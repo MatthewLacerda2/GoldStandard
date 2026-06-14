@@ -1,0 +1,34 @@
+{
+  "app": {
+    "title": "Gold Standard",
+    "nav": {
+      "items": "Items",
+      "login": "Login"
+    }
+  },
+  "items": {
+    "heading": "Items",
+    "subheading": "Manage your items.",
+    "loading": "Loading items…",
+    "error": "Could not load items.",
+    "empty": "No items yet.",
+    "columns": {
+      "name": "Name",
+      "description": "Description"
+    },
+    "form": {
+      "namePlaceholder": "Item name",
+      "descriptionPlaceholder": "Description",
+      "submit": "Add item"
+    }
+  },
+  "login": {
+    "heading": "Sign in",
+    "subheading": "Enter your credentials.",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "error": "Login failed."
+  }
+}

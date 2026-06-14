@@ -1,0 +1,14 @@
+# Keep the build context lean and avoid shipping dev/test artifacts.
+tests/
+pytest.ini
+requirements-dev.txt
+__pycache__/
+*.pyc
+.venv/
+.ruff_cache/
+.pytest_cache/
+
+# Ignore environment files but keep the committed example.
+.env
+.env.*
+!.env.example

@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- Frontend (Node/Bun) ---
+node_modules/
+frontend/dist/
+*.local
+.vite/
+
+# Keep the example env tracked
+!.env.example

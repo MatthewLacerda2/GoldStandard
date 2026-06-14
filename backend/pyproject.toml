@@ -1,0 +1,28 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# F: pyflakes, E/W: pycodestyle, B: bugbear, I: isort, UP: pyupgrade, ANN: annotations.
+select = ["F", "E", "W", "B", "I", "UP", "ANN"]
+# E501 (line length) is owned by the formatter, not the linter.
+# ANN401 forbids typing.Any, which we deliberately use for JWT payloads.
+ignore = ["E501", "ANN401"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependency-injection helpers are called in argument defaults by design.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Body",
+    "fastapi.Path",
+    "fastapi.Header",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests do not need return-type annotations on every fixture/test function.
+"tests/**" = ["ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "ANN204", "B008"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

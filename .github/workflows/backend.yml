@@ -1,0 +1,33 @@
+name: backend
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "Makefile"
+      - ".github/workflows/backend.yml"
+
+jobs:
+  backend:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start postgres (pgvector)
+        run: docker compose up -d --build --wait postgres
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      - name: Run backend gates
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/app
+          JWT_SECRET: ci-secret
+        run: make backend PYTHON=python
