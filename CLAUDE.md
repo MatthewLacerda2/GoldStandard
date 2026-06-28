@@ -189,5 +189,4 @@ needs a running app, ask them to start it.
 
 - **Migrations:** `init_db()` uses `create_all` (additive only). Add Alembic
   when schema changes need to be destructive/ordered.
-- **Multi-tenancy:** reintroduce a `tenant_id` FK + a `get_tenant` dependency.
 - **Typed SDK:** generate `lib/schemas/` from the backend OpenAPI spec.
