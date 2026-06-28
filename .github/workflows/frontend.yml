@@ -1,6 +1,12 @@
 name: frontend
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - "Makefile"
+      - ".github/workflows/frontend.yml"
   pull_request:
     paths:
       - "frontend/**"
