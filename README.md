@@ -6,8 +6,7 @@ your product inside a structure whose architecture and quality gates are already
 decided for you. The worked example resource is `items`: a single CRUD domain
 threaded through every layer so the pattern is obvious and copyable.
 
-The authoritative specification is [`auxmd.md`](./auxmd.md); the operating
-contract for anyone (human or agent) working in the repo is
+The operating contract for anyone (human or agent) working in the repo is
 [`CLAUDE.md`](./CLAUDE.md). This README summarizes the architecture and the
 practices — not the line-by-line implementation.
 
@@ -78,7 +77,6 @@ frontend/   React 19 · Vite · TanStack Router/Query · Tailwind v4 · ShadCN �
 docker/     postgres (pgvector/pgvector:pg16)
 Makefile    the single task runner; CI invokes these targets
 CLAUDE.md   the operating contract
-auxmd.md    the full architecture & pattern specification
 ```
 
 ## Getting started
