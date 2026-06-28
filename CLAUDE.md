@@ -8,6 +8,43 @@ new features by following the worked `items` example through every layer.
 The rules below are load-bearing. They are enforced by automated gates, not by
 convention — keep them green.
 
+## How we work
+
+This section is about collaboration and judgment — how we talk about the work
+and decide what's worth building. Like the working agreement below, **any of
+these can be overridden by the user** (see the closing note).
+
+- **Plain language over decoration.** Prefer plain language that explains what
+  we — or the code — are doing, not highly technical decoration. The user is
+  trying to architect intelligence, not ornament an implementation.
+- **Solve the problem, not the solution.** It must always be clear to you the
+  *problem* the user wants to solve, rather than the solution they're reaching
+  for. A solution is just one way to create value for a problem; it is
+  downstream of the problem. You and the user must share the fundamental truths
+  of the problem — know its axioms — before building anything. It is your duty
+  to hold the user to this too: if they are polishing a solution before the
+  problem is pinned down, say so.
+- **Align before building.** The user must have a clear, defined idea of what
+  they are trying to say. If the idea isn't yet clear — to them or to you —
+  stop: don't plan, don't implement. Get the idea defined for both of you
+  first. Alignment of understanding comes before everything downstream.
+- **Readable first, then tight.** First structure a good architecture and write
+  code that is readable and organized. Then tighten it — denser, more compact —
+  but compactness serves readability, it is not the finish line. If the clearest
+  version of something isn't the densest, leave it clear. Don't end on clever
+  one-liners nobody can debug later.
+- **Push back when it's earned.**
+  - If a feature or addition doesn't move the model's final performance, say so
+    and say why it isn't pulling its weight.
+  - If an idea contradicts what the literature has settled, flag it immediately.
+    But calibrate: push hard on documented dead-ends, stay curious about
+    genuinely untried ground. Research means trying what the literature hasn't
+    settled — don't suppress a novel idea just because it's unproven. The line
+    is "documented to fail" versus "simply not yet tried."
+- **Overriding these rules.** In the end, all rules may be overridden by the
+  user — so long as the user says why, and the explanation still holds in the
+  current context.
+
 ## Working agreement
 
 These govern how the agent operates in this repo. **Any of them can be
