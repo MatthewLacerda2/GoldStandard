@@ -45,6 +45,87 @@ these can be overridden by the user** (see the closing note).
   user — so long as the user says why, and the explanation still holds in the
   current context.
 
+## Issues and Pull Requests
+
+How we plan work and land it. These are process rules; like everything above,
+the user can override them with a reason that holds.
+
+### Issues
+
+An issue is the agreed *purpose and direction* of a piece of work, written
+before it — a best-effort intention, not a hard spec. It has three parts:
+
+- **Context** — the problem or feature, and what we want once it's addressed.
+- **Suggestion** — the changes to make, and/or how.
+- **Definition of done** — what the resulting Pull Request should deliver.
+
+Because it is written before the work, an issue can't foresee everything: its
+*Suggestion* may not survive contact with the code, and its *Definition of done*
+may miss something. Treat it as a starting point and let what you discover refine
+the details — never treat an incomplete or slightly-wrong issue as a reason to
+stop. When the work meaningfully diverges, the **Pull Request is the source of
+truth** for what was actually done: say so there, and if the gap matters later,
+reflect it back into the issue or spin off a new one.
+
+- **Title** starts with a scope tag — `[FE]` frontend, `[BE]` backend, `[FS]`
+  fullstack, `[OT]` other (DevOps, root-folder files, docs-only). Tags are
+  scan/query cues, not hard walls; common sense lets work cross a tag when the
+  outcome needs it. Still separate by responsibility — if an issue grows too
+  big, split the rest into another one.
+- **Primary label** (at least one): `feat` (new feature/enhancement), `fix`
+  (bug or problem), `refactor` (changes how we do things).
+- **Additive labels** (only alongside a primary): `docs`, `planning` (we don't
+  yet know how to implement it), `human` (can't be finished by an agent alone).
+- **`minor`** — a very small change (~30 lines or fewer), so small its
+  resolution may just ride along in another issue's PR. May appear alone or with
+  anything.
+- **Assignment** — no assignee means free for grabs; an assignee means it's
+  taken. When we start *actually working* an issue (not just planning), assign
+  the user and tell them. Picking an issue doesn't require opening a PR yet.
+
+If the user postpones a change that must still happen, suggest opening an issue
+so we don't lose track of it.
+
+### Pull Requests
+
+Run the gates locally first (see the no-drift meta-pattern) — green before you
+push. A PR need not address an issue; when it does, title it
+`{issue_number}-{branch_name}` (e.g. `42-feat/item-tags`) and start the
+description with `Closes #{issue_number}`.
+
+- **Every PR is assigned to someone.** If the user asked you to open it, assign
+  them; if it closes an issue, assign them there too. If that issue is already
+  assigned to someone else, say so and let the user decide — you may keep
+  writing the PR meanwhile.
+- **Never merge without the user's say-so.** Once given, carry it through
+  without pausing: commit, push, then merge as soon as CI is green (or
+  immediately if CI doesn't run). If CI fails, stop and report instead.
+- **"Do" / "resolve" / "work" an issue** means the full chain by default, no
+  asking between steps: assign the user, create the worktree, implement, run the
+  gates, push, and open a ready-for-review PR — assigned to them, closing the
+  issue.
+- **If you can't finish** (environment failure, gates that won't pass, a spec
+  gap), don't go silent: push what you have, open the PR as a **draft**, comment
+  the bottleneck, and tag the user.
+
+Structure the description as four sections, in order:
+
+1. **Context** — what the PR addresses (feature, bug, refactor…).
+2. **Solution** — how it adds value. Skip how you got there unless it's needed
+   to explain the solution, and skip the technical domain unless it's new to the
+   repository.
+3. **Surface** — what the change touches: name the nearest common parent folder,
+   then the core files and what each adds or edits (frontend: which pages/
+   routes). The flow, not deep technical detail.
+4. **Result** — what changes from now on.
+
+The user no longer hand-writes issue or PR descriptions — you do — so there's no
+need to mark them "AI-generated"; that's the default. The user may still write
+comments. Before an issue is written, the user must show they have thought it
+through — first principles and purpose — and the idea must be clear to both
+sides. Don't transcribe a vague ask into an issue: surface gaps, challenge
+assumptions, reach shared understanding first.
+
 ## Working agreement
 
 These govern how the agent operates in this repo. **Any of them can be
@@ -89,42 +170,6 @@ make frontend   # front-lint + front-build + front-test
 Do **not** auto-start dev servers, `docker compose up`, or long-running
 processes to "check" something. Use the gates (build/test) to verify. If a human
 needs a running app, ask them to start it.
-
-## Backend rules
-
-- **4-layer separation (non-negotiable):**
-  `api/` (handlers) → `schemas/` (Pydantic) → `repositories/` (DB) → `models/`
-  (ORM), with `services/` for business logic that isn't a repo.
-- **DB access is forbidden anywhere except `repositories/`.** No raw SQL or ORM
-  query in a handler, service, or util. Repositories take an `AsyncSession` and
-  never open their own session (the test rollback depends on this).
-- Repositories `flush()`; the handler/caller `commit()`s.
-- **Length limits** (enforced by `tools/house_lint.py`):
-  - File ≤ 350 lines (opt a data module out with a `# lint: data-file` marker in
-    the first 15 lines; `tests/**` exempt).
-  - Endpoint handler ≤ 50 lines.
-  - Test ≤ 50 lines.
-- All I/O models are Pydantic; type annotations are enforced (ruff `ANN`).
-- Config via `pydantic-settings` accessed through `@lru_cache get_settings()`.
-
-## Frontend rules
-
-- **Pages never `fetch`.** `routes/` → `lib/api/<domain>.ts` →
-  `lib/api/client.ts`. `client.ts` is the single place auth/token handling lives.
-  (Streaming is the only allowed exception.)
-- `lib/schemas/` mirrors the backend Pydantic models.
-- **Design-system compliance:**
-  - **Compose `components/ui/**` (shadcn) primitives**; never hand-roll a text
-    `<input>`/`<select>`/`<textarea>`. Add primitives with
-    `bunx shadcn@latest add <name>`.
-  - **Typography tokens only** (`text-display`, `text-h1`…`text-caption`,
-    `text-kpi-*`). No legacy `text-xs…3xl`, no arbitrary `text-[Npx]`. Tokens
-    carry weight/line-height — don't repeat `font-*` next to them.
-  - **Color is an allowlist.** Only semantic tokens; no raw palette classes
-    (`bg-red-500`), no hex/`rgb()` literals in `className`/`style`.
-  - **One exported React component per file** (`components/ui/**`, barrels, and
-    Router objects exempt).
-- `max-lines: 550` per `.ts`/`.tsx` (`mock-*.ts` files exempt).
 
 ## Language & i18n
 
