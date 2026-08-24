@@ -42,7 +42,7 @@ export default tseslint.config(
       "local/no-redundant-font-utility": "error",
 
       // --- Color allowlist via the real theme. ---
-      "better-tailwindcss/no-unregistered-classes": [
+      "better-tailwindcss/no-unknown-classes": [
         "error",
         { ignore: NON_TAILWIND_CLASSES },
       ],
@@ -78,14 +78,14 @@ export default tseslint.config(
       "local/no-legacy-text-scale": "off",
       "local/no-color-literal": "off",
       "local/no-redundant-font-utility": "off",
-      "better-tailwindcss/no-unregistered-classes": "off",
+      "better-tailwindcss/no-unknown-classes": "off",
     },
   },
   // ESLint rule sources and their tests are Node modules, not DOM/Tailwind code.
   {
     files: ["eslint-rules/**"],
     rules: {
-      "better-tailwindcss/no-unregistered-classes": "off",
+      "better-tailwindcss/no-unknown-classes": "off",
       "local/no-hand-rolled-form-control": "off",
       "local/no-color-literal": "off",
     },
