@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,7 +21,11 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/app"
 
-    JWT_SECRET: str = "change-me-in-production-min-32-bytes"
+    # RFC 7518 section 3.2 requires an HMAC key at least as long as the hash
+    # output, so 32 bytes for SHA256. PyJWT only warns below that; we refuse to
+    # start instead, so a weak signing key cannot reach production unnoticed.
+    # 32 characters is always at least 32 bytes once UTF-8 encoded.
+    JWT_SECRET: str = Field(default="change-me-in-production-min-32-bytes", min_length=32)
     JWT_ISSUER: str = "goldstandard"
     JWT_AUDIENCE: str = "goldstandard-app"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
