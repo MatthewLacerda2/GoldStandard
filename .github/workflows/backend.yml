@@ -35,5 +35,5 @@ jobs:
       - name: Run backend gates
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/app
-          JWT_SECRET: ci-secret
+          JWT_SECRET: ci-secret-not-for-production-use-only
         run: make backend PYTHON=python

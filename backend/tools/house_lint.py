@@ -82,8 +82,7 @@ def check_function_lengths(path: Path, source: str) -> list[str]:
             )
         if under_tests and node.name.startswith("test_") and span > MAX_TEST_LINES:
             violations.append(
-                f"{path}:{node.lineno}: test '{node.name}' is {span} lines "
-                f"(max {MAX_TEST_LINES})"
+                f"{path}:{node.lineno}: test '{node.name}' is {span} lines (max {MAX_TEST_LINES})"
             )
     return violations
 
