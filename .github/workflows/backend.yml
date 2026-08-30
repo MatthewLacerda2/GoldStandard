@@ -18,12 +18,12 @@ jobs:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Start postgres (pgvector)
         run: docker compose up -d --build --wait postgres
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -35,5 +35,5 @@ jobs:
       - name: Run backend gates
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/app
-          JWT_SECRET: ci-secret
+          JWT_SECRET: ci-secret-not-for-production-use-only
         run: make backend PYTHON=python
