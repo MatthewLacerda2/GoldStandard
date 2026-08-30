@@ -1,12 +1,29 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
-import reactCompiler from "eslint-plugin-react-compiler";
+import reactHooks from "eslint-plugin-react-hooks";
 import betterTailwind from "eslint-plugin-better-tailwindcss";
 import local from "./eslint-rules/index";
 
 // Classes that are legitimately not Tailwind utilities (e.g. structural hooks),
 // so the color allowlist rule must not flag them as unregistered.
 const NON_TAILWIND_CLASSES = ["^dark$", "^group($|/)", "^peer($|/)"];
+
+// The two long-standing hooks rules, which we grade explicitly below. Every
+// other rule the react-hooks preset enables is a React Compiler diagnostic.
+const CLASSIC_HOOK_RULES = new Set([
+  "react-hooks/rules-of-hooks",
+  "react-hooks/exhaustive-deps",
+]);
+
+// React Compiler used to be one switch (`react-compiler/react-compiler`) in its
+// own plugin; it now ships as individual rules inside eslint-plugin-react-hooks.
+// The preset grades most of them as errors — we keep them advisory, the way the
+// single switch was, so compiler feedback informs without blocking the gate.
+const reactCompilerRules = Object.fromEntries(
+  Object.keys(reactHooks.configs.flat["recommended-latest"].rules)
+    .filter((rule) => !CLASSIC_HOOK_RULES.has(rule))
+    .map((rule) => [rule, "warn"] as const),
+);
 
 export default tseslint.config(
   {
@@ -24,7 +41,7 @@ export default tseslint.config(
     files: ["**/*.{ts,tsx}"],
     plugins: {
       local,
-      "react-compiler": reactCompiler,
+      "react-hooks": reactHooks,
       "better-tailwindcss": betterTailwind,
     },
     settings: {
@@ -42,7 +59,7 @@ export default tseslint.config(
       "local/no-redundant-font-utility": "error",
 
       // --- Color allowlist via the real theme. ---
-      "better-tailwindcss/no-unregistered-classes": [
+      "better-tailwindcss/no-unknown-classes": [
         "error",
         { ignore: NON_TAILWIND_CLASSES },
       ],
@@ -55,8 +72,12 @@ export default tseslint.config(
       "@typescript-eslint/no-shadow": "error",
       "no-shadow": "off",
 
-      // --- React Compiler. ---
-      "react-compiler/react-compiler": "warn",
+      // --- React hooks correctness. ---
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+
+      // --- React Compiler diagnostics. ---
+      ...reactCompilerRules,
 
       // --- File length. ---
       "max-lines": ["error", { max: 550, skipBlankLines: false }],
@@ -78,14 +99,14 @@ export default tseslint.config(
       "local/no-legacy-text-scale": "off",
       "local/no-color-literal": "off",
       "local/no-redundant-font-utility": "off",
-      "better-tailwindcss/no-unregistered-classes": "off",
+      "better-tailwindcss/no-unknown-classes": "off",
     },
   },
   // ESLint rule sources and their tests are Node modules, not DOM/Tailwind code.
   {
     files: ["eslint-rules/**"],
     rules: {
-      "better-tailwindcss/no-unregistered-classes": "off",
+      "better-tailwindcss/no-unknown-classes": "off",
       "local/no-hand-rolled-form-control": "off",
       "local/no-color-literal": "off",
     },
