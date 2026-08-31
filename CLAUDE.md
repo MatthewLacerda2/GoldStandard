@@ -86,6 +86,40 @@ reflect it back into the issue or spin off a new one.
 If the user postpones a change that must still happen, suggest opening an issue
 so we don't lose track of it.
 
+**Priority — `refactor` → `fix` → `feat`; `docs` never waits its turn.** This is
+"foundations come first" expressed as an order: a missing boundary, convention,
+gate or tool halts feature work, and all of those wear `refactor`. Priority orders
+what gets **merged**, not what gets **worked**.
+
+**`planning` and `human` are stops, and their absence means ready.** Both mean *do
+not start*, absolutely; an issue carrying neither is startable the moment it
+exists, including one filed a minute ago. The judgement lives in the label, so an
+agent-written issue must carry one if it is a breaking change, changes user-facing
+behaviour, needs a judgement call, or changes what this template teaches. A `fix`
+usually should not — the deciding happened when the code broke.
+
+**The dependency graph is the plan.** Record how issues relate with GitHub's
+**Blocked by / Blocks** and **sub-issues**; there are no rigid batches. Split by
+responsibility, never by parallelism — sub-issues that all land in the same file
+are one branch. Never split an API change into a `[BE]` and an `[FE]`: the
+frontend schemas are hand-mirrored and no gate holds the halves together.
+
+**Two skills carry the working protocols**, so this file can hold the reasoning
+and they can hold the steps. Invoke them rather than reconstructing a procedure
+from memory, and name them when briefing a subagent. Where a rule here is stated in
+one line and a skill has ten, the line is the rule and the skill is how to keep it;
+where they disagree, this file wins and the skill is wrong.
+
+- **`issue-write`** — what an issue must contain, which labels it carries, the
+  three gates in full, and when an agent may file one unprompted.
+- **`issue-batch`** — how a set of issues is worked: how many branches at once,
+  which can safely run together, worktrees, the path to merged, re-reading the
+  board.
+
+The labels above are this repo's own; a fresh clone from the template has GitHub's
+stock set instead. `issue-write` ends with the `gh label create` commands that
+bootstrap them.
+
 ### Pull Requests
 
 Run the gates locally first (see the no-drift meta-pattern) — green before you
