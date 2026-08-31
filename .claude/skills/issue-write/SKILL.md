@@ -223,7 +223,7 @@ gh label create bug            --force --color EE0701 --description "Something i
 gh label create documentation  --force --color 0075CA --description "Edit/add documentation; never waits its turn."
 gh label create foundation     --force --color 0E8A16 --description "Groundwork that makes the template more complete."
 gh label create feature        --force --color A2EEEF --description "A new capability or resource."
-gh label create planning       --force --color FBCA04 --description "Approach still being discussed. Do not start."
+gh label create planning       --force --color FBCA04 --description "Not decided, or approach not settled. Do not start."
 gh label create human          --force --color 5319E7 --description "Needs a human in the loop end to end. Do not start."
 gh label create minor          --force --color C2E0C6 --description "~30 lines or fewer; may ride along in another PR."
 ```
