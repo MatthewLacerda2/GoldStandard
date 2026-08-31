@@ -111,7 +111,7 @@ of building it.
 The strongest issues come from doing the work: a claim in `README.md` that quietly
 became false, a lint rule whose message misleads, a fixture that only works by
 accident, a dependency wired up and never armed. Those are findings, and findings
-are cheap to lose. A `fix` is always filable — the test above is about whether
+are cheap to lose. A `bug` is always filable — the test above is about whether
 something is worth *building*, never about whether a defect is worth *recording*.
 
 **File rather than fix** when the thing found is outside the branch in hand. A
@@ -125,44 +125,61 @@ the assumptions, reach shared understanding — *then* write.
 
 ## Labels
 
-This repo's scheme, from `CLAUDE.md`. A fresh clone of the template has none of
-them (GitHub's defaults are not these) — see *Bootstrapping the labels* below.
+This repo's scheme, from `CLAUDE.md`: **one type label, plus at most one stage
+label.** The same set is used across all of the user's repos, so an issue reads the
+same wherever it was filed. A fresh clone of the template has none of them
+(GitHub's defaults are not these) — see *The label set* below.
 
-**Primary — at least one:**
+**Type — one:**
 
-- `feat` — new feature or enhancement.
-- `fix` — a bug or a problem.
-- `refactor` — changes *how we do things*: a layer boundary, a convention, a gate,
-  a tool, a pattern the template means to model.
+- `architecture` — the project's structure and conventions: a layer boundary, the
+  Pydantic ↔ `lib/schemas/` contract, a file or response format, where a
+  responsibility is allowed to live.
+- `infrastructure` — the tools and guardrails around the development process: a
+  `Makefile` gate, a CI workflow, an eslint rule, a test harness.
+- `bug` — something is broken.
+- `documentation` — documentation.
+- `foundation` — groundwork that makes the template more complete: a piece of the
+  worked example that simply is not built yet.
+- `feature` — a new capability or resource, built on top of all of that.
 
-**Additive — only alongside a primary:**
+The first three are one band in most schemes and three here, and the priority order
+below is the reason. The question that separates them is **what the change is
+about**: the shape of the product is `architecture`, the machinery that constrains
+how it gets written is `infrastructure`, and something merely missing rather than
+wrong is `foundation`. Concretely — a layer boundary or an API contract is
+`architecture`; a `Makefile` gate or an eslint rule is `infrastructure`; an
+unwritten half of the `items` example is `foundation`.
 
-- `docs` — documentation.
-- `planning` — has value, but we do not yet know how to implement it. **Never
-  started.**
+**Stage — at most one, and its absence means ready:**
+
+- `planning` — **never started.** It carries both "we do not yet know how" and
+  "nobody has decided this is worth doing"; both are the user's call.
 - `human` — cannot be finished by an agent alone. **Treat as not-ready.**
 
 **`minor`** — ~30 lines or fewer, small enough that its resolution may ride along
-in another issue's pull request. Stands alone or joins anything.
+in another issue's pull request. A size marker, not a type: it stands alone or
+joins anything.
 
-**`planning` and `human` are stage labels, and their absence means ready.** No
-amount of the issue looking startable overrides one, and no amount of it looking
-vague substitutes for one. **The judgement lives in the label**, so put it on
-honestly: a Claude-written issue **must** carry one if it is a breaking change,
-changes user-facing behaviour, needs a judgement call, or proposes a structural
-change — anything that moves what the template *teaches* is in that last group.
+No amount of the issue looking startable overrides a stage label, and no amount of
+it looking vague substitutes for one. **The judgement lives in the label**, so put
+it on honestly: a Claude-written issue **must** carry one if it is a breaking
+change, changes user-facing behaviour, needs a judgement call, or proposes a
+structural change — anything that moves what the template *teaches* is in that last
+group.
 
-A `fix` usually should **not** carry one — it is specific, the deciding already
+A `bug` usually should **not** carry one — it is specific, the deciding already
 happened when the code broke, and nothing is gained by making it wait.
 
 ## Priority
 
-**`refactor` → `fix` → `feat`.** `docs` never waits its turn.
+**`architecture` → `infrastructure` → `bug` → `foundation` → `feature`.**
+`documentation` never waits its turn.
 
 That is `CLAUDE.md`'s "foundations come first" expressed as an order: if the way we
-build is not solid — a boundary or convention missing, a gate missing, a tool
-missing — that halts feature work, and here all three wear `refactor`. Then what
-is broken. Then what is new.
+build is not solid — a boundary or convention missing (`architecture`), a gate or
+tool missing (`infrastructure`) — that halts everything downstream. Then what is
+broken. Then the groundwork that makes the template more complete. Then what is new.
 
 Priority orders what gets **merged**, not what gets **worked**.
 
@@ -191,17 +208,25 @@ its description opens with `Closes #{issue_number}` — and **check the number**
 typo'd `Closes #N` closes the wrong issue or none, silently, and nothing verifies
 it.
 
-## Bootstrapping the labels (downstream repos)
+## The label set (for a downstream repo)
 
-A repo generated from this template starts with GitHub's stock labels, which do not
-include any of the above. Nothing in these skills works until they exist:
+The nine labels above already exist here. A repo generated from this template
+starts with GitHub's stock set instead, which has none of them under these
+meanings, and nothing in these skills works until it does. One block, run once
+(`--force` because `bug` and `documentation` ship stock with different
+descriptions):
 
 ```sh
-gh label create feat     --color 0E8A16 --description "New feature or enhancement"
-gh label create fix      --color D73A4A --description "A bug or a problem"
-gh label create refactor --color 5319E7 --description "Changes how we do things"
-gh label create docs     --color 0075CA --description "Documentation"
-gh label create planning --color FBCA04 --description "Do not start: approach not settled"
-gh label create human    --color B60205 --description "Do not start: needs a human end to end"
-gh label create minor    --color C2E0C6 --description "~30 lines or fewer; may ride along"
+gh label create architecture   --force --color B60205 --description "The project's structure and conventions: layer boundaries, API contracts, formats."
+gh label create infrastructure --force --color D93F0B --description "Tools and guardrails for the development process: CI, gates, harnesses."
+gh label create bug            --force --color EE0701 --description "Something isn't working."
+gh label create documentation  --force --color 0075CA --description "Edit/add documentation; never waits its turn."
+gh label create foundation     --force --color 0E8A16 --description "Groundwork that makes the template more complete."
+gh label create feature        --force --color A2EEEF --description "A new capability or resource."
+gh label create planning       --force --color FBCA04 --description "Approach still being discussed. Do not start."
+gh label create human          --force --color 5319E7 --description "Needs a human in the loop end to end. Do not start."
+gh label create minor          --force --color C2E0C6 --description "~30 lines or fewer; may ride along in another PR."
 ```
+
+GitHub's stock `enhancement` duplicates `feature` and is worth deleting, so nobody
+reaches for the wrong one.

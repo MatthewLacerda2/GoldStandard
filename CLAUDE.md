@@ -72,13 +72,17 @@ reflect it back into the issue or spin off a new one.
   scan/query cues, not hard walls; common sense lets work cross a tag when the
   outcome needs it. Still separate by responsibility — if an issue grows too
   big, split the rest into another one.
-- **Primary label** (at least one): `feat` (new feature/enhancement), `fix`
-  (bug or problem), `refactor` (changes how we do things).
-- **Additive labels** (only alongside a primary): `docs`, `planning` (we don't
-  yet know how to implement it), `human` (can't be finished by an agent alone).
+- **Type label** (one): `architecture` (the project's structure and
+  conventions — layer boundaries, API contracts, formats), `infrastructure`
+  (tools and guardrails for the development process — CI, gates, harnesses),
+  `bug`, `documentation`, `foundation` (groundwork that makes the template more
+  complete), `feature` (a new capability or resource).
+- **Stage label** (at most one, alongside the type): `planning` — either we
+  don't yet know how to implement it, or nobody has decided it's worth doing;
+  both are the user's call — and `human` (can't be finished by an agent alone).
 - **`minor`** — a very small change (~30 lines or fewer), so small its
-  resolution may just ride along in another issue's PR. May appear alone or with
-  anything.
+  resolution may just ride along in another issue's PR. It is a size marker, not
+  a type: it may appear alone or with anything.
 - **Assignment** — no assignee means free for grabs; an assignee means it's
   taken. When we start *actually working* an issue (not just planning), assign
   the user and tell them. Picking an issue doesn't require opening a PR yet.
@@ -86,16 +90,18 @@ reflect it back into the issue or spin off a new one.
 If the user postpones a change that must still happen, suggest opening an issue
 so we don't lose track of it.
 
-**Priority — `refactor` → `fix` → `feat`; `docs` never waits its turn.** This is
-"foundations come first" expressed as an order: a missing boundary, convention,
-gate or tool halts feature work, and all of those wear `refactor`. Priority orders
-what gets **merged**, not what gets **worked**.
+**Priority — `architecture` → `infrastructure` → `bug` → `foundation` →
+`feature`; `documentation` never waits its turn.** This is "foundations come
+first" expressed as an order: a missing boundary or contract (`architecture`) and
+a missing gate or tool (`infrastructure`) both halt everything downstream, then
+what is broken, then the groundwork that makes the template more complete, then
+what is new. Priority orders what gets **merged**, not what gets **worked**.
 
 **`planning` and `human` are stops, and their absence means ready.** Both mean *do
 not start*, absolutely; an issue carrying neither is startable the moment it
 exists, including one filed a minute ago. The judgement lives in the label, so an
 agent-written issue must carry one if it is a breaking change, changes user-facing
-behaviour, needs a judgement call, or changes what this template teaches. A `fix`
+behaviour, needs a judgement call, or changes what this template teaches. A `bug`
 usually should not — the deciding happened when the code broke.
 
 **The dependency graph is the plan.** Record how issues relate with GitHub's
@@ -116,9 +122,9 @@ where they disagree, this file wins and the skill is wrong.
   which can safely run together, worktrees, the path to merged, re-reading the
   board.
 
-The labels above are this repo's own; a fresh clone from the template has GitHub's
-stock set instead. `issue-write` ends with the `gh label create` commands that
-bootstrap them.
+These labels exist here already; a fresh clone from the template has GitHub's
+stock set instead. `issue-write` ends with the `gh label create` block a downstream
+repo runs once to get them.
 
 ### Pull Requests
 
@@ -144,7 +150,7 @@ description with `Closes #{issue_number}`.
 
 Structure the description as four sections, in order:
 
-1. **Context** — what the PR addresses (feature, bug, refactor…).
+1. **Context** — what the PR addresses (a feature, a bug, a convention…).
 2. **Solution** — how it adds value. Skip how you got there unless it's needed
    to explain the solution, and skip the technical domain unless it's new to the
    repository.
