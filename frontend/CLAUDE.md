@@ -31,10 +31,14 @@ only allowed exception). `lib/schemas/` mirrors the backend Pydantic models.
 `no-floating-promises`, `no-misused-promises`, and `await-thenable` are errors.
 A deliberately un-awaited promise must say so with `void`.
 
-## i18n
+## i18n (an ESLint error too)
 
 User-facing strings go through `i18next` (`src/i18n/`), never hardcoded in
-components.
+components. `local/no-untranslated-text` flags a JSX text node containing a
+letter, and a string literal passed to `placeholder`, `title`, `aria-label` or
+`alt` — an allowlist, so new props stay unaffected until they're added to it.
+Letter-free text (`·`, `—`, `/`, `:`, digits) and anything in an expression
+container — `{t("items.heading")}` and `{item.name}` alike — are untouched.
 
 ## Gate before pushing
 
