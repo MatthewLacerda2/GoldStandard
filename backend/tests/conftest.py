@@ -11,6 +11,7 @@ import os
 import subprocess
 
 import asyncpg
+import pytest
 import pytest_asyncio
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -18,11 +19,22 @@ from sqlalchemy.pool import NullPool
 
 from core.config import get_settings
 from core.database import normalize_database_url
+from core.rate_limiter import limiter
 from models.base import Base
 
 # One-time guard so DDL/database creation happens once per process even though
 # the engine fixture is function-scoped (each test runs on its own event loop).
 _DB_READY = False
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """Clear slowapi's in-process counters before every test.
+
+    The global limit keys on client address, and every test drives the app from
+    the same one, so without this a fast suite would trip its own throttle.
+    """
+    limiter.reset()
 
 
 def _repo_root() -> str:
