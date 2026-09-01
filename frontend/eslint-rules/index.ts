@@ -4,6 +4,7 @@ import { noLegacyTextScale } from "./no-legacy-text-scale";
 import { noColorLiteral } from "./no-color-literal";
 import { noHandRolledFormControl } from "./no-hand-rolled-form-control";
 import { noRedundantFontUtility } from "./no-redundant-font-utility";
+import { noUntranslatedText } from "./no-untranslated-text";
 
 /** The local ESLint plugin exposing the design-system rules. */
 const plugin = {
@@ -15,6 +16,7 @@ const plugin = {
     "no-color-literal": noColorLiteral,
     "no-hand-rolled-form-control": noHandRolledFormControl,
     "no-redundant-font-utility": noRedundantFontUtility,
+    "no-untranslated-text": noUntranslatedText,
   },
 };
 
