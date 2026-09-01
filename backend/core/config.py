@@ -35,6 +35,11 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
+    # Applied to every request by the slowapi middleware. Any `limits`
+    # expression works ("10/second", "100/minute"); an empty value turns the
+    # global throttle off for deployments that rate-limit at the gateway.
+    RATE_LIMIT_DEFAULT: str = "10/second"
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse the comma-separated CORS origins into a list."""
