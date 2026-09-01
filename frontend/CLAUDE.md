@@ -25,6 +25,12 @@ only allowed exception). `lib/schemas/` mirrors the backend Pydantic models.
   Router objects exempt).
 - ≤ 550 lines per `.ts`/`.tsx` (`mock-*.ts` exempt).
 
+## Promises (type-aware ESLint errors)
+
+`eslint.config.ts` gives the parser a TypeScript program (`projectService`), so
+`no-floating-promises`, `no-misused-promises`, and `await-thenable` are errors.
+A deliberately un-awaited promise must say so with `void`.
+
 ## i18n
 
 User-facing strings go through `i18next` (`src/i18n/`), never hardcoded in
