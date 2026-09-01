@@ -39,6 +39,15 @@ export default tseslint.config(
   // App + plugin source.
   {
     files: ["**/*.{ts,tsx}"],
+    // `projectService` gives the parser a TypeScript program, which is what the
+    // promise rules below read types from. Every linted file is covered by
+    // `tsconfig.json`'s `include`, so no file needs a project of its own.
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
     plugins: {
       local,
       "react-hooks": reactHooks,
@@ -71,6 +80,12 @@ export default tseslint.config(
       ],
       "@typescript-eslint/no-shadow": "error",
       "no-shadow": "off",
+
+      // --- Promise handling (type-aware). An un-awaited promise is either a
+      // bug or a deliberate fire-and-forget; these force it to say which. ---
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": "error",
+      "@typescript-eslint/await-thenable": "error",
 
       // --- React hooks correctness. ---
       "react-hooks/rules-of-hooks": "error",
