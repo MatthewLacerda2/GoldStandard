@@ -4,7 +4,8 @@
 battle-tested starting point. Clone it, rename the example domain, and build
 your product inside a structure whose architecture and quality gates are already
 decided for you. The worked example resource is `items`: a single CRUD domain
-threaded through every layer so the pattern is obvious and copyable.
+threaded through all four backend layers, leaving `services/` an empty
+placeholder for logic that outgrows a thin handler.
 
 The operating contract for anyone (human or agent) working in the repo is
 [`CLAUDE.md`](./CLAUDE.md). This README summarizes the architecture and the
