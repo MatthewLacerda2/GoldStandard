@@ -1,17 +1,21 @@
 name: frontend
 
+# No path filter: the workflow always triggers, so the "frontend" check always
+# reports exactly once per commit and can safely be a required status check.
+# Economy comes from the gate step below, which skips the expensive tail when
+# nothing frontend-relevant changed -- leaving a checkout and a diff, a few
+# seconds, instead of a toolchain setup and a dependency install.
 on:
   push:
     branches: [main]
-    paths:
-      - "frontend/**"
-      - "Makefile"
-      - ".github/workflows/frontend.yml"
   pull_request:
-    paths:
-      - "frontend/**"
-      - "Makefile"
-      - ".github/workflows/frontend.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   HUSKY: 0
@@ -21,14 +25,61 @@ jobs:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     steps:
+      # Full history: the diff below needs the base commit, which the default
+      # shallow clone would not have.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the frontend gates must run
+        id: gate
+        env:
+          # A pull_request run diffs against its base; a push to main diffs
+          # against the commit it replaced. Both arrive as plain SHAs.
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+
+          # An unknown or unreachable base (first push, force push, grafted
+          # history) means the changed set cannot be trusted -- run the gates.
+          if [ -z "${BASE_SHA:-}" ] || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "Base commit unavailable; running the frontend gates."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed=$(git diff --name-only "$BASE_SHA" HEAD)
+          echo "Changed files:"
+          echo "$changed" | sed 's/^/  /'
+
+          if echo "$changed" | grep -qE '^(frontend/|Makefile$|\.github/workflows/frontend\.yml$)'; then
+            echo "Frontend-relevant changes found; running the frontend gates."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No frontend-relevant changes; skipping the frontend gates."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: oven-sh/setup-bun@v2
+        if: steps.gate.outputs.run == 'true'
         with:
           bun-version: 1.3.11
 
+      # setup-bun only caches the bun binary itself, so the dependency cache is
+      # ours to keep, keyed on the lockfile.
+      - name: Cache bun dependencies
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
+        if: steps.gate.outputs.run == 'true'
         run: cd frontend && bun install --frozen-lockfile
 
       - name: Run frontend gates
+        if: steps.gate.outputs.run == 'true'
         run: make frontend

@@ -1,38 +1,86 @@
 name: backend
 
+# No path filter: the workflow always triggers, so the "backend" check always
+# reports exactly once per commit and can safely be a required status check.
+# Economy comes from the gate step below, which skips the expensive tail when
+# nothing backend-relevant changed -- leaving a checkout and a diff, a few
+# seconds, instead of a Postgres service and a dependency install.
 on:
   push:
     branches: [main]
-    paths:
-      - "backend/**"
-      - "Makefile"
-      - ".github/workflows/backend.yml"
   pull_request:
-    paths:
-      - "backend/**"
-      - "Makefile"
-      - ".github/workflows/backend.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     steps:
+      # Full history: the diff below needs the base commit, which the default
+      # shallow clone would not have.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the backend gates must run
+        id: gate
+        env:
+          # A pull_request run diffs against its base; a push to main diffs
+          # against the commit it replaced. Both arrive as plain SHAs.
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+
+          # An unknown or unreachable base (first push, force push, grafted
+          # history) means the changed set cannot be trusted -- run the gates.
+          if [ -z "${BASE_SHA:-}" ] || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "Base commit unavailable; running the backend gates."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed=$(git diff --name-only "$BASE_SHA" HEAD)
+          echo "Changed files:"
+          echo "$changed" | sed 's/^/  /'
+
+          # Backend-relevant paths. docker/, docker-compose.yml and
+          # .env.example define the Postgres service the backend tests run
+          # against, so a change to any of them counts as backend-relevant.
+          if echo "$changed" | grep -qE '^(backend/|docker/|docker-compose\.yml$|\.env\.example$|Makefile$|\.github/workflows/backend\.yml$)'; then
+            echo "Backend-relevant changes found; running the backend gates."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No backend-relevant changes; skipping the backend gates."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Start postgres (pgvector)
+        if: steps.gate.outputs.run == 'true'
         run: docker compose up -d --build --wait postgres
 
       - uses: actions/setup-python@v7
+        if: steps.gate.outputs.run == 'true'
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
 
       - name: Install dependencies
+        if: steps.gate.outputs.run == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt -r backend/requirements-dev.txt
 
       - name: Run backend gates
+        if: steps.gate.outputs.run == 'true'
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/app
           JWT_SECRET: ci-secret-not-for-production-use-only
