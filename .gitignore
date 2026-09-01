@@ -227,3 +227,6 @@ frontend/dist/
 
 # Keep the example env tracked
 !.env.example
+
+# Claude Code agent worktrees (transient scratch, never tracked)
+.claude/worktrees/
