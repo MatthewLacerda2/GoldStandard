@@ -14,8 +14,11 @@ live in the root `Makefile` (`make backend`) and run identically in CI.
   bootstrap-time exception.
 - Repositories take an `AsyncSession` and `flush()`; the **caller commits**.
   Repositories never open their own session — the test rollback depends on it.
-- All request/response bodies are Pydantic models. Type annotations are
-  enforced (ruff `ANN`).
+- All request/response bodies are Pydantic models — enforced by
+  `tools/house_lint.py`, which reads each file's `schemas` imports and requires
+  every `@router` handler parameter to be a schema type, a path/query scalar,
+  or an injected dependency, and every return to be a schema type, a `list` of
+  one, or `None`. That the annotations exist at all is ruff's job (`ANN`).
 - Config is `pydantic-settings`, read through `@lru_cache get_settings()`.
 
 ## Size limits (enforced by `tools/house_lint.py`)
