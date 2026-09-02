@@ -110,21 +110,17 @@ responsibility, never by parallelism — sub-issues that all land in the same fi
 are one branch. Never split an API change into a `[BE]` and an `[FE]`: the
 frontend schemas are hand-mirrored and no gate holds the halves together.
 
-**Two skills carry the working protocols**, so this file can hold the reasoning
-and they can hold the steps. Invoke them rather than reconstructing a procedure
-from memory, and name them when briefing a subagent. Where a rule here is stated in
-one line and a skill has ten, the line is the rule and the skill is how to keep it;
-where they disagree, this file wins and the skill is wrong.
-
-- **`issue-write`** — what an issue must contain, which labels it carries, the
-  three gates in full, and when an agent may file one unprompted.
-- **`issue-batch`** — how a set of issues is worked: how many branches at once,
-  which can safely run together, worktrees, the path to merged, re-reading the
-  board.
-
 These labels exist here already; a fresh clone from the template has GitHub's
 stock set instead. `issue-write` ends with the `gh label create` block a downstream
 repo runs once to get them.
+
+**Two skills carry the working protocols** — `issue-write` and `issue-batch` — so
+this file can hold the reasoning and they can hold the steps. Each one names its
+own scope and when to reach for it, so this file does not restate them; invoke
+them rather than reconstructing a procedure from memory, and name them when
+briefing a subagent. Where a rule here is stated in one line and a skill has ten,
+the line is the rule and the skill is how to keep it; where they disagree, this
+file wins and the skill is wrong.
 
 ### Pull Requests
 
