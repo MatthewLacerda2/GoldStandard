@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { login } from "@/lib/api/auth";
@@ -74,4 +74,11 @@ function LoginPage() {
   );
 }
 
-export const Route = createFileRoute("/login")({ component: LoginPage });
+// The one public page. Someone who already has a token has nothing to do here,
+// so send them on to the app instead of showing the form again.
+export const Route = createFileRoute("/login")({
+  beforeLoad: ({ context }) => {
+    if (context.auth.getToken()) throw redirect({ to: "/" });
+  },
+  component: LoginPage,
+});

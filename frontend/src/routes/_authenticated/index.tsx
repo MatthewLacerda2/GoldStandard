@@ -100,4 +100,6 @@ function ItemsPage() {
   );
 }
 
-export const Route = createFileRoute("/")({ component: ItemsPage });
+export const Route = createFileRoute("/_authenticated/")({
+  component: ItemsPage,
+});

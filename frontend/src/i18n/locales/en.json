@@ -3,7 +3,8 @@
     "title": "Gold Standard",
     "nav": {
       "items": "Items",
-      "login": "Login"
+      "login": "Login",
+      "logout": "Log out"
     }
   },
   "items": {
