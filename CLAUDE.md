@@ -41,6 +41,24 @@ these can be overridden by the user** (see the closing note).
     genuinely untried ground. Research means trying what the literature hasn't
     settled — don't suppress a novel idea just because it's unproven. The line
     is "documented to fail" versus "simply not yet tried."
+- **Take the initiative.** Don't wait to be told to improve the template. A
+  change that makes it better, or makes developing it better, and is a clear win
+  with no downside is **implemented, not proposed**: implementing now and
+  validating later beats waiting. *Align before building* is about the user's
+  ideas; a clear win of your own needs no meeting first. The exception is a
+  change to **what this template teaches** — a layer boundary, an API contract,
+  the design system's tokens, a lint rule, the conventions in this file. There
+  you propose and the user decides, unless one option is a plain win-win, which
+  you take. Initiative still runs through the normal flow (an issue or an
+  issue-less PR, a worktree branch, the gates, a PR). An issue that the
+  stage-label rule below says must carry `planning` or `human` is not a clear win
+  by definition, and a `planning` issue is never started.
+  - **Initiative goes where the priority order says: infrastructure first.**
+    Before building the project, improve what makes building it reliable —
+    tests, tools, gates, harnesses — because every later branch runs on them.
+    Then the project itself. And a big feature often needs a refactor before it
+    can land cleanly: suggest that refactor first, as its own branch, merged
+    before the feature and never folded into it.
 - **Overriding these rules.** In the end, all rules may be overridden by the
   user — so long as the user says why, and the explanation still holds in the
   current context.
@@ -90,12 +108,17 @@ reflect it back into the issue or spin off a new one.
 If the user postpones a change that must still happen, suggest opening an issue
 so we don't lose track of it.
 
-**Priority — `architecture` → `infrastructure` → `bug` → `foundation` →
+**Priority — `infrastructure` → `architecture` → `bug` → `foundation` →
 `feature`; `documentation` never waits its turn.** This is "foundations come
-first" expressed as an order: a missing boundary or contract (`architecture`) and
-a missing gate or tool (`infrastructure`) both halt everything downstream, then
-what is broken, then the groundwork that makes the template more complete, then
-what is new. Priority orders what gets **merged**, not what gets **worked**.
+first" expressed as an order: a missing gate or tool (`infrastructure`) and a
+missing boundary or contract (`architecture`) both halt everything downstream,
+then what is broken, then the groundwork that makes the template more complete,
+then what is new. Infrastructure leads because it makes every later branch
+cheaper, architecture included: a faster or safer gate pays off on all the work
+queued behind it. A bug in the development tooling itself — CI, the `Makefile`
+gates, the lint rules — ranks as `infrastructure` whatever its label, because
+while it stands every branch pays for it. Priority orders what gets **merged**,
+not what gets **worked**.
 
 **`planning` and `human` are stops, and their absence means ready.** Both mean *do
 not start*, absolutely; an issue carrying neither is startable the moment it
@@ -114,11 +137,11 @@ These labels exist here already; a fresh clone from the template has GitHub's
 stock set instead. `issue-write` ends with the `gh label create` block a downstream
 repo runs once to get them.
 
-**Two skills carry the working protocols** — `issue-write` and `issue-batch` — so
-this file can hold the reasoning and they can hold the steps. Each one names its
-own scope and when to reach for it, so this file does not restate them; invoke
-them rather than reconstructing a procedure from memory, and name them when
-briefing a subagent. Where a rule here is stated in one line and a skill has ten,
+**Three skills carry the working protocols** — `issue-write`, `issue-batch` and
+`independent-review` (which `issue-batch` depends on) — so this file can hold the
+reasoning and they can hold the steps. Each one names its own scope and when to
+reach for it, so this file does not restate them; invoke them rather than
+reconstructing a procedure from memory, and name them when briefing a subagent. Where a rule here is stated in one line and a skill has ten,
 the line is the rule and the skill is how to keep it; where they disagree, this
 file wins and the skill is wrong.
 
@@ -129,13 +152,30 @@ push. A PR need not address an issue; when it does, title it
 `{issue_number}-{branch_name}` (e.g. `42-feat/item-tags`) and start the
 description with `Closes #{issue_number}`.
 
+**Nobody reads the code line by line.** With good infrastructure around it, and a
+problem that isn't too complex, the code comes out good. A person's review then
+buys little either way: a trivial change gets a glance that adds nothing, and a
+change complex enough to need a real read is too complex to review in reasonable
+time. So the guardrails — the gates, CI, the house lints and the independent
+review — are what keep the code in line. Don't expect anyone to review a PR, and
+never leave one waiting for that. If a change only feels safe once a person has
+read it, a guardrail is missing: that is an `infrastructure` issue, not a reason
+to ask for a review.
+
 - **Every PR is assigned to someone.** If the user asked you to open it, assign
   them; if it closes an issue, assign them there too. If that issue is already
   assigned to someone else, say so and let the user decide — you may keep
   writing the PR meanwhile.
-- **Never merge without the user's say-so.** Once given, carry it through
-  without pausing: commit, push, then merge as soon as CI is green (or
-  immediately if CI doesn't run). If CI fails, stop and report instead.
+- **When to merge depends on how the work started.**
+  - **In a batch** (`issue-batch`), starting the batch is the approval: merge
+    each PR once its gates and CI are green and, when triggered, its independent
+    review is answered.
+  - **In a conversation**, the conversation is usually about one theme, and its
+    PR is where that theme lands. Keep the PR open while the user is still adding
+    to it; when they seem done, offer the merge, and merge on their word.
+  - Either way, once merging is approved carry it through without pausing: merge
+    as soon as CI is green (or immediately if CI doesn't run). If CI fails, stop
+    and report instead. A PR the user said to leave alone waits for them.
 - **"Do" / "resolve" / "work" an issue** means the full chain by default, no
   asking between steps: assign the user, create the worktree, implement, run the
   gates, push, and open a ready-for-review PR — assigned to them, closing the
@@ -143,6 +183,19 @@ description with `Closes #{issue_number}`.
 - **If you can't finish** (environment failure, gates that won't pass, a spec
   gap), don't go silent: push what you have, open the PR as a **draft**, comment
   the bottleneck, and tag the user.
+- **A PR the gates cannot fully judge gets an independent review before it
+  merges** — database access, the API contract, auth, a refactor, CI and the
+  gates. The `independent-review` skill has the triggers and how to keep the
+  reviewer unbiased; run it on request for any PR, batch or not.
+- **Decisions are written down, never waited on.** A judgement call the issue
+  left open is yours to take when something points the way — a rule in this
+  file, a convention the codebase already follows (the worked `items` example
+  first), or a run of past decisions in the same direction. Take it and record
+  it, with its reason, in the PR. A decision with none of those behind it goes
+  back to the user, and the PR is a draft that names it. A check only a human
+  can do (the page in a real browser, how it looks) never keeps a PR a draft:
+  its checklist goes in the PR for the user to run later, and a failure found
+  then is a bug. What stays the user's call is listed in *Take the initiative*.
 
 Structure the description as four sections, in order:
 
@@ -157,10 +210,10 @@ Structure the description as four sections, in order:
 
 The user no longer hand-writes issue or PR descriptions — you do — so there's no
 need to mark them "AI-generated"; that's the default. The user may still write
-comments. Before an issue is written, the user must show they have thought it
-through — first principles and purpose — and the idea must be clear to both
-sides. Don't transcribe a vague ask into an issue: surface gaps, challenge
-assumptions, reach shared understanding first.
+comments. Before an issue for the user's idea is written, they must show they
+have thought it through — first principles and purpose — and the idea must be
+clear to both sides. Don't transcribe a vague ask into an issue: surface gaps,
+challenge assumptions, reach shared understanding first.
 
 ## Working agreement
 
@@ -168,17 +221,21 @@ These govern how the agent operates in this repo. **Any of them can be
 overridden by the user in the current or a previous prompt** — an explicit
 instruction wins.
 
-- **Never commit or push** unless the user told you to in the current or a
-  previous prompt.
+- **Committing and pushing are your call; merging is not.** Commit and push
+  whenever you judge a meaningful part of the job done, with the gates for what
+  you touched green — on your own branch, never on `main`, and never force-push
+  a branch someone else is working on. When to merge is *Pull Requests*' rule.
 - **Foundations come first.** The infrastructure, architecture, and gold-standard
   conventions/patterns must already be in place before any feature change is
   made. Don't build on top of a structure that isn't there yet — establish it.
-- **Shared understanding before code.** Before implementing a change, the user
-  must have a clear idea of what they want, and you must confirm you're on the
-  same page. If the request is ambiguous, clarify first — don't guess and build.
+- **Shared understanding before code.** Before implementing a change the user
+  asked for, they must have a clear idea of what they want, and you must confirm
+  you're on the same page. If the request is ambiguous, clarify first — don't
+  guess and build. Your own clear wins follow *Take the initiative* instead.
 - **Push back on dead weight.** If the user is trying to add something that
-  doesn't add value to the project, you MUST push back. If you spot something
-  that can be removed without losing value, you may suggest removing it.
+  doesn't add value to the project, you MUST push back. Something that can be
+  removed without losing value is a clear win: remove it, unless that changes
+  what the template teaches, in which case suggest it.
 - **Don't multiply Markdown.** Do not create new Markdown files without asking
   the user first. You may edit existing ones, as long as you tell the user what
   you changed.

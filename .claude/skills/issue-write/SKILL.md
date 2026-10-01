@@ -37,6 +37,13 @@ line that is actually wrong. Issue #8 opens with *"`core/rate_limiter.py` builds
 decorator anywhere"* — nobody has to re-derive that. "We should rate-limit login"
 is worth less.
 
+**Point with symbols and paths, not line numbers.** `api/deps.py`'s
+`get_current_user` or `house_lint.py`'s `check_function_lengths` survive the
+edits that land before the issue is picked up; a bare `backend/api/deps.py:38`
+does not. On a sibling repo, a batch merged ~50 pull requests in one day and
+nearly every brief had to warn its coder that the issue's line references were
+stale. A line number is fine as a hint *beside* a symbol, never on its own.
+
 **Cite what it relates to.** Sibling issues, the pull request that exposed it, the
 rule in `CLAUDE.md` it turns on, the upgrade path in `README.md` it finally takes.
 A future reader arrives with no memory of today.
@@ -173,13 +180,16 @@ happened when the code broke, and nothing is gained by making it wait.
 
 ## Priority
 
-**`architecture` → `infrastructure` → `bug` → `foundation` → `feature`.**
+**`infrastructure` → `architecture` → `bug` → `foundation` → `feature`.**
 `documentation` never waits its turn.
 
 That is `CLAUDE.md`'s "foundations come first" expressed as an order: if the way we
-build is not solid — a boundary or convention missing (`architecture`), a gate or
-tool missing (`infrastructure`) — that halts everything downstream. Then what is
-broken. Then the groundwork that makes the template more complete. Then what is new.
+build is not solid — a gate or tool missing (`infrastructure`), a boundary or
+convention missing (`architecture`) — that halts everything downstream. Then what
+is broken. Then the groundwork that makes the template more complete. Then what is
+new. Infrastructure leads because every branch after it runs on the faster, safer
+loop. A bug in the development tooling itself — CI, the `Makefile` gates, the lint
+rules — ranks as `infrastructure`, whatever its label.
 
 Priority orders what gets **merged**, not what gets **worked**.
 
