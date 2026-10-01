@@ -21,8 +21,8 @@ whole of this section is downstream of that number.
 So there is nothing to pipeline around. In a compiled monorepo the merge queue is
 the scarce resource and the shape of the work is dictated by it; here it is
 cheaper than the conversation about it. **Cap the number of branches in flight on
-file collision and on how many diffs a person will actually read**, not on the
-queue.
+file collision**, not on the queue — and not on a person's reading time, because
+nobody reads the diffs (`CLAUDE.md`, *Pull Requests*).
 
 What survives from the compiled-repo arithmetic is the part CI never paid for:
 over shared files, N branches cost **N(N−1)/2 rebases**. That is git's bill, not
@@ -146,8 +146,8 @@ stale worktree keeps a stale test database alive behind it.
   so **a draft pull request runs no CI at all**. Marking it ready is the moment
   anything is checked, and the local gates are what you have until then.
 - **Ready means finished.** Never ready a pull request just to get a CI run: a
-  ready pull request claims the branch is done, and once the user has said to
-  merge, it merges the moment CI is green. On a sibling repo a pull request was
+  ready pull request claims the branch is done, and in a batch it merges the
+  moment CI is green. On a sibling repo a pull request was
   readied to get CI on a temporary test loop and merged with the loop still in
   it. The no-drift rule is what makes this cheap here — the local gates *are*
   the CI targets, so the proof on a draft is `make check`, run locally.
@@ -188,11 +188,12 @@ There is no separate merge skill in this repo. This is the whole of it.
    and passing are different states; never write a wait loop that reads zero
    completed checks as success. `gh pr checks <n>` alongside
    `gh run list --branch <branch>` tells you whether a run exists at all.
-6. **Nothing but you stops a red merge** — `main` carries no branch protection and
-   no ruleset. `CLAUDE.md` is the gate: never merge without the user's say-so;
-   once given, carry it through without pausing — commit, push, merge as soon as
-   CI is green, or immediately if CI does not run. If CI fails, stop and report.
-   A triggered PR also needs its `Independent review` comment first.
+6. **Merge — starting the batch was the approval.** Nobody waits to read the
+   code (`CLAUDE.md`, *Pull Requests*): merge as soon as CI is green, or
+   immediately if CI does not run, and a triggered PR once its `Independent
+   review` comment exists too. **Nothing but you stops a red merge** — `main`
+   carries no branch protection and no ruleset — so if CI fails, stop and fix
+   forward or report. A PR the user said to leave alone waits for them.
 7. `gh pr merge`, then remove the worktree and delete the branch —
    `deleteBranchOnMerge` is off, so both are yours to do.
 
@@ -212,7 +213,7 @@ A merge changes the graph. Whatever the merged issue blocked is fair game the
 moment it lands — so the decision is one merge wide, not one batch wide.
 
 Re-reading is not a licence to start everything. The ceiling is the collision list
-above and the reviewer's attention, and an unblocked issue left unstarted is not
+above, and an unblocked issue left unstarted is not
 wasted capacity — it is a rebase not yet paid for. Priority (`infrastructure` →
 `architecture` → `bug` → `foundation` → `feature`, `documentation` any time)
 orders what gets **merged**, not what gets started.

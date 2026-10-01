@@ -139,10 +139,9 @@ repo runs once to get them.
 
 **Three skills carry the working protocols** — `issue-write`, `issue-batch` and
 `independent-review` (which `issue-batch` depends on) — so this file can hold the
-reasoning and they can hold the steps. Each one names its
-own scope and when to reach for it, so this file does not restate them; invoke
-them rather than reconstructing a procedure from memory, and name them when
-briefing a subagent. Where a rule here is stated in one line and a skill has ten,
+reasoning and they can hold the steps. Each one names its own scope and when to
+reach for it, so this file does not restate them; invoke them rather than
+reconstructing a procedure from memory, and name them when briefing a subagent. Where a rule here is stated in one line and a skill has ten,
 the line is the rule and the skill is how to keep it; where they disagree, this
 file wins and the skill is wrong.
 
@@ -153,13 +152,30 @@ push. A PR need not address an issue; when it does, title it
 `{issue_number}-{branch_name}` (e.g. `42-feat/item-tags`) and start the
 description with `Closes #{issue_number}`.
 
+**Nobody reads the code line by line.** With good infrastructure around it, and a
+problem that isn't too complex, the code comes out good. A person's review then
+buys little either way: a trivial change gets a glance that adds nothing, and a
+change complex enough to need a real read is too complex to review in reasonable
+time. So the guardrails — the gates, CI, the house lints and the independent
+review — are what keep the code in line. Don't expect anyone to review a PR, and
+never leave one waiting for that. If a change only feels safe once a person has
+read it, a guardrail is missing: that is an `infrastructure` issue, not a reason
+to ask for a review.
+
 - **Every PR is assigned to someone.** If the user asked you to open it, assign
   them; if it closes an issue, assign them there too. If that issue is already
   assigned to someone else, say so and let the user decide — you may keep
   writing the PR meanwhile.
-- **Never merge without the user's say-so.** Once given, carry it through
-  without pausing: commit, push, then merge as soon as CI is green (or
-  immediately if CI doesn't run). If CI fails, stop and report instead.
+- **When to merge depends on how the work started.**
+  - **In a batch** (`issue-batch`), starting the batch is the approval: merge
+    each PR once its gates and CI are green and, when triggered, its independent
+    review is answered.
+  - **In a conversation**, the conversation is usually about one theme, and its
+    PR is where that theme lands. Keep the PR open while the user is still adding
+    to it; when they seem done, offer the merge, and merge on their word.
+  - Either way, once merging is approved carry it through without pausing: merge
+    as soon as CI is green (or immediately if CI doesn't run). If CI fails, stop
+    and report instead. A PR the user said to leave alone waits for them.
 - **"Do" / "resolve" / "work" an issue** means the full chain by default, no
   asking between steps: assign the user, create the worktree, implement, run the
   gates, push, and open a ready-for-review PR — assigned to them, closing the
@@ -171,13 +187,15 @@ description with `Closes #{issue_number}`.
   merges** — database access, the API contract, auth, a refactor, CI and the
   gates. The `independent-review` skill has the triggers and how to keep the
   reviewer unbiased; run it on request for any PR, batch or not.
-- **Decisions are written down, never waited on.** Working unattended, a
-  judgement call the issue left open takes the default that the issue, this file
-  or the worked `items` example points to, and the choice and its reason go in
-  the PR. A check only a human can do (the page in a real browser, how it looks)
-  never keeps a PR a draft: its checklist goes in the PR for the user to run
-  later, and a failure found then is a bug. What stays the user's call is listed
-  in *Take the initiative*.
+- **Decisions are written down, never waited on.** A judgement call the issue
+  left open is yours to take when something points the way — a rule in this
+  file, a convention the codebase already follows (the worked `items` example
+  first), or a run of past decisions in the same direction. Take it and record
+  it, with its reason, in the PR. A decision with none of those behind it goes
+  back to the user, and the PR is a draft that names it. A check only a human
+  can do (the page in a real browser, how it looks) never keeps a PR a draft:
+  its checklist goes in the PR for the user to run later, and a failure found
+  then is a bug. What stays the user's call is listed in *Take the initiative*.
 
 Structure the description as four sections, in order:
 
@@ -203,8 +221,10 @@ These govern how the agent operates in this repo. **Any of them can be
 overridden by the user in the current or a previous prompt** — an explicit
 instruction wins.
 
-- **Never commit or push** unless the user told you to in the current or a
-  previous prompt.
+- **Committing and pushing are your call; merging is not.** Commit and push
+  whenever you judge a meaningful part of the job done, with the gates for what
+  you touched green — on your own branch, never on `main`, and never force-push
+  a branch someone else is working on. When to merge is *Pull Requests*' rule.
 - **Foundations come first.** The infrastructure, architecture, and gold-standard
   conventions/patterns must already be in place before any feature change is
   made. Don't build on top of a structure that isn't there yet — establish it.

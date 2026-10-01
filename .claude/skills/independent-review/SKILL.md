@@ -7,12 +7,13 @@ description: Get an unbiased review of a pull request before it merges — a fre
 
 ## Why it exists
 
-A coder reviewing its own diff reviews what it *meant* to write, not what it
-wrote. The gates catch what a machine can state; they cannot tell you that a
-query leaks another user's rows or that the frontend schema no longer matches the
-backend's. So a PR that touches what the gates cannot see gets one more read, by
-an agent that reads it the way an outsider would and is never told what to think
-of it. **Everything below exists to keep the coder's bias out of the reviewer.**
+Nobody reads the code line by line (`CLAUDE.md`, *Pull Requests*), so besides the
+gates a PR gets exactly one read: this one. A coder reviewing its own diff reviews
+what it *meant* to write, not what it wrote. The gates catch what a machine can
+state; they cannot tell you that a query leaks another user's rows or that the
+frontend schema no longer matches the backend's. So a PR that touches what the
+gates cannot see gets one more read, by an agent that reads it the way an
+outsider would and is never told what to think of it. **Everything below exists to keep the coder's bias out of the reviewer.**
 
 The review itself is Claude Code's built-in `code-review` skill. It ships with
 Claude Code and is updated whenever the model changes, so this skill only says
@@ -128,8 +129,8 @@ checked against the code first. Then:
    branch pushed. In a stack, the PRs above are rebased onto the fix.
 3. **One PR comment, headed `Independent review`**, lists every finding and what
    became of it: fixed (with the commit), declined (with why), or sent to the
-   user. Say so if there were no findings, too. This comment is the record that
-   the review happened.
+   user. Say so if there were no findings, too. Since no person reads the code,
+   this comment is the record that the review happened.
 4. When the fixes rework a query, a contract or the logic substantially, one more
    reviewer reads the new diff. Otherwise one round is the review.
 
@@ -149,6 +150,8 @@ comment goes on the reviewed PR and links the fix.
   reviews the summary, not the code.
 - Letting the reviewer push its own fixes. It reports; the coder fixes.
 - Merging a triggered PR before its `Independent review` comment exists.
+- Waiting for a person to review the code after this one. Nobody will; this
+  review and the gates are what the PR gets.
 - Skipping the review because the diff is small. The trigger is what the change
   touches: a ten-line change to a repository's query is reviewed; a 300-line
   locale sweep is not.
