@@ -1,6 +1,6 @@
 ---
 name: issue-batch
-description: Run a set of issues from board to merged — how many branches at once, which ones can safely run together, worktrees, the path to merged, and re-reading the board. Use when starting work on one or more issues, when deciding what to start next, or when told to "do the issues".
+description: Run a set of issues from board to merged — how many branches at once, which ones can safely run together, worktrees, the path to merged, re-reading the board, and turning lessons into changes. Use when starting work on one or more issues, when deciding what to start next, or when told to "do the issues".
 ---
 
 # Working a batch of issues
@@ -145,6 +145,12 @@ stale worktree keeps a stale test database alive behind it.
   costs here: both workflows carry `if: ${{ !github.event.pull_request.draft }}`,
   so **a draft pull request runs no CI at all**. Marking it ready is the moment
   anything is checked, and the local gates are what you have until then.
+- **Ready means finished.** Never ready a pull request just to get a CI run: a
+  ready pull request claims the branch is done, and once the user has said to
+  merge, it merges the moment CI is green. On a sibling repo a pull request was
+  readied to get CI on a temporary test loop and merged with the loop still in
+  it. The no-drift rule is what makes this cheap here — the local gates *are*
+  the CI targets, so the proof on a draft is `make check`, run locally.
 
 ## The path to merged
 
@@ -157,6 +163,15 @@ There is no separate merge skill in this repo. This is the whole of it.
    `make backend PYTHON=python` on a clean 3.12 with `requirements.txt` installed
    fresh, and `bun install --frozen-lockfile`. A `.venv` or a `node_modules` that
    has drifted from its manifest is green on nothing.
+
+   **Not every red is the branch's.** Before fixing a red gate in code the branch
+   did not touch, run it on `main`; if it fails there too, it is a bug to cite or
+   file, not this branch's to fix. And a failure the machine caused —
+   `No space left on device`, `Cannot allocate memory`, a killed process —
+   says nothing about the code: free the space and run it again, never "fix"
+   code that was never wrong. A gate this machine cannot run at all (no docker
+   for the test database, say) is **named in the pull request**, with the CI
+   workflow that answers for it — never claimed green.
 2. `git fetch origin && git rebase origin/main`, then push with
    `--force-with-lease`.
 3. **Mark it ready.** That is what starts CI.
@@ -191,8 +206,8 @@ moment it lands — so the decision is one merge wide, not one batch wide.
 
 Re-reading is not a licence to start everything. The ceiling is the collision list
 above and the reviewer's attention, and an unblocked issue left unstarted is not
-wasted capacity — it is a rebase not yet paid for. Priority (`architecture` →
-`infrastructure` → `bug` → `foundation` → `feature`, `documentation` any time)
+wasted capacity — it is a rebase not yet paid for. Priority (`infrastructure` →
+`architecture` → `bug` → `foundation` → `feature`, `documentation` any time)
 orders what gets **merged**, not what gets started.
 
 **A stage label is the only absolute stop.** `planning` and `human` mean *not
@@ -241,6 +256,57 @@ Working unattended, a question that only blocks *one* issue is a comment on that
 issue and a move to the next — not a night spent idling. A question that blocks the
 batch is a hand-back.
 
+**Everything else is decided, written down, and not waited on.** A judgement call
+the issue left open — and that is not on the list above — takes the default the
+issue, `CLAUDE.md` or the worked `items` example points to; the pull request says
+what was chosen and why. **A human check is never a hold either.** Some proof only
+a person can give: the page in a real browser, how it looks, a flow clicked
+through. Agents do not start the app (`CLAUDE.md`, *Server-start guardrails*), so
+put the check in the pull request as a checklist for the user to run later, and
+carry on. If it turns out broken, that is a bug to file and fix, not a reason the
+batch waited. (On a sibling repo, three pull requests held for a smoke test and an
+ear check stalled the queue for hours, and every one was fine.)
+
+## Learn from the batch: every lesson ends as a change
+
+A batch is trial by fire: it finds the traps, gaps and bugs in the tooling and in
+the template faster than anything else. A lesson that only reaches the chat is
+lost, because the next session starts without it. So every lesson ends as exactly
+one of:
+
+- **fixed** — a pull request that removes the cause;
+- **enforced** — a lint rule, gate or test that makes it impossible to repeat
+  (`CLAUDE.md`'s *prefer expression over description* says this is the best of
+  the four);
+- **documented** — this skill, `issue-write`, or a `CLAUDE.md`, for what the repo
+  cannot change (a platform behaviour, a procedure);
+- **tracked** — an issue with the evidence (run ids, pull request numbers, the
+  failing output) and a proposed fix, never just the symptom.
+
+**Mid-batch, fix what blocks or bites twice.** When a lesson costs the running
+batch time — a gate that misleads, a brief that makes every agent re-solve the same
+trap — fix it now. It is infrastructure, so it outranks whatever was next. An edit
+that changes a **rule in `CLAUDE.md`**, rather than recording a step in a skill,
+changes the template's conventions: open it and leave it for the user (*Take the
+initiative*).
+
+**Otherwise, file it and keep going.** File an agent's "follow-up, not in this
+pull request" notes and a pull request's open decisions the moment you read them,
+not at the end.
+
+**At the end, run a retro before reporting back:**
+
+1. List every trap, gap, surprise, workaround and hand-back from the batch: your
+   own notes, each pull request's decisions, the issues the agents filed.
+2. Map each one to fixed, enforced, documented or tracked. Anything unmapped gets
+   an issue now.
+3. **Refresh the unstarted issues whose ground moved.** Add a short *Context
+   update* comment to the issues next in line: what merged that they build on, and
+   what changed under them. Re-scope or close any the batch made moot. Never touch
+   a `planning` issue's scope.
+4. Put the mapping in the report, so the user sees each lesson turned into a change
+   rather than only described.
+
 ## Reporting back
 
 The user is not reading the transcript of a batch. They take long — often hours,
@@ -249,6 +315,8 @@ usually overnight — and the transcript is, if anything, notes for Claude itsel
 **When things go well, say what the result was.** When things did not go as one
 would expect, say what the surprise was. That does not necessarily mean things went
 badly; we write it down because the more we can predict, the better we improve.
+Include the retro's lesson → change mapping, and list every human check left
+unrun in what merged.
 
 Two things still interrupt, because they are the ones the user would want to
 overrule and overruling is only possible while the batch is still running: **a

@@ -41,6 +41,18 @@ these can be overridden by the user** (see the closing note).
     genuinely untried ground. Research means trying what the literature hasn't
     settled — don't suppress a novel idea just because it's unproven. The line
     is "documented to fail" versus "simply not yet tried."
+- **Take the initiative.** Don't wait to be told to improve the template. A
+  change that makes it better, or makes developing it better, and is a clear win
+  with no downside is **implemented, not proposed**: implementing now and
+  validating later beats waiting. *Align before building* is about the user's
+  ideas; a clear win of your own needs no meeting first. The exception is a
+  change to **what this template teaches** — a layer boundary, an API contract,
+  the design system's tokens, a lint rule, the conventions in this file. There
+  you propose and the user decides, unless one option is a plain win-win, which
+  you take. Initiative still runs through the normal flow (an issue or an
+  issue-less PR, a worktree branch, the gates, a PR). An issue that the
+  stage-label rule below says must carry `planning` or `human` is not a clear win
+  by definition, and a `planning` issue is never started.
 - **Overriding these rules.** In the end, all rules may be overridden by the
   user — so long as the user says why, and the explanation still holds in the
   current context.
@@ -90,12 +102,17 @@ reflect it back into the issue or spin off a new one.
 If the user postpones a change that must still happen, suggest opening an issue
 so we don't lose track of it.
 
-**Priority — `architecture` → `infrastructure` → `bug` → `foundation` →
+**Priority — `infrastructure` → `architecture` → `bug` → `foundation` →
 `feature`; `documentation` never waits its turn.** This is "foundations come
-first" expressed as an order: a missing boundary or contract (`architecture`) and
-a missing gate or tool (`infrastructure`) both halt everything downstream, then
-what is broken, then the groundwork that makes the template more complete, then
-what is new. Priority orders what gets **merged**, not what gets **worked**.
+first" expressed as an order: a missing gate or tool (`infrastructure`) and a
+missing boundary or contract (`architecture`) both halt everything downstream,
+then what is broken, then the groundwork that makes the template more complete,
+then what is new. Infrastructure leads because it makes every later branch
+cheaper, architecture included: a faster or safer gate pays off on all the work
+queued behind it. A bug in the development tooling itself — CI, the `Makefile`
+gates, the lint rules — ranks as `infrastructure` whatever its label, because
+while it stands every branch pays for it. Priority orders what gets **merged**,
+not what gets **worked**.
 
 **`planning` and `human` are stops, and their absence means ready.** Both mean *do
 not start*, absolutely; an issue carrying neither is startable the moment it
@@ -143,6 +160,13 @@ description with `Closes #{issue_number}`.
 - **If you can't finish** (environment failure, gates that won't pass, a spec
   gap), don't go silent: push what you have, open the PR as a **draft**, comment
   the bottleneck, and tag the user.
+- **Decisions are written down, never waited on.** Working unattended, a
+  judgement call the issue left open takes the default that the issue, this file
+  or the worked `items` example points to, and the choice and its reason go in
+  the PR. A check only a human can do (the page in a real browser, how it looks)
+  never keeps a PR a draft: its checklist goes in the PR for the user to run
+  later, and a failure found then is a bug. What stays the user's call is listed
+  in *Take the initiative*.
 
 Structure the description as four sections, in order:
 
@@ -157,10 +181,10 @@ Structure the description as four sections, in order:
 
 The user no longer hand-writes issue or PR descriptions — you do — so there's no
 need to mark them "AI-generated"; that's the default. The user may still write
-comments. Before an issue is written, the user must show they have thought it
-through — first principles and purpose — and the idea must be clear to both
-sides. Don't transcribe a vague ask into an issue: surface gaps, challenge
-assumptions, reach shared understanding first.
+comments. Before an issue for the user's idea is written, they must show they
+have thought it through — first principles and purpose — and the idea must be
+clear to both sides. Don't transcribe a vague ask into an issue: surface gaps,
+challenge assumptions, reach shared understanding first.
 
 ## Working agreement
 
@@ -173,12 +197,14 @@ instruction wins.
 - **Foundations come first.** The infrastructure, architecture, and gold-standard
   conventions/patterns must already be in place before any feature change is
   made. Don't build on top of a structure that isn't there yet — establish it.
-- **Shared understanding before code.** Before implementing a change, the user
-  must have a clear idea of what they want, and you must confirm you're on the
-  same page. If the request is ambiguous, clarify first — don't guess and build.
+- **Shared understanding before code.** Before implementing a change the user
+  asked for, they must have a clear idea of what they want, and you must confirm
+  you're on the same page. If the request is ambiguous, clarify first — don't
+  guess and build. Your own clear wins follow *Take the initiative* instead.
 - **Push back on dead weight.** If the user is trying to add something that
-  doesn't add value to the project, you MUST push back. If you spot something
-  that can be removed without losing value, you may suggest removing it.
+  doesn't add value to the project, you MUST push back. Something that can be
+  removed without losing value is a clear win: remove it, unless that changes
+  what the template teaches, in which case suggest it.
 - **Don't multiply Markdown.** Do not create new Markdown files without asking
   the user first. You may edit existing ones, as long as you tell the user what
   you changed.
