@@ -1,6 +1,6 @@
 ---
 name: issue-batch
-description: Run a set of issues from board to merged — how many branches at once, which ones can safely run together, worktrees, the path to merged, re-reading the board, and turning lessons into changes. Use when starting work on one or more issues, when deciding what to start next, or when told to "do the issues".
+description: Run a set of issues from board to merged — how many branches at once, which ones can safely run together, worktrees, the path to merged (including the independent review it depends on), re-reading the board, and turning lessons into changes. Use when starting work on one or more issues, when deciding what to start next, or when told to "do the issues".
 ---
 
 # Working a batch of issues
@@ -174,19 +174,26 @@ There is no separate merge skill in this repo. This is the whole of it.
    workflow that answers for it — never claimed green.
 2. `git fetch origin && git rebase origin/main`, then push with
    `--force-with-lease`.
-3. **Mark it ready.** That is what starts CI.
-4. **Wait for the runs that should exist — and work out which those are.** Read the
+3. **Independent review, when a trigger hits.** Invoke the `independent-review`
+   skill: it names the triggers (database access, the API contract, auth, a
+   refactor, CI and the gates), dispatches the unbiased reviewer, and says how the
+   coder answers. It runs on the **draft**, before step 4: findings are part of
+   being finished, and ready means finished. The batch's session dispatches the
+   reviewer; the coder only answers it. A PR that hits no trigger skips this step.
+4. **Mark it ready.** That is what starts CI.
+5. **Wait for the runs that should exist — and work out which those are.** Read the
    diff against the path filters first. A branch touching only root Markdown or
    `.claude/**` matches neither workflow and gets **zero checks**, which on the
    pull request page is indistinguishable from "checks have not started". Absent
    and passing are different states; never write a wait loop that reads zero
    completed checks as success. `gh pr checks <n>` alongside
    `gh run list --branch <branch>` tells you whether a run exists at all.
-5. **Nothing but you stops a red merge** — `main` carries no branch protection and
+6. **Nothing but you stops a red merge** — `main` carries no branch protection and
    no ruleset. `CLAUDE.md` is the gate: never merge without the user's say-so;
    once given, carry it through without pausing — commit, push, merge as soon as
    CI is green, or immediately if CI does not run. If CI fails, stop and report.
-6. `gh pr merge`, then remove the worktree and delete the branch —
+   A triggered PR also needs its `Independent review` comment first.
+7. `gh pr merge`, then remove the worktree and delete the branch —
    `deleteBranchOnMerge` is off, so both are yours to do.
 
 **A red ready pull request stays ready** and is fixed forward. Draft is for work
@@ -225,6 +232,9 @@ written to be read cold. Beyond that:
 - Tell it which gate to run: the layer target while working, `make check` before
   the pull request goes ready.
 - Tell it **not** to merge — merging belongs to the session running the batch.
+- Tell it **not** to review its own pull request. When a trigger hits, the
+  batch's session runs `independent-review` and sends the findings back to the
+  coder (`SendMessage` resumes it with its context) to answer.
 - Tell it **not** to start `docker compose`, a dev server, or anything
   long-running. The stack is a singleton and the gates are the verification.
 - **Scratch filenames must carry the issue number.** The scratchpad is shared

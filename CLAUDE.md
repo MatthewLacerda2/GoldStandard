@@ -53,6 +53,12 @@ these can be overridden by the user** (see the closing note).
   issue-less PR, a worktree branch, the gates, a PR). An issue that the
   stage-label rule below says must carry `planning` or `human` is not a clear win
   by definition, and a `planning` issue is never started.
+  - **Initiative goes where the priority order says: infrastructure first.**
+    Before building the project, improve what makes building it reliable —
+    tests, tools, gates, harnesses — because every later branch runs on them.
+    Then the project itself. And a big feature often needs a refactor before it
+    can land cleanly: suggest that refactor first, as its own branch, merged
+    before the feature and never folded into it.
 - **Overriding these rules.** In the end, all rules may be overridden by the
   user — so long as the user says why, and the explanation still holds in the
   current context.
@@ -131,8 +137,9 @@ These labels exist here already; a fresh clone from the template has GitHub's
 stock set instead. `issue-write` ends with the `gh label create` block a downstream
 repo runs once to get them.
 
-**Two skills carry the working protocols** — `issue-write` and `issue-batch` — so
-this file can hold the reasoning and they can hold the steps. Each one names its
+**Three skills carry the working protocols** — `issue-write`, `issue-batch` and
+`independent-review` (which `issue-batch` depends on) — so this file can hold the
+reasoning and they can hold the steps. Each one names its
 own scope and when to reach for it, so this file does not restate them; invoke
 them rather than reconstructing a procedure from memory, and name them when
 briefing a subagent. Where a rule here is stated in one line and a skill has ten,
@@ -160,6 +167,10 @@ description with `Closes #{issue_number}`.
 - **If you can't finish** (environment failure, gates that won't pass, a spec
   gap), don't go silent: push what you have, open the PR as a **draft**, comment
   the bottleneck, and tag the user.
+- **A PR the gates cannot fully judge gets an independent review before it
+  merges** — database access, the API contract, auth, a refactor, CI and the
+  gates. The `independent-review` skill has the triggers and how to keep the
+  reviewer unbiased; run it on request for any PR, batch or not.
 - **Decisions are written down, never waited on.** Working unattended, a
   judgement call the issue left open takes the default that the issue, this file
   or the worked `items` example points to, and the choice and its reason go in
