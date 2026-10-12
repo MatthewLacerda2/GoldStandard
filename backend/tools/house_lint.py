@@ -1,14 +1,16 @@
 """Custom house linter (pure stdlib, AST-based).
 
-Rules enforced:
-  1. A source file longer than ``MAX_FILE_LINES`` lines fails, unless it carries
-     a ``# lint: data-file`` marker within its first 15 lines. Files under a
-     ``tests/`` directory are exempt from this rule.
+Rules enforced (rules 1-3 count **lines of code**: blank lines, comment-only
+lines and the docstring of a module, class or function do not count, so
+documenting a file never pushes it over; any other string still counts):
+  1. A source file with more than ``MAX_FILE_LINES`` lines of code fails, unless
+     it carries a ``# lint: data-file`` marker within its first 15 lines. Files
+     under a ``tests/`` directory are exempt from this rule.
   2. Any function decorated with ``@router.<method>`` (get/post/put/patch/delete)
-     longer than ``MAX_HANDLER_LINES`` (def line to last line, decorators
-     excluded) fails.
-  3. Any ``test_*`` function under a ``tests/`` directory longer than
-     ``MAX_TEST_LINES`` fails.
+     with more than ``MAX_HANDLER_LINES`` lines of code (def line to last line,
+     decorators excluded) fails.
+  3. Any ``test_*`` function under a ``tests/`` directory with more than
+     ``MAX_TEST_LINES`` lines of code fails.
   4. Every body crossing a ``@router.<method>`` boundary is a Pydantic schema
      type: a parameter is either an injected dependency (``Depends()`` and the
      rest of FastAPI's parameter markers), a path/query scalar, or a schema
@@ -36,7 +38,9 @@ The module is importable (rules return violation lists) and runnable as
 from __future__ import annotations
 
 import ast
+import io
 import sys
+import tokenize
 from pathlib import Path
 
 MAX_FILE_LINES = 350
@@ -63,11 +67,67 @@ def _is_under_tests(path: Path) -> bool:
     return "tests" in path.parts
 
 
-def _node_line_span(node: ast.AST) -> int:
-    """Number of lines a function spans, excluding decorators."""
+# Tokens that never make a line count as code on their own.
+_NON_CODE_TOKENS = frozenset(
+    {
+        tokenize.COMMENT,
+        tokenize.NL,
+        tokenize.NEWLINE,
+        tokenize.INDENT,
+        tokenize.DEDENT,
+        tokenize.ENCODING,
+        tokenize.ENDMARKER,
+    }
+)
+_DOCSTRING_OWNERS = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+
+
+def _docstring_starts(tree: ast.Module, lines: list[str]) -> set[tuple[int, int]]:
+    """Where the docstring of each module, class or function starts: (line, column).
+
+    ``ast`` measures columns in UTF-8 bytes and ``tokenize`` in characters, so
+    the column is converted here to match the tokens it is looked up against.
+    """
+    starts: set[tuple[int, int]] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, _DOCSTRING_OWNERS) or not node.body:
+            continue
+        first = node.body[0]
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            line, byte_col = first.value.lineno, first.value.col_offset
+            starts.add((line, len(lines[line - 1].encode()[:byte_col].decode())))
+    return starts
+
+
+def code_lines(source: str, tree: ast.Module) -> set[int]:
+    """Line numbers that hold code: not blank, not only a comment, and not the
+    docstring of a module, class or function.
+
+    A line counts when any token on it is code. Docstring tokens are skipped
+    rather than their lines dropped, so a one-line ``def`` carrying its own
+    docstring still counts. Any other string, multi-line or not, counts every
+    line it spans.
+    """
+    docstrings = _docstring_starts(tree, source.split("\n"))
+    lines: set[int] = set()
+    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+        if tok.type in _NON_CODE_TOKENS:
+            continue
+        if tok.type == tokenize.STRING and tok.start in docstrings:
+            continue
+        lines.update(range(tok.start[0], tok.end[0] + 1))
+    return lines
+
+
+def _function_code_lines(node: ast.FunctionDef | ast.AsyncFunctionDef, code: set[int]) -> int:
+    """Lines of code a function spans, excluding decorators."""
     start = node.lineno  # `def`/`async def` line, after decorators
     end = node.end_lineno or start
-    return end - start + 1
+    return sum(1 for line in range(start, end + 1) if line in code)
 
 
 def _is_router_handler(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
@@ -79,40 +139,36 @@ def _is_router_handler(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return False
 
 
-def check_file_length(path: Path, source: str) -> list[str]:
-    """Rule 1: enforce the maximum file length."""
+def check_file_length(path: Path, source: str, code: set[int]) -> list[str]:
+    """Rule 1: enforce the maximum file length, in lines of code."""
     if _is_under_tests(path):
         return []
-    lines = source.splitlines()
-    if len(lines) <= MAX_FILE_LINES:
-        return []
-    header = "\n".join(lines[:_MARKER_SCAN_LINES])
+    header = "\n".join(source.splitlines()[:_MARKER_SCAN_LINES])
     if DATA_FILE_MARKER in header:
         return []
-    return [f"{path}: file has {len(lines)} lines (max {MAX_FILE_LINES})"]
+    count = len(code)
+    if count <= MAX_FILE_LINES:
+        return []
+    return [f"{path}: file has {count} lines of code (max {MAX_FILE_LINES})"]
 
 
-def check_function_lengths(path: Path, source: str) -> list[str]:
+def check_function_lengths(path: Path, tree: ast.Module, code: set[int]) -> list[str]:
     """Rules 2 and 3: enforce handler and test function length limits."""
     violations: list[str] = []
-    try:
-        tree = ast.parse(source, filename=str(path))
-    except SyntaxError as exc:
-        return [f"{path}: syntax error: {exc}"]
-
     under_tests = _is_under_tests(path)
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        span = _node_line_span(node)
+        span = _function_code_lines(node, code)
         if _is_router_handler(node) and span > MAX_HANDLER_LINES:
             violations.append(
-                f"{path}:{node.lineno}: handler '{node.name}' is {span} lines "
+                f"{path}:{node.lineno}: handler '{node.name}' is {span} lines of code "
                 f"(max {MAX_HANDLER_LINES})"
             )
         if under_tests and node.name.startswith("test_") and span > MAX_TEST_LINES:
             violations.append(
-                f"{path}:{node.lineno}: test '{node.name}' is {span} lines (max {MAX_TEST_LINES})"
+                f"{path}:{node.lineno}: test '{node.name}' is {span} lines of code "
+                f"(max {MAX_TEST_LINES})"
             )
     return violations
 
@@ -264,13 +320,8 @@ def _check_return(
     ]
 
 
-def check_router_io(path: Path, source: str) -> list[str]:
+def check_router_io(path: Path, tree: ast.Module) -> list[str]:
     """Rule 4: every body crossing a router boundary is a Pydantic schema type."""
-    try:
-        tree = ast.parse(source, filename=str(path))
-    except SyntaxError:
-        return []  # Already reported by check_function_lengths.
-
     known = _schema_names(tree)
     violations: list[str] = []
     for node in ast.walk(tree):
@@ -284,11 +335,20 @@ def check_router_io(path: Path, source: str) -> list[str]:
 
 
 def check_source(path: Path, source: str) -> list[str]:
-    """Run every rule against a single file's source text."""
+    """Run every rule against a single file's source text.
+
+    The file is parsed and tokenized once here; a syntax error is the only
+    violation reported for a file that does not parse.
+    """
+    try:
+        tree = ast.parse(source, filename=str(path))
+    except SyntaxError as exc:
+        return [f"{path}: syntax error: {exc}"]
+    code = code_lines(source, tree)
     return (
-        check_file_length(path, source)
-        + check_function_lengths(path, source)
-        + check_router_io(path, source)
+        check_file_length(path, source, code)
+        + check_function_lengths(path, tree, code)
+        + check_router_io(path, tree)
     )
 
 
