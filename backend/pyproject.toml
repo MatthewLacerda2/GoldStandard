@@ -26,3 +26,19 @@ extend-immutable-calls = [
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+# Mutation testing: run it through `make back-mutate`, never bare. The target
+# refuses an accidental whole-scope run and drops the test databases a killed
+# mutant leaves behind. What it is for and how to triage: backend/CLAUDE.md.
+[tool.mutmut]
+# Everything with logic in it. `repositories/` is in because a query is where a
+# wrong filter (an ownership check, an ordering) goes unnoticed; `api/`,
+# `models/` and `schemas/` are declarations the tests exercise but don't decide.
+source_paths = ["core", "repositories", "services", "utils"]
+# mutmut copies only `source_paths` into `mutants/` and runs the tests there,
+# so everything else the suite imports or reads is copied too. A missing entry
+# fails loudly on the first, unmutated run.
+also_copy = ["api", "models", "schemas", "tests", "tools", "main.py", "pytest.ini"]
+# The whole suite: mutmut records which tests reach each function and runs only
+# those against its mutants. A hand-picked list produces false survivors.
+pytest_add_cli_args_test_selection = ["tests"]

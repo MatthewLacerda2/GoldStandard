@@ -258,6 +258,10 @@ make frontend   # front-lint + front-build + front-test
 **Gates must be green before you push.** Scope your run to the layer you touched
 (`make backend` / `make frontend`) and run `make check` before opening a PR.
 
+**Gates block on correctness; signals inform on quality.** Mutation testing
+(`make back-mutate`, backend/CLAUDE.md) is a signal: Claude runs it when a
+change adds logic, and it is never a gate and never in CI.
+
 ## Server-start guardrails
 
 Do **not** auto-start dev servers, `docker compose up`, or long-running
