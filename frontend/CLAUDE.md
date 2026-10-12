@@ -23,7 +23,8 @@ only allowed exception). `lib/schemas/` mirrors the backend Pydantic models.
   (`bg-red-500`), no hex/`rgb()` literals in `className`/`style`.
 - **One exported React component per file** (`components/ui/**`, barrels, and
   Router objects exempt).
-- ≤ 550 lines per `.ts`/`.tsx` (`mock-*.ts` exempt).
+- ≤ 550 lines of code per `.ts`/`.tsx` — blank and comment lines don't count
+  (`mock-*.ts` exempt).
 
 ## Promises (type-aware ESLint errors)
 

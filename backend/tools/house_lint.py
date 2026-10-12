@@ -1,14 +1,15 @@
 """Custom house linter (pure stdlib, AST-based).
 
-Rules enforced:
-  1. A source file longer than ``MAX_FILE_LINES`` lines fails, unless it carries
-     a ``# lint: data-file`` marker within its first 15 lines. Files under a
-     ``tests/`` directory are exempt from this rule.
+Rules enforced (rules 1-3 count **lines of code**: blank lines, comment-only
+lines and docstrings do not count, so documenting a file never pushes it over):
+  1. A source file with more than ``MAX_FILE_LINES`` lines of code fails, unless
+     it carries a ``# lint: data-file`` marker within its first 15 lines. Files
+     under a ``tests/`` directory are exempt from this rule.
   2. Any function decorated with ``@router.<method>`` (get/post/put/patch/delete)
-     longer than ``MAX_HANDLER_LINES`` (def line to last line, decorators
-     excluded) fails.
-  3. Any ``test_*`` function under a ``tests/`` directory longer than
-     ``MAX_TEST_LINES`` fails.
+     with more than ``MAX_HANDLER_LINES`` lines of code (def line to last line,
+     decorators excluded) fails.
+  3. Any ``test_*`` function under a ``tests/`` directory with more than
+     ``MAX_TEST_LINES`` lines of code fails.
   4. Every body crossing a ``@router.<method>`` boundary is a Pydantic schema
      type: a parameter is either an injected dependency (``Depends()`` and the
      rest of FastAPI's parameter markers), a path/query scalar, or a schema
@@ -36,7 +37,9 @@ The module is importable (rules return violation lists) and runnable as
 from __future__ import annotations
 
 import ast
+import io
 import sys
+import tokenize
 from pathlib import Path
 
 MAX_FILE_LINES = 350
@@ -63,11 +66,64 @@ def _is_under_tests(path: Path) -> bool:
     return "tests" in path.parts
 
 
-def _node_line_span(node: ast.AST) -> int:
-    """Number of lines a function spans, excluding decorators."""
+# Tokens that never make a line count as code on their own.
+_NON_CODE_TOKENS = frozenset(
+    {
+        tokenize.COMMENT,
+        tokenize.NL,
+        tokenize.NEWLINE,
+        tokenize.INDENT,
+        tokenize.DEDENT,
+        tokenize.ENCODING,
+        tokenize.ENDMARKER,
+    }
+)
+_DOCSTRING_OWNERS = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+
+
+def _docstring_spans(tree: ast.Module) -> list[tuple[tuple[int, int], tuple[int, int]]]:
+    """(start, end) positions of every module, class and function docstring."""
+    spans = []
+    for node in ast.walk(tree):
+        if not isinstance(node, _DOCSTRING_OWNERS) or not node.body:
+            continue
+        first = node.body[0]
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            value = first.value
+            spans.append(
+                ((value.lineno, value.col_offset), (value.end_lineno, value.end_col_offset))
+            )
+    return spans
+
+
+def code_lines(source: str, tree: ast.Module) -> set[int]:
+    """Line numbers that hold code: not blank, not only a comment, not a docstring.
+
+    A line counts when any token on it is code. Docstring tokens are skipped
+    rather than their lines dropped, so a one-line ``def`` carrying its own
+    docstring still counts. A multi-line string that is not a docstring counts
+    every line it spans.
+    """
+    docstrings = _docstring_spans(tree)
+    lines: set[int] = set()
+    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+        if tok.type in _NON_CODE_TOKENS:
+            continue
+        if any(start <= tok.start and tok.end <= end for start, end in docstrings):
+            continue
+        lines.update(range(tok.start[0], tok.end[0] + 1))
+    return lines
+
+
+def _function_code_lines(node: ast.FunctionDef | ast.AsyncFunctionDef, code: set[int]) -> int:
+    """Lines of code a function spans, excluding decorators."""
     start = node.lineno  # `def`/`async def` line, after decorators
     end = node.end_lineno or start
-    return end - start + 1
+    return sum(1 for line in range(start, end + 1) if line in code)
 
 
 def _is_router_handler(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
@@ -80,16 +136,20 @@ def _is_router_handler(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def check_file_length(path: Path, source: str) -> list[str]:
-    """Rule 1: enforce the maximum file length."""
+    """Rule 1: enforce the maximum file length, in lines of code."""
     if _is_under_tests(path):
         return []
-    lines = source.splitlines()
-    if len(lines) <= MAX_FILE_LINES:
-        return []
-    header = "\n".join(lines[:_MARKER_SCAN_LINES])
+    header = "\n".join(source.splitlines()[:_MARKER_SCAN_LINES])
     if DATA_FILE_MARKER in header:
         return []
-    return [f"{path}: file has {len(lines)} lines (max {MAX_FILE_LINES})"]
+    try:
+        tree = ast.parse(source, filename=str(path))
+    except SyntaxError:
+        return []  # check_function_lengths reports it, once
+    count = len(code_lines(source, tree))
+    if count <= MAX_FILE_LINES:
+        return []
+    return [f"{path}: file has {count} lines of code (max {MAX_FILE_LINES})"]
 
 
 def check_function_lengths(path: Path, source: str) -> list[str]:
@@ -100,19 +160,21 @@ def check_function_lengths(path: Path, source: str) -> list[str]:
     except SyntaxError as exc:
         return [f"{path}: syntax error: {exc}"]
 
+    code = code_lines(source, tree)
     under_tests = _is_under_tests(path)
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        span = _node_line_span(node)
+        span = _function_code_lines(node, code)
         if _is_router_handler(node) and span > MAX_HANDLER_LINES:
             violations.append(
-                f"{path}:{node.lineno}: handler '{node.name}' is {span} lines "
+                f"{path}:{node.lineno}: handler '{node.name}' is {span} lines of code "
                 f"(max {MAX_HANDLER_LINES})"
             )
         if under_tests and node.name.startswith("test_") and span > MAX_TEST_LINES:
             violations.append(
-                f"{path}:{node.lineno}: test '{node.name}' is {span} lines (max {MAX_TEST_LINES})"
+                f"{path}:{node.lineno}: test '{node.name}' is {span} lines of code "
+                f"(max {MAX_TEST_LINES})"
             )
     return violations
 

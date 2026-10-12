@@ -23,6 +23,9 @@ live in the root `Makefile` (`make backend`) and run identically in CI.
 
 ## Size limits (enforced by `tools/house_lint.py`)
 
+Every limit counts **lines of code**: blank lines, comment-only lines and
+docstrings don't count, so documenting code never pushes it over.
+
 - File ≤ 350 lines — opt a data module out with `# lint: data-file` in the
   first 15 lines; `tests/**` is exempt.
 - Endpoint handler ≤ 50 lines. Test ≤ 50 lines.

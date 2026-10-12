@@ -95,8 +95,11 @@ export default tseslint.config(
       // --- React Compiler diagnostics. ---
       ...reactCompilerRules,
 
-      // --- File length. ---
-      "max-lines": ["error", { max: 550, skipBlankLines: false }],
+      // --- File length, in lines of code: blank and comment lines are free. ---
+      "max-lines": [
+        "error",
+        { max: 550, skipBlankLines: true, skipComments: true },
+      ],
     },
   },
   // mock-*.ts files are exempt from max-lines.
