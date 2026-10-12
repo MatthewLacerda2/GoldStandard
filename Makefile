@@ -19,7 +19,7 @@ frontend: front-lint front-build front-test
 # ---------------------------------------------------------------------------
 # Backend gates  (run from backend/, driven by $(PYTHON))
 # ---------------------------------------------------------------------------
-.PHONY: back-lint back-build back-test back-install
+.PHONY: back-lint back-build back-test back-mutate back-install
 back-lint:
 	cd backend && $(PYTHON) -m ruff check .
 	cd backend && $(PYTHON) -m ruff format --check .
@@ -30,6 +30,12 @@ back-build:
 
 back-test:
 	cd backend && $(PYTHON) -m pytest
+
+# A signal, not a gate: never part of `backend`, `check` or CI. Needs Postgres,
+# like the tests. ONLY="<mutant-name glob>" for what you changed, ALL=1 for the
+# whole scope; a bare run refuses. See backend/CLAUDE.md, "Mutation testing".
+back-mutate:
+	cd backend && $(PYTHON) -m tools.mutate $(if $(ALL),--all) $(ONLY)
 
 back-install:
 	cd backend && python3.12 -m venv .venv
