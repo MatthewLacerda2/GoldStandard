@@ -2,7 +2,7 @@
 # Override the interpreter in CI with: make backend PYTHON=python
 # Locally a venv is used: make backend PYTHON=.venv/bin/python (see backend/README note).
 
-PYTHON ?= python3.12
+PYTHON ?= python3.14
 BUN    ?= bun
 
 .DEFAULT_GOAL := check
@@ -32,7 +32,7 @@ back-test:
 	cd backend && $(PYTHON) -m pytest
 
 back-install:
-	cd backend && python3.12 -m venv .venv
+	cd backend && $(PYTHON) -m venv --clear .venv
 	cd backend && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
 
 # ---------------------------------------------------------------------------

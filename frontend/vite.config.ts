@@ -4,7 +4,6 @@ import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
-import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   plugins: [
@@ -15,8 +14,9 @@ export default defineConfig({
     // so we stay on Babel.
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss(),
-    tsconfigPaths(),
   ],
+  // Vite resolves tsconfig `paths` (the `@/` alias) itself.
+  resolve: { tsconfigPaths: true },
   test: {
     globals: true,
     environment: "jsdom",
