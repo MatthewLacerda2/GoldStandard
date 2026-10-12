@@ -32,7 +32,7 @@ back-test:
 	cd backend && $(PYTHON) -m pytest
 
 back-install:
-	cd backend && $(PYTHON) -m venv .venv
+	cd backend && $(PYTHON) -m venv --clear .venv
 	cd backend && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
 
 # ---------------------------------------------------------------------------

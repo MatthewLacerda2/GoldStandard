@@ -20,6 +20,17 @@ updates:
     groups:
       bun-minor:
         update-types: [minor, patch]
+    ignore:
+      # Majors held back on purpose, because the gates would pass them green:
+      # TypeScript 7 until typescript-eslint supports it; @babel/core 8, under
+      # which the React Compiler silently skips components (Button, PR #31);
+      # and @types/node, which tracks a Node version we don't run.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      - dependency-name: "@babel/core"
+        update-types: [version-update:semver-major]
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
@@ -29,15 +40,24 @@ updates:
       actions-minor:
         update-types: [minor, patch]
 
+  # Images get patches only. A minor of Python, Bun or nginx has to move CI's
+  # pin and the image together (python-version in backend.yml, packageManager
+  # in package.json), and CI never builds the images, so a Dependabot PR that
+  # moved only the image would pass green while the two drift apart. Those
+  # bumps are made by hand, in one PR. Dependabot can't read pgvector's `pg16`
+  # tag at all, so the Postgres major (a dump and restore of every data
+  # volume) is never proposed either.
   - package-ecosystem: docker
     directories: [/backend, /frontend, /docker/postgres]
     schedule: { interval: weekly }
     labels: [dependencies]
     groups:
-      docker-minor:
-        update-types: [minor, patch]
+      docker-patch:
+        update-types: [patch]
     ignore:
-      # A Postgres major needs a dump and restore of every existing data
-      # volume, so it is a decision, not a weekly bump.
-      - dependency-name: pgvector/pgvector
-        update-types: [version-update:semver-major]
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: oven/bun
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: nginxinc/nginx-unprivileged
+        update-types: [version-update:semver-major, version-update:semver-minor]

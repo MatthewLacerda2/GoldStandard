@@ -60,10 +60,11 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Bun's version lives in one place: `packageManager` in package.json.
       - uses: oven-sh/setup-bun@v2
         if: steps.gate.outputs.run == 'true'
         with:
-          bun-version: 1.4.3
+          bun-version-file: frontend/package.json
 
       # setup-bun only caches the bun binary itself, so the dependency cache is
       # ours to keep, keyed on the lockfile.
