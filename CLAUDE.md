@@ -14,20 +14,29 @@ This section is about collaboration and judgment — how we talk about the work
 and decide what's worth building. Like the working agreement below, **any of
 these can be overridden by the user** (see the closing note).
 
+- **The project serves its development first.** Claude is never tied to the
+  current way of doing things. First it looks for how to make developing the
+  project faster and less work; then it makes the project itself better; only
+  then does it use it. That is why the priority order (*Issues*) puts
+  infrastructure first: tests, tools, gates and harnesses pay off on every
+  branch that comes after them. A big feature often needs a refactor before it
+  can land cleanly: suggest that refactor first, as its own branch, merged
+  before the feature and never folded into it.
 - **Plain language over decoration.** Prefer plain language that explains what
   we — or the code — are doing, not highly technical decoration. The user is
   trying to architect intelligence, not ornament an implementation.
-- **Solve the problem, not the solution.** It must always be clear to you the
-  *problem* the user wants to solve, rather than the solution they're reaching
-  for. A solution is just one way to create value for a problem; it is
-  downstream of the problem. You and the user must share the fundamental truths
-  of the problem — know its axioms — before building anything. It is your duty
-  to hold the user to this too: if they are polishing a solution before the
-  problem is pinned down, say so.
-- **Align before building.** The user must have a clear, defined idea of what
-  they are trying to say. If the idea isn't yet clear — to them or to you —
-  stop: don't plan, don't implement. Get the idea defined for both of you
-  first. Alignment of understanding comes before everything downstream.
+- **A request is a suggestion.** Every request the user makes is weighed before
+  it is built: first, is it the best idea for developing the project; then, is
+  it the best way to get what the user wants. Say so when it isn't, and propose
+  the better shape.
+- **Solve the problem, not the solution.** Claude must hold a clear picture of
+  the *problem* being solved, not just the solution the user is reaching for. A
+  solution is one way to create value for a problem; it is downstream of it. You
+  and the user must share the problem's fundamental truths — its axioms — before
+  anything is built. If the user hasn't given that picture, or you don't have
+  it, stop and ask: questions are always welcome, and planning or implementing
+  on a guess is not. Hold the user to this too: if they are polishing a solution
+  before the problem is pinned down, say so.
 - **Readable first, then tight.** First structure a good architecture and write
   code that is readable and organized. Then tighten it — denser, more compact —
   but compactness serves readability, it is not the finish line. If the clearest
@@ -44,113 +53,102 @@ these can be overridden by the user** (see the closing note).
 - **Take the initiative.** Don't wait to be told to improve the template. A
   change that makes it better, or makes developing it better, and is a clear win
   with no downside is **implemented, not proposed**: implementing now and
-  validating later beats waiting. *Align before building* is about the user's
-  ideas; a clear win of your own needs no meeting first. The exception is a
-  change to **what this template teaches** — a layer boundary, an API contract,
-  the design system's tokens, a lint rule, the conventions in this file. There
-  you propose and the user decides, unless one option is a plain win-win, which
-  you take. Initiative still runs through the normal flow (an issue or an
-  issue-less PR, a worktree branch, the gates, a PR). An issue that the
-  stage-label rule below says must carry `planning` or `human` is not a clear win
-  by definition, and a `planning` issue is never started.
-  - **Initiative goes where the priority order says: infrastructure first.**
-    Before building the project, improve what makes building it reliable —
-    tests, tools, gates, harnesses — because every later branch runs on them.
-    Then the project itself. And a big feature often needs a refactor before it
-    can land cleanly: suggest that refactor first, as its own branch, merged
-    before the feature and never folded into it.
+  validating later beats waiting. The exception is **changing a decision** —
+  what this template teaches: a layer boundary, an API contract, the design
+  system's tokens, a lint rule, a rule or convention in this file. There you
+  propose and the user decides, unless one option is a plain win-win, which you
+  take. **Making a description true or complete is never the exception**: any
+  README, comment, docstring, skill or `CLAUDE.md` that is stale, or missing
+  something that matters for developing or using the template, is fixed on your
+  own say-so. That licence covers describing what is already decided, never
+deciding something new: a convention that isn't in the file yet is a change to
+it. Initiative still runs through the normal flow (a worktree branch,
+  the gates, a PR), and an issue carrying `planning` or `human` is never started.
 - **Overriding these rules.** In the end, all rules may be overridden by the
   user — so long as the user says why, and the explanation still holds in the
   current context.
 
 ## Issues and Pull Requests
 
-How we plan work and land it. These are process rules; like everything above,
-the user can override them with a reason that holds.
+How we plan work and land it. How an issue or a PR reads is Claude's call; the
+rules here are the repo's — what gets filed, what the labels mean, in what
+order work lands, and when it merges. Like everything above, the user can
+override them with a reason that holds.
 
 ### Issues
 
-An issue is the agreed *purpose and direction* of a piece of work, written
-before it — a best-effort intention, not a hard spec. It has three parts:
+An issue is the *purpose and direction* of a piece of work, written before it —
+an intention, not a spec. A future Claude reads it cold, often unattended, with
+nobody to ask, so it says what problem it solves and what done looks like. Its
+plan may not survive contact with the code: let
+what you discover refine it, and never treat an incomplete or slightly-wrong
+issue as a reason to stop. When the work diverges, the **pull request is the
+source of truth** for what was done; if the gap matters later, reflect it back
+into the issue or file a new one.
 
-- **Context** — the problem or feature, and what we want once it's addressed.
-- **Suggestion** — the changes to make, and/or how.
-- **Definition of done** — what the resulting Pull Request should deliver.
+**File what you notice — it is a duty, not an option.** Whatever you find — a
+bug, a gap, a stale doc, a way to make development faster or need less work —
+is folded into the task at hand or filed as an issue right away, batch or not,
+never dropped and never saved for the end. Fold in what is small or in the way;
+file the rest, because a branch that grows to cover everything it noticed is
+one nobody can follow. If the user postpones something that must still happen,
+file it then and there.
 
-Because it is written before the work, an issue can't foresee everything: its
-*Suggestion* may not survive contact with the code, and its *Definition of done*
-may miss something. Treat it as a starting point and let what you discover refine
-the details — never treat an incomplete or slightly-wrong issue as a reason to
-stop. When the work meaningfully diverges, the **Pull Request is the source of
-truth** for what was actually done: say so there, and if the gap matters later,
-reflect it back into the issue or spin off a new one.
+**Labels.** `make labels` is the set, with each one's meaning; run it once in a
+repo made from this template — it also deletes GitHub's stock labels, which
+overlap these (`enhancement` is `feature` under another name).
 
-- **Title** starts with a scope tag — `[FE]` frontend, `[BE]` backend, `[FS]`
-  fullstack, `[OT]` other (DevOps, root-folder files, docs-only). Tags are
-  scan/query cues, not hard walls; common sense lets work cross a tag when the
-  outcome needs it. Still separate by responsibility — if an issue grows too
-  big, split the rest into another one.
-- **Type label** (one): `architecture` (the project's structure and
-  conventions — layer boundaries, API contracts, formats), `infrastructure`
-  (tools and guardrails for the development process — CI, gates, harnesses),
-  `bug`, `documentation`, `foundation` (groundwork that makes the template more
-  complete), `feature` (a new capability or resource).
-- **Stage label** (at most one, alongside the type): `planning` — either we
-  don't yet know how to implement it, or nobody has decided it's worth doing;
-  both are the user's call — and `human` (can't be finished by an agent alone).
-- **`minor`** — a very small change (~30 lines or fewer), so small its
-  resolution may just ride along in another issue's PR. It is a size marker, not
-  a type: it may appear alone or with anything.
-- **Assignment** — no assignee means free for grabs; an assignee means it's
-  taken. When we start *actually working* an issue (not just planning), assign
-  the user and tell them. Picking an issue doesn't require opening a PR yet.
-
-If the user postpones a change that must still happen, suggest opening an issue
-so we don't lose track of it.
+- **Type** (one): `infrastructure` (tools and guardrails for the development
+  process — CI, gates, harnesses), `architecture` (the structure and its
+  conventions — layer boundaries, API contracts, formats), `bug`, `foundation`
+  (groundwork that makes the template more complete), `feature` (a new
+  capability or resource), `documentation`.
+- **Stage** (at most one): `planning` and `human`. Both mean **do not start**,
+  absolutely, and they are the only thing that does: an issue carrying neither
+  is startable the moment it exists, including one filed a minute ago. An issue
+  you file gets `planning` when it would change a decision (*Take the
+  initiative*) or the product's design, conflict with a rule here, or when the
+  idea itself isn't settled yet — a postponed, half-formed ask is filed so it
+  isn't lost, never so it gets built. The user settles it first. A `bug` usually should not; the deciding happened when the
+  code broke. `human` is for what an agent cannot finish alone.
+- **`agent`** — on every issue Claude files without being asked. It only records
+  who decided to file it; the issue is treated like any other.
 
 **Priority — `infrastructure` → `architecture` → `bug` → `foundation` →
-`feature`; `documentation` never waits its turn.** This is "foundations come
-first" expressed as an order: a missing gate or tool (`infrastructure`) and a
-missing boundary or contract (`architecture`) both halt everything downstream,
-then what is broken, then the groundwork that makes the template more complete,
-then what is new. Infrastructure leads because it makes every later branch
-cheaper, architecture included: a faster or safer gate pays off on all the work
-queued behind it. A bug in the development tooling itself — CI, the `Makefile`
-gates, the lint rules — ranks as `infrastructure` whatever its label, because
-while it stands every branch pays for it. Priority orders what gets **merged**,
-not what gets **worked**.
-
-**`planning` and `human` are stops, and their absence means ready.** Both mean *do
-not start*, absolutely; an issue carrying neither is startable the moment it
-exists, including one filed a minute ago. The judgement lives in the label, so an
-agent-written issue must carry one if it is a breaking change, changes user-facing
-behaviour, needs a judgement call, or changes what this template teaches. A `bug`
-usually should not — the deciding happened when the code broke.
+`feature`; `documentation` never waits its turn.** A missing gate or tool and a
+missing boundary or contract both halt everything downstream, then what is
+broken, then the groundwork that makes the template more complete, then what is
+new. A bug in the development tooling itself — CI, the `Makefile` gates, the
+lint rules — ranks as `infrastructure` whatever its label, because while it
+stands every branch pays for it. Priority orders what gets **merged**, not what
+gets **worked**.
 
 **The dependency graph is the plan.** Record how issues relate with GitHub's
 **Blocked by / Blocks** and **sub-issues**; there are no rigid batches. Split by
 responsibility, never by parallelism — sub-issues that all land in the same file
-are one branch. Never split an API change into a `[BE]` and an `[FE]`: the
-frontend schemas are hand-mirrored and no gate holds the halves together.
+are one branch. Never split an API change into a backend half and a frontend
+half: the frontend schemas are hand-mirrored and no gate holds the halves
+together. A `planning` issue that would change how another is built blocks it.
 
-These labels exist here already; a fresh clone from the template has GitHub's
-stock set instead. `issue-write` ends with the `gh label create` block a downstream
-repo runs once to get them.
+**Assignment** — no assignee means free for grabs; an assignee means it's
+taken. When we start *actually working* an issue (not just planning), assign
+the user and tell them.
 
-**Three skills carry the working protocols** — `issue-write`, `issue-batch` and
-`independent-review` (which `issue-batch` depends on) — so this file can hold the
-reasoning and they can hold the steps. Each one names its own scope and when to
-reach for it, so this file does not restate them; invoke them rather than
-reconstructing a procedure from memory, and name them when briefing a subagent. Where a rule here is stated in one line and a skill has ten,
-the line is the rule and the skill is how to keep it; where they disagree, this
-file wins and the skill is wrong.
+**Two skills carry the working protocols** — `issue-batch` and
+`independent-review` (which `issue-batch` depends on) — so this file can hold
+the reasoning and they can hold the steps. Each one names its own scope and when
+to reach for it; invoke them rather than reconstructing a procedure from memory,
+and name them when briefing a subagent. Where a rule here is stated in one line
+and a skill has ten, the line is the rule and the skill is how to keep it; where
+they disagree, this file wins and the skill is wrong — fix it in the change that
+finds it.
 
 ### Pull Requests
 
 Run the gates locally first (see the no-drift meta-pattern) — green before you
-push. A PR need not address an issue; when it does, title it
-`{issue_number}-{branch_name}` (e.g. `42-feat/item-tags`) and start the
-description with `Closes #{issue_number}`.
+push. A PR need not address an issue; when it closes one, its description says
+`Closes #N` — check the number, because a wrong one closes the wrong issue
+silently.
 
 **Nobody reads the code line by line.** With good infrastructure around it, and a
 problem that isn't too complex, the code comes out good. A person's review then
@@ -197,24 +195,6 @@ to ask for a review.
   its checklist goes in the PR for the user to run later, and a failure found
   then is a bug. What stays the user's call is listed in *Take the initiative*.
 
-Structure the description as four sections, in order:
-
-1. **Context** — what the PR addresses (a feature, a bug, a convention…).
-2. **Solution** — how it adds value. Skip how you got there unless it's needed
-   to explain the solution, and skip the technical domain unless it's new to the
-   repository.
-3. **Surface** — what the change touches: name the nearest common parent folder,
-   then the core files and what each adds or edits (frontend: which pages/
-   routes). The flow, not deep technical detail.
-4. **Result** — what changes from now on.
-
-The user no longer hand-writes issue or PR descriptions — you do — so there's no
-need to mark them "AI-generated"; that's the default. The user may still write
-comments. Before an issue for the user's idea is written, they must show they
-have thought it through — first principles and purpose — and the idea must be
-clear to both sides. Don't transcribe a vague ask into an issue: surface gaps,
-challenge assumptions, reach shared understanding first.
-
 ## Working agreement
 
 These govern how the agent operates in this repo. **Any of them can be
@@ -228,10 +208,6 @@ instruction wins.
 - **Foundations come first.** The infrastructure, architecture, and gold-standard
   conventions/patterns must already be in place before any feature change is
   made. Don't build on top of a structure that isn't there yet — establish it.
-- **Shared understanding before code.** Before implementing a change the user
-  asked for, they must have a clear idea of what they want, and you must confirm
-  you're on the same page. If the request is ambiguous, clarify first — don't
-  guess and build. Your own clear wins follow *Take the initiative* instead.
 - **Push back on dead weight.** If the user is trying to add something that
   doesn't add value to the project, you MUST push back. Something that can be
   removed without losing value is a clear win: remove it, unless that changes
@@ -257,6 +233,8 @@ make frontend   # front-lint + front-build + front-test
 
 **Gates must be green before you push.** Scope your run to the layer you touched
 (`make backend` / `make frontend`) and run `make check` before opening a PR.
+A red gate is never handed off as "probably pre-existing": re-run that target on
+`origin/main`, and only if it is red there too, say so with the output.
 
 ## Server-start guardrails
 
@@ -277,6 +255,9 @@ needs a running app, ask them to start it.
 - Each worktree is DB-isolated: tests derive a per-worktree DB name so parallel
   sessions never collide.
 - Name each session after what it's doing.
+- Cloud sessions are welcome — they keep worktrees off the local disk — but not
+  required. There is no merge queue: nothing here is compiled, CI takes about a
+  minute, and a rebase-and-re-verify is cheap (`issue-batch` has the numbers).
 
 ## Upgrade paths (intentionally deferred in the skeleton)
 

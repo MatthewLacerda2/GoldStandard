@@ -50,3 +50,24 @@ front-test:
 
 front-install:
 	cd frontend && $(BUN) install
+
+# ---------------------------------------------------------------------------
+# Repository setup  (run once in a repo made from this template; needs `gh`)
+# ---------------------------------------------------------------------------
+# The issue labels CLAUDE.md's rules are written against. `--force` updates a
+# label that already exists, such as GitHub's stock `bug` and `documentation`;
+# the stock labels that overlap these are deleted (`-`: already gone is fine).
+.PHONY: labels
+labels:
+	gh label create infrastructure --force --color D93F0B --description "Tools and guardrails for the development process: CI, gates, harnesses."
+	gh label create architecture   --force --color B60205 --description "The project's structure and conventions: layer boundaries, API contracts, formats."
+	gh label create bug            --force --color EE0701 --description "Something isn't working."
+	gh label create foundation     --force --color 0E8A16 --description "Groundwork that makes the template more complete."
+	gh label create feature        --force --color A2EEEF --description "A new capability or resource."
+	gh label create documentation  --force --color 0075CA --description "Edit/add documentation; never waits its turn."
+	gh label create planning       --force --color FBCA04 --description "Changes a decision or the design, or not settled yet. Do not start."
+	gh label create human          --force --color 5319E7 --description "Needs a human in the loop end to end. Do not start."
+	gh label create agent          --force --color F95F2B --description "Filed by an agent on its own; treated like any other issue."
+	gh label create dependencies   --force --color 0386F6 --description "A Dependabot bump (.github/dependabot.yml)."
+	-@for l in enhancement duplicate invalid question wontfix "good first issue" "help wanted"; do \
+		gh label delete "$$l" --yes 2>/dev/null; done
