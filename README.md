@@ -57,8 +57,9 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
 - **`make check` is the law.** `make backend` and `make frontend` each run their
   layer's lint + build + test; CI calls the same targets. Gates must be green
   before pushing.
-- **Length discipline (backend):** files ≤ 350 lines, endpoint handlers ≤ 50,
-  tests ≤ 50 — enforced by a custom AST linter (`tools/house_lint.py`), not by
+- **Length discipline (backend):** files ≤ 350 lines of code, endpoint
+  handlers ≤ 50, tests ≤ 50 (blank lines, comments and docstrings don't
+  count) — enforced by a custom AST linter (`tools/house_lint.py`), not by
   honor system. Ruff enforces that type annotations exist; the same AST linter
   enforces that the ones on a `@router` handler are Pydantic I/O models —
   every request and response body is a schema type, a `list` of one, or `None`,
