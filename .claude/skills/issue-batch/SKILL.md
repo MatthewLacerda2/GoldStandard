@@ -160,7 +160,7 @@ There is no separate merge skill in this repo. This is the whole of it.
    touched, `make check` before opening. This is the no-drift rule paying out: CI
    runs these exact targets, so a local green is a real prediction — unlike a repo
    where the runner is a different machine. Two ways it can still lie: CI runs
-   `make backend PYTHON=python` on a clean 3.12 with `requirements.txt` installed
+   `make backend PYTHON=python` on a clean 3.14 with `requirements.txt` installed
    fresh, and `bun install --frozen-lockfile`. A `.venv` or a `node_modules` that
    has drifted from its manifest is green on nothing.
 

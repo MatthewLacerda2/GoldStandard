@@ -44,7 +44,7 @@ def _repo_root() -> str:
             ["git", "rev-parse", "--show-toplevel"], stderr=subprocess.DEVNULL
         )
         return out.decode().strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return os.getcwd()
 
 

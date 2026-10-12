@@ -1,0 +1,43 @@
+# Keeps every pinned version current without anyone having to remember to.
+# Minor and patch bumps arrive as one grouped PR per ecosystem a week; a major
+# bump arrives on its own PR, since that is the one that can need code changes.
+# Every PR runs the same gates as any other, so green CI is the merge signal.
+version: 2
+
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule: { interval: weekly }
+    labels: [dependencies]
+    groups:
+      pip-minor:
+        update-types: [minor, patch]
+
+  - package-ecosystem: bun
+    directory: /frontend
+    schedule: { interval: weekly }
+    labels: [dependencies]
+    groups:
+      bun-minor:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    labels: [dependencies]
+    groups:
+      actions-minor:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directories: [/backend, /frontend, /docker/postgres]
+    schedule: { interval: weekly }
+    labels: [dependencies]
+    groups:
+      docker-minor:
+        update-types: [minor, patch]
+    ignore:
+      # A Postgres major needs a dump and restore of every existing data
+      # volume, so it is a decision, not a weekly bump.
+      - dependency-name: pgvector/pgvector
+        update-types: [version-update:semver-major]

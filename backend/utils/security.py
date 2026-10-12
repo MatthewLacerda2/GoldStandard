@@ -27,7 +27,7 @@ def verify_password(password: str, stored: str) -> bool:
     try:
         salt_hex, hash_hex = stored.split("$", 1)
         salt = bytes.fromhex(salt_hex)
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         return False
     digest = hashlib.pbkdf2_hmac(_HASH_NAME, password.encode("utf-8"), salt, _ITERATIONS)
     return secrets.compare_digest(digest.hex(), hash_hex)
