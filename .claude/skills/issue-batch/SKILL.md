@@ -103,7 +103,7 @@ never scarce, and manufactures collisions: four sub-issues each adding a locale 
 is four rebases and four reviews for one coherent change. Sub-issues are for work
 that is genuinely separable *in the code*, not for work that is merely listable.
 
-A `minor` issue is not a branch. It rides along in whichever pull request is
+A small change is not a branch. It rides along in whichever pull request is
 already standing in that file.
 
 ## One worktree per branch
@@ -289,26 +289,29 @@ one of:
 - **enforced** — a lint rule, gate or test that makes it impossible to repeat
   (`CLAUDE.md`'s *prefer expression over description* says this is the best of
   the four);
-- **documented** — this skill, `issue-write`, or a `CLAUDE.md`, for what the repo
+- **documented** — this skill or a `CLAUDE.md`, for what the repo
   cannot change (a platform behaviour, a procedure);
 - **tracked** — an issue with the evidence (run ids, pull request numbers, the
   failing output) and a proposed fix, never just the symptom.
 
 **Mid-batch, fix what blocks or bites twice.** When a lesson costs the running
 batch time — a gate that misleads, a brief that makes every agent re-solve the same
-trap — fix it now. It is infrastructure, so it outranks whatever was next. An edit
-that changes a **rule in `CLAUDE.md`**, rather than recording a step in a skill,
-changes the template's conventions: open it and leave it for the user (*Take the
+trap — fix it now. It is infrastructure, so it outranks whatever was next.
+Correcting a stale description — a skill, a `CLAUDE.md`, a README — is part of
+that and needs no one's approval; changing a **rule** is changing a decision, so
+it is filed with `planning` and raised at the next check-in (*Take the
 initiative*).
 
 **Otherwise, file it and keep going.** File an agent's "follow-up, not in this
 pull request" notes and a pull request's open decisions the moment you read them,
-not at the end.
+not at the end. Every issue you file on your own carries `agent`.
 
 **At the end, run a retro before reporting back:**
 
 1. List every trap, gap, surprise, workaround and hand-back from the batch: your
-   own notes, each pull request's decisions, the issues the agents filed.
+   own notes, each pull request's decisions, the issues the agents filed. Ask the
+   question the user would otherwise have to: what would have made this batch
+   faster, or less work? Each answer is a lesson like the rest.
 2. Map each one to fixed, enforced, documented or tracked. Anything unmapped gets
    an issue now.
 3. **Refresh the unstarted issues whose ground moved.** Add a short *Context
