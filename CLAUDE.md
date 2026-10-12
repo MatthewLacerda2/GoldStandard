@@ -60,7 +60,9 @@ these can be overridden by the user** (see the closing note).
   take. **Making a description true or complete is never the exception**: any
   README, comment, docstring, skill or `CLAUDE.md` that is stale, or missing
   something that matters for developing or using the template, is fixed on your
-  own say-so. Initiative still runs through the normal flow (a worktree branch,
+  own say-so. That licence covers describing what is already decided, never
+deciding something new: a convention that isn't in the file yet is a change to
+it. Initiative still runs through the normal flow (a worktree branch,
   the gates, a PR), and an issue carrying `planning` or `human` is never started.
 - **Overriding these rules.** In the end, all rules may be overridden by the
   user — so long as the user says why, and the explanation still holds in the
@@ -76,7 +78,9 @@ override them with a reason that holds.
 ### Issues
 
 An issue is the *purpose and direction* of a piece of work, written before it —
-an intention, not a spec. Its plan may not survive contact with the code: let
+an intention, not a spec. A future Claude reads it cold, often unattended, with
+nobody to ask, so it says what problem it solves and what done looks like. Its
+plan may not survive contact with the code: let
 what you discover refine it, and never treat an incomplete or slightly-wrong
 issue as a reason to stop. When the work diverges, the **pull request is the
 source of truth** for what was done; if the gap matters later, reflect it back
@@ -91,7 +95,8 @@ one nobody can follow. If the user postpones something that must still happen,
 file it then and there.
 
 **Labels.** `make labels` is the set, with each one's meaning; run it once in a
-repo made from this template (a fresh one has GitHub's stock labels instead).
+repo made from this template — it also deletes GitHub's stock labels, which
+overlap these (`enhancement` is `feature` under another name).
 
 - **Type** (one): `infrastructure` (tools and guardrails for the development
   process — CI, gates, harnesses), `architecture` (the structure and its
@@ -102,8 +107,9 @@ repo made from this template (a fresh one has GitHub's stock labels instead).
   absolutely, and they are the only thing that does: an issue carrying neither
   is startable the moment it exists, including one filed a minute ago. An issue
   you file gets `planning` when it would change a decision (*Take the
-  initiative*) or the product's design, or conflict with a rule here — the user
-  settles it first. A `bug` usually should not; the deciding happened when the
+  initiative*) or the product's design, conflict with a rule here, or when the
+  idea itself isn't settled yet — a postponed, half-formed ask is filed so it
+  isn't lost, never so it gets built. The user settles it first. A `bug` usually should not; the deciding happened when the
   code broke. `human` is for what an agent cannot finish alone.
 - **`agent`** — on every issue Claude files without being asked. It only records
   who decided to file it; the issue is treated like any other.

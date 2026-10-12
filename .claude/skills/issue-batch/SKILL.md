@@ -31,8 +31,10 @@ a session.
 
 ## Merges serialize per layer, not globally
 
-Both workflows are **path-filtered** — `backend.yml` on `backend/**`, `Makefile`
-and itself; `frontend.yml` on `frontend/**`, `Makefile` and itself. Two branches
+Both workflows always trigger, and a first step decides from the changed paths
+whether the gates run — `backend.yml` on `backend/`, `docker/`,
+`docker-compose.yml`, `.env.example`, the `Makefile` and itself; `frontend.yml`
+on `frontend/`, the `Makefile` and itself. Two branches
 in different layers do not share a gate and cannot break each other's, so they
 merge in either order, or at once, and a re-run buys nothing.
 
@@ -137,8 +139,8 @@ stale worktree keeps a stale test database alive behind it.
   means free for grabs. **Unassign** if it turns out the issue was never started.
 - Worktree off the latest `main`, branch `feat/…` or `fix/…`, pushed under the
   same name.
-- Pull request titled `{issue_number}-{branch_name}`, description opening
-  `Closes #{issue_number}`, then Context / Solution / Surface / Result.
+- The pull request says `Closes #N` for the issue it closes — with the number
+  checked.
 - **Open it as a draft on the first push.** Draft is not decoration on unfinished
   work; it is how work survives a session that ends badly — the issue is the
   durable context, and a hand-back comment may never get written. Know what draft
@@ -165,7 +167,7 @@ There is no separate merge skill in this repo. This is the whole of it.
    has drifted from its manifest is green on nothing.
 
    **Not every red is the branch's.** Before fixing a red gate in code the branch
-   did not touch, run it on `main`; if it fails there too, it is a bug to cite or
+   did not touch, run it on `origin/main`; if it fails there too, it is a bug to cite or
    file, not this branch's to fix. And a failure the machine caused —
    `No space left on device`, `Cannot allocate memory`, a killed process —
    says nothing about the code: free the space and run it again, never "fix"
@@ -225,8 +227,8 @@ startable the moment it exists, including an issue filed a minute ago.
 ## Briefing a subagent
 
 Point it at the root `CLAUDE.md`, then the layer contract it will live in —
-`backend/CLAUDE.md` or `frontend/CLAUDE.md` — then the issue. Issues here are
-written to be read cold. Beyond that:
+`backend/CLAUDE.md` or `frontend/CLAUDE.md` — then the issue, which is written
+to be read cold (`CLAUDE.md`, *Issues*). Beyond that:
 
 - Name the **base commit** and what has landed recently that it must respect.
 - Name the **siblings** and which files they are touching.
