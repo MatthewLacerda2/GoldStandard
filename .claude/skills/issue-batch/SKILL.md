@@ -217,7 +217,7 @@ moment it lands — so the decision is one merge wide, not one batch wide.
 Re-reading is not a licence to start everything. The ceiling is the collision list
 above, and an unblocked issue left unstarted is not
 wasted capacity — it is a rebase not yet paid for. Priority (`infrastructure` →
-`architecture` → `bug` → `foundation` → `feature`, `documentation` any time)
+`architecture` → `fix` → `foundation` → `feat`, `documentation` any time)
 orders what gets **merged**, not what gets started.
 
 **A stage label is the only absolute stop.** `planning` and `human` mean *not

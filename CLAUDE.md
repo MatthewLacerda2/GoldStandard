@@ -42,14 +42,10 @@ these can be overridden by the user** (see the closing note).
   but compactness serves readability, it is not the finish line. If the clearest
   version of something isn't the densest, leave it clear. Don't end on clever
   one-liners nobody can debug later.
-- **Push back when it's earned.**
-  - If a feature or addition doesn't move the model's final performance, say so
-    and say why it isn't pulling its weight.
-  - If an idea contradicts what the literature has settled, flag it immediately.
-    But calibrate: push hard on documented dead-ends, stay curious about
-    genuinely untried ground. Research means trying what the literature hasn't
-    settled — don't suppress a novel idea just because it's unproven. The line
-    is "documented to fail" versus "simply not yet tried."
+- **Cut what doesn't justify itself.** If you realize a feature isn't
+  justifying itself, say so. Cutting what can't justify being kept, or can be
+  absorbed into something else, is always ideal: remove it, unless that changes
+  what the template teaches, in which case propose it.
 - **Take the initiative.** Don't wait to be told to improve the template. A
   change that makes it better, or makes developing it better, and is a clear win
   with no downside is **implemented, not proposed**: implementing now and
@@ -61,9 +57,9 @@ these can be overridden by the user** (see the closing note).
   README, comment, docstring, skill or `CLAUDE.md` that is stale, or missing
   something that matters for developing or using the template, is fixed on your
   own say-so. That licence covers describing what is already decided, never
-deciding something new: a convention that isn't in the file yet is a change to
-it. Initiative still runs through the normal flow (a worktree branch,
-  the gates, a PR), and an issue carrying `planning` or `human` is never started.
+  deciding something new: a convention that isn't in the file yet is a change to
+  it. Initiative still runs through the normal flow (a worktree branch, the
+  gates, a PR), and an issue carrying `planning` or `human` is never started.
 - **Overriding these rules.** In the end, all rules may be overridden by the
   user — so long as the user says why, and the explanation still holds in the
   current context.
@@ -96,26 +92,31 @@ file it then and there.
 
 **Labels.** `make labels` is the set, with each one's meaning; run it once in a
 repo made from this template — it also deletes GitHub's stock labels, which
-overlap these (`enhancement` is `feature` under another name).
+overlap these (`enhancement` is `feat` under another name).
 
 - **Type** (one): `infrastructure` (tools and guardrails for the development
-  process — CI, gates, harnesses), `architecture` (the structure and its
-  conventions — layer boundaries, API contracts, formats), `bug`, `foundation`
-  (groundwork that makes the template more complete), `feature` (a new
+  process — CI, gates, harnesses; nothing of it ships in the app),
+  `architecture` (the structure and its conventions — layer boundaries, API
+  contracts, formats), `fix` (something broken or overlooked — a missing
+  translation key counts), `foundation` (groundwork inside the app that later
+  features stand on, though nobody would ask for it on its own), `feat` (a new
   capability or resource), `documentation`.
+- **`refactor`** — alongside the type, on a big change: a refactor, or anything
+  large. It flags the PR for the independent review.
 - **Stage** (at most one): `planning` and `human`. Both mean **do not start**,
   absolutely, and they are the only thing that does: an issue carrying neither
   is startable the moment it exists, including one filed a minute ago. An issue
   you file gets `planning` when it would change a decision (*Take the
   initiative*) or the product's design, conflict with a rule here, or when the
   idea itself isn't settled yet — a postponed, half-formed ask is filed so it
-  isn't lost, never so it gets built. The user settles it first. A `bug` usually should not; the deciding happened when the
-  code broke. `human` is for what an agent cannot finish alone.
+  isn't lost, never so it gets built. The user settles it first. A `fix`
+  usually should not; the deciding happened when the code broke. `human` is for
+  what an agent cannot finish alone.
 - **`agent`** — on every issue Claude files without being asked. It only records
   who decided to file it; the issue is treated like any other.
 
-**Priority — `infrastructure` → `architecture` → `bug` → `foundation` →
-`feature`; `documentation` never waits its turn.** A missing gate or tool and a
+**Priority — `infrastructure` → `architecture` → `fix` → `foundation` →
+`feat`; `documentation` never waits its turn.** A missing gate or tool and a
 missing boundary or contract both halt everything downstream, then what is
 broken, then the groundwork that makes the template more complete, then what is
 new. A bug in the development tooling itself — CI, the `Makefile` gates, the
@@ -208,10 +209,6 @@ instruction wins.
 - **Foundations come first.** The infrastructure, architecture, and gold-standard
   conventions/patterns must already be in place before any feature change is
   made. Don't build on top of a structure that isn't there yet — establish it.
-- **Push back on dead weight.** If the user is trying to add something that
-  doesn't add value to the project, you MUST push back. Something that can be
-  removed without losing value is a clear win: remove it, unless that changes
-  what the template teaches, in which case suggest it.
 - **Don't multiply Markdown.** Do not create new Markdown files without asking
   the user first. You may edit existing ones, as long as you tell the user what
   you changed.
