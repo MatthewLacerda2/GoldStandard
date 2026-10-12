@@ -83,6 +83,38 @@ def test_one_line_def_with_docstring_counts_its_def():
     assert house_lint.code_lines(source, ast.parse(source)) == {1}
 
 
+def test_non_ascii_docstrings_are_still_found():
+    # ast counts columns in UTF-8 bytes, tokenize in characters: `é` is 2 bytes.
+    # Line 2 holds only the docstring of `café`, which starts after a non-ASCII name.
+    source = 'def café(): """doc\ncontinued."""\n\ndef g():\n    """Résumé é."""\n    return 1\n'
+    assert house_lint.code_lines(source, ast.parse(source)) == {1, 4, 6}
+
+
+def test_attribute_string_still_counts():
+    source = 'class C:\n    """Doc."""\n\n    x = 1\n    """Not a docstring."""\n'
+    assert house_lint.code_lines(source, ast.parse(source)) == {1, 4, 5}
+
+
+def _test_function(code_lines: int) -> str:
+    """A test of ``code_lines`` lines of code, padded with non-code."""
+    lines = ["def test_big():", '    """Doc."""']
+    lines += [f"    # step {i}\n\n    a{i} = {i}" for i in range(code_lines - 1)]
+    return "\n".join(lines) + "\n"
+
+
+def test_test_function_cap_counts_code_only():
+    path = Path("tests/test_x.py")
+    assert house_lint.check_source(path, _test_function(house_lint.MAX_TEST_LINES)) == []
+    over = house_lint.check_source(path, _test_function(house_lint.MAX_TEST_LINES + 1))
+    assert any("test 'test_big'" in v for v in over)
+
+
+def test_syntax_error_is_reported_once():
+    violations = house_lint.check_source(Path("app/broken.py"), "def f(:\n")
+    assert len(violations) == 1
+    assert "syntax error" in violations[0]
+
+
 def test_clean_input_passes():
     source = "@router.get('/ok')\ndef ok():\n    return 1\n"
     violations = house_lint.check_source(Path("api/v1/ok.py"), source)

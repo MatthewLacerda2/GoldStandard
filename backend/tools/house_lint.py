@@ -1,7 +1,8 @@
 """Custom house linter (pure stdlib, AST-based).
 
 Rules enforced (rules 1-3 count **lines of code**: blank lines, comment-only
-lines and docstrings do not count, so documenting a file never pushes it over):
+lines and the docstring of a module, class or function do not count, so
+documenting a file never pushes it over; any other string still counts):
   1. A source file with more than ``MAX_FILE_LINES`` lines of code fails, unless
      it carries a ``# lint: data-file`` marker within its first 15 lines. Files
      under a ``tests/`` directory are exempt from this rule.
@@ -81,9 +82,13 @@ _NON_CODE_TOKENS = frozenset(
 _DOCSTRING_OWNERS = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
 
 
-def _docstring_spans(tree: ast.Module) -> list[tuple[tuple[int, int], tuple[int, int]]]:
-    """(start, end) positions of every module, class and function docstring."""
-    spans = []
+def _docstring_starts(tree: ast.Module, lines: list[str]) -> set[tuple[int, int]]:
+    """Where the docstring of each module, class or function starts: (line, column).
+
+    ``ast`` measures columns in UTF-8 bytes and ``tokenize`` in characters, so
+    the column is converted here to match the tokens it is looked up against.
+    """
+    starts: set[tuple[int, int]] = set()
     for node in ast.walk(tree):
         if not isinstance(node, _DOCSTRING_OWNERS) or not node.body:
             continue
@@ -93,27 +98,26 @@ def _docstring_spans(tree: ast.Module) -> list[tuple[tuple[int, int], tuple[int,
             and isinstance(first.value, ast.Constant)
             and isinstance(first.value.value, str)
         ):
-            value = first.value
-            spans.append(
-                ((value.lineno, value.col_offset), (value.end_lineno, value.end_col_offset))
-            )
-    return spans
+            line, byte_col = first.value.lineno, first.value.col_offset
+            starts.add((line, len(lines[line - 1].encode()[:byte_col].decode())))
+    return starts
 
 
 def code_lines(source: str, tree: ast.Module) -> set[int]:
-    """Line numbers that hold code: not blank, not only a comment, not a docstring.
+    """Line numbers that hold code: not blank, not only a comment, and not the
+    docstring of a module, class or function.
 
     A line counts when any token on it is code. Docstring tokens are skipped
     rather than their lines dropped, so a one-line ``def`` carrying its own
-    docstring still counts. A multi-line string that is not a docstring counts
-    every line it spans.
+    docstring still counts. Any other string, multi-line or not, counts every
+    line it spans.
     """
-    docstrings = _docstring_spans(tree)
+    docstrings = _docstring_starts(tree, source.split("\n"))
     lines: set[int] = set()
     for tok in tokenize.generate_tokens(io.StringIO(source).readline):
         if tok.type in _NON_CODE_TOKENS:
             continue
-        if any(start <= tok.start and tok.end <= end for start, end in docstrings):
+        if tok.type == tokenize.STRING and tok.start in docstrings:
             continue
         lines.update(range(tok.start[0], tok.end[0] + 1))
     return lines
@@ -135,32 +139,22 @@ def _is_router_handler(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return False
 
 
-def check_file_length(path: Path, source: str) -> list[str]:
+def check_file_length(path: Path, source: str, code: set[int]) -> list[str]:
     """Rule 1: enforce the maximum file length, in lines of code."""
     if _is_under_tests(path):
         return []
     header = "\n".join(source.splitlines()[:_MARKER_SCAN_LINES])
     if DATA_FILE_MARKER in header:
         return []
-    try:
-        tree = ast.parse(source, filename=str(path))
-    except SyntaxError:
-        return []  # check_function_lengths reports it, once
-    count = len(code_lines(source, tree))
+    count = len(code)
     if count <= MAX_FILE_LINES:
         return []
     return [f"{path}: file has {count} lines of code (max {MAX_FILE_LINES})"]
 
 
-def check_function_lengths(path: Path, source: str) -> list[str]:
+def check_function_lengths(path: Path, tree: ast.Module, code: set[int]) -> list[str]:
     """Rules 2 and 3: enforce handler and test function length limits."""
     violations: list[str] = []
-    try:
-        tree = ast.parse(source, filename=str(path))
-    except SyntaxError as exc:
-        return [f"{path}: syntax error: {exc}"]
-
-    code = code_lines(source, tree)
     under_tests = _is_under_tests(path)
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -326,13 +320,8 @@ def _check_return(
     ]
 
 
-def check_router_io(path: Path, source: str) -> list[str]:
+def check_router_io(path: Path, tree: ast.Module) -> list[str]:
     """Rule 4: every body crossing a router boundary is a Pydantic schema type."""
-    try:
-        tree = ast.parse(source, filename=str(path))
-    except SyntaxError:
-        return []  # Already reported by check_function_lengths.
-
     known = _schema_names(tree)
     violations: list[str] = []
     for node in ast.walk(tree):
@@ -346,11 +335,20 @@ def check_router_io(path: Path, source: str) -> list[str]:
 
 
 def check_source(path: Path, source: str) -> list[str]:
-    """Run every rule against a single file's source text."""
+    """Run every rule against a single file's source text.
+
+    The file is parsed and tokenized once here; a syntax error is the only
+    violation reported for a file that does not parse.
+    """
+    try:
+        tree = ast.parse(source, filename=str(path))
+    except SyntaxError as exc:
+        return [f"{path}: syntax error: {exc}"]
+    code = code_lines(source, tree)
     return (
-        check_file_length(path, source)
-        + check_function_lengths(path, source)
-        + check_router_io(path, source)
+        check_file_length(path, source, code)
+        + check_function_lengths(path, tree, code)
+        + check_router_io(path, tree)
     )
 
 
