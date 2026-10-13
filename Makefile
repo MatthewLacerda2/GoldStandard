@@ -64,6 +64,7 @@ labels:
 	gh label create fix            --force --color EE0701 --description "Something broken or overlooked (a missing translation key counts)."
 	gh label create foundation     --force --color 0E8A16 --description "Groundwork inside the app that later features stand on."
 	gh label create feat           --force --color A2EEEF --description "A new capability or resource."
+	gh label create minor          --force --color C2E0C6 --description "A small change, beside its type: may ride along in another PR; goes first among equals."
 	gh label create refactor       --force --color C5DEF5 --description "A big change, beside its type: flags the PR for the independent review."
 	gh label create documentation  --force --color 0075CA --description "Edit/add documentation; never waits its turn."
 	gh label create planning       --force --color FBCA04 --description "Changes a decision or the design, or not settled yet. Do not start."

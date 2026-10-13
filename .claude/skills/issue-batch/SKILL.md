@@ -105,8 +105,8 @@ never scarce, and manufactures collisions: four sub-issues each adding a locale 
 is four rebases and four reviews for one coherent change. Sub-issues are for work
 that is genuinely separable *in the code*, not for work that is merely listable.
 
-A small change is not a branch. It rides along in whichever pull request is
-already standing in that file.
+A small change (`minor`) need not be a branch. It may ride along in whichever
+pull request is already standing in that file.
 
 ## One worktree per branch
 

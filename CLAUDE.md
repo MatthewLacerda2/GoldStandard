@@ -101,8 +101,11 @@ overlap these (`enhancement` is `feat` under another name).
   translation key counts), `foundation` (groundwork inside the app that later
   features stand on, though nobody would ask for it on its own), `feat` (a new
   capability or resource), `documentation`.
-- **`refactor`** — alongside the type, on a big change: a refactor, or anything
-  large. It flags the PR for the independent review.
+- **Size** (at most one, alongside the type): `minor` is a small change — it
+  may be folded into another PR on the same ground, though it doesn't have to
+  be, and among issues of the same priority it goes first, being cheap.
+  `refactor` is a big one — a refactor, or anything large — and flags the PR
+  for the independent review.
 - **Stage** (at most one): `planning` and `human`. Both mean **do not start**,
   absolutely, and they are the only thing that does: an issue carrying neither
   is startable the moment it exists, including one filed a minute ago. An issue
