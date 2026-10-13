@@ -105,8 +105,8 @@ never scarce, and manufactures collisions: four sub-issues each adding a locale 
 is four rebases and four reviews for one coherent change. Sub-issues are for work
 that is genuinely separable *in the code*, not for work that is merely listable.
 
-A small change is not a branch. It rides along in whichever pull request is
-already standing in that file.
+A small change (`minor`) need not be a branch. It may ride along in whichever
+pull request is already standing in that file.
 
 ## One worktree per branch
 
@@ -217,7 +217,7 @@ moment it lands — so the decision is one merge wide, not one batch wide.
 Re-reading is not a licence to start everything. The ceiling is the collision list
 above, and an unblocked issue left unstarted is not
 wasted capacity — it is a rebase not yet paid for. Priority (`infrastructure` →
-`architecture` → `bug` → `foundation` → `feature`, `documentation` any time)
+`architecture` → `fix` → `foundation` → `feat`, `documentation` any time)
 orders what gets **merged**, not what gets started.
 
 **A stage label is the only absolute stop.** `planning` and `human` mean *not
