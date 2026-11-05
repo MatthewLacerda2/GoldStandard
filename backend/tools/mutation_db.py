@@ -36,10 +36,11 @@ def admin_connect_args(database_url: str) -> dict:
 
     They are the ones SQLAlchemy's dialect hands asyncpg for the app's own
     connections: each URL parameter arrives under its own name, as a string,
-    so the ones asyncpg takes as strings (``ssl=require``,
-    ``command_timeout=30``) work here as they do for the app, and any other one
-    (``timeout``, ``statement_cache_size``, a libpq-only name) fails here as it
-    does there; naming them for asyncpg is ``normalize_database_url``'s job. A
+    so only the ones asyncpg takes as strings (``ssl=require``,
+    ``command_timeout=30``) work. ``normalize_database_url`` leaves no other
+    one in the URL: it moves asyncpg's numeric keys (``timeout``,
+    ``statement_cache_size``) and ``application_name`` beside it, where the app
+    reads them and this connection goes without, and refuses the rest. A
     raw DSN would not do: asyncpg reads a DSN by libpq's names (``sslmode``)
     and sends any other one to the server as a setting, which it refuses.
     Another driver's URL is refused: its arguments are not asyncpg's.
