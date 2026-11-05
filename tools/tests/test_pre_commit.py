@@ -54,9 +54,16 @@ class Scratch(unittest.TestCase):
             ("core.hooksPath", ".githooks"),
         ]:
             self.git("config", key, value)
-        for name in ("Makefile", ".gitignore", ".githooks", "tools/docs_lint"):
+        for name in ("Makefile", ".gitignore", ".githooks"):
             copy = shutil.copytree if (ROOT / name).is_dir() else shutil.copy
             copy(ROOT / name, self.repo / name)
+        # The docs lint, which the hook runs, is a stub: it has its own tests,
+        # and the real one would judge this scratch copy against what the
+        # Makefile's comments name.
+        lint = self.repo / "tools/docs_lint"
+        lint.mkdir(parents=True)
+        (lint / "__init__.py").write_text("")
+        (lint / "__main__.py").write_text('print("docs-lint: stub")\n')
         for layer in ("backend", "frontend"):
             (self.repo / layer).mkdir()
             (self.repo / layer / "a.txt").write_text("one\n")

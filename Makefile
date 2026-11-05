@@ -37,7 +37,7 @@ frontend: front-lint front-build front-test front-contract
 .PHONY: tools tools-lint docs-lint
 tools: docs-lint tools-lint
 	$(TOOLS_PYTHON) -m unittest discover --start-directory tools/tests --top-level-directory .
-	$(TOOLS_PYTHON) tools/markers.py
+	$(TOOLS_PYTHON) -m tools.markers
 
 tools-lint:
 	@found="$$($(RUFF) --version 2>/dev/null)"; [ "$$found" = "ruff $(RUFF_PIN)" ] || { \
@@ -45,7 +45,8 @@ tools-lint:
 	$(RUFF) check --config backend/pyproject.toml tools
 	$(RUFF) format --check --config backend/pyproject.toml tools
 
-# The size and shape of what an agent loads: CLAUDE.md files and skills.
+# The size and shape of what an agent loads (CLAUDE.md files and skills), and
+# that the paths and make targets the docs and comments name exist.
 docs-lint:
 	$(TOOLS_PYTHON) -m tools.docs_lint
 

@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
-import io
 import re
 import tokenize
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import PurePosixPath
 
+from tools.comments import comments as read_comments
+
 SKILLS_DIR = (".claude", "skills")
 DOCS_DIR = PurePosixPath("docs")
 CODE_SUFFIXES = frozenset({".py", ".sh", ".ts", ".tsx", ".mts", ".cts", ".js", ".mjs", ".cjs"})
+# The files whose comments open with `//` (`tools/comments.py`); any other
+# code file but Python's takes `#`.
+_SLASH_SUFFIXES = frozenset({".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"})
 
 _HTML_COMMENT = re.compile(r"<!--((?:(?!-->).)*)-->")
-# Where a comment starts in a code file that is not Python (read by line, so a
-# string that looks like a comment counts too; Python is read with tokenize).
+# What a line that is nothing but a comment opens with, in a code file.
 _CODE_COMMENT = ("#", "//", "/*", "*")
 # A fence opens with three or more backticks or tildes, indented at most three
 # spaces, and closes with a run of the same character at least as long.
@@ -40,14 +44,46 @@ def fenced_lines(lines: list[str]) -> frozenset[int]:
     return frozenset(inside)
 
 
+def _nothing_ignored(path: str) -> bool:
+    return False
+
+
+@dataclass(frozen=True)
+class Tree:
+    """What exists in the repository, for a rule that checks what a doc names."""
+
+    # Every file git tracks or would track (untracked, not ignored), on disk.
+    files: frozenset[str] = frozenset()
+    # The root `Makefile`'s targets.
+    targets: frozenset[str] = frozenset()
+    # Whether git ignores a path (`.env`, `backend/.venv/`): made on a machine
+    # and never committed, so it is named on purpose.
+    ignored: Callable[[str], bool] = _nothing_ignored
+
+    @cached_property
+    def dirs(self) -> frozenset[str]:
+        """Every directory holding one of the files."""
+        return frozenset(str(d) for f in self.files for d in PurePosixPath(f).parents) - {"."}
+
+    def has(self, path: str) -> bool:
+        """Whether `path` (a file, or a directory when it ends in `/`) exists, or
+        is ignored by git in a directory that does. An ignored directory may be
+        named without its `/` (`backend/.venv`)."""
+        bare = path.rstrip("/")
+        if bare in self.dirs or (bare == path and bare in self.files):
+            return True
+        parent = str(PurePosixPath(bare).parent)
+        placed = parent == "." or parent in self.dirs
+        return placed and (self.ignored(path) or self.ignored(f"{bare}/"))
+
+
 @dataclass(frozen=True)
 class Doc:
     """One tracked file, as a rule reads it."""
 
     path: PurePosixPath
     text: str
-    # Every tracked path, for a rule that checks what a doc names.
-    tracked: frozenset[str] = field(default=frozenset(), repr=False)
+    tree: Tree = field(default=Tree(), repr=False)
 
     @cached_property
     def lines(self) -> list[str]:
@@ -105,21 +141,13 @@ class Doc:
                 if i not in self.fenced
             }
             return {i: texts for i, texts in found.items() if texts}
-        if self.path.suffix == ".py":
-            try:
-                tokens = tokenize.generate_tokens(io.StringIO(self.text).readline)
-                comments: dict[int, list[str]] = {}
-                for tok in tokens:
-                    if tok.type == tokenize.COMMENT:
-                        comments.setdefault(tok.start[0] - 1, []).append(tok.string)
-                return comments
-            except tokenize.TokenError, SyntaxError:
-                pass  # not valid Python: read it by line, as below
-        return {
-            i: [line]
-            for i, line in enumerate(self.lines)
-            if line.lstrip().startswith(_CODE_COMMENT)
-        }
+        suffix = self.path.suffix
+        syntax = "python" if suffix == ".py" else "slash" if suffix in _SLASH_SUFFIXES else "hash"
+        try:
+            found = read_comments(syntax, self.text)
+        except tokenize.TokenError, SyntaxError:
+            found = read_comments("hash", self.text)  # not valid Python: read it by line
+        return {line - 1: texts for line, texts in found.items()}
 
 
 @dataclass(frozen=True)
@@ -149,10 +177,17 @@ def _is_html_comment(doc: Doc, index: int) -> bool:
 
 
 def allowed_line(doc: Doc, index: int, rule: str) -> bool:
-    """Whether line `index` (0-based) of a Markdown page is excused from `rule`:
-    an HTML comment on it allows it, or one in the unbroken run of one-line HTML
-    comments directly above it does. An allow inside a fence excuses only its
-    own line."""
+    """Whether line `index` (0-based) is excused from `rule`. In a Markdown
+    page, an HTML comment on it allows it, or one in the unbroken run of
+    one-line HTML comments directly above it does; an allow inside a fence
+    excuses only its own line. In a code file, a comment on it allows it, or
+    one on the line directly above when that line is nothing but a comment: an
+    allow after code on its line is that line's own."""
+    if not doc.is_markdown:
+        near = list(doc.comments.get(index, []))
+        if index > 0 and doc.lines[index - 1].lstrip().startswith(_CODE_COMMENT):
+            near += doc.comments.get(index - 1, [])
+        return any(grants(comment, rule) for comment in near)
     on_line = (m.group(1) for m in _HTML_COMMENT.finditer(doc.lines[index]))
     if any(grants(comment, rule) for comment in on_line):
         return True

@@ -226,7 +226,7 @@ check that only runs in CI, or only locally.
 
 ```
 make check      # everything
-make tools      # tools/: ruff + tests; docs-lint (CLAUDE.md and skill limits)
+make tools      # tools/: ruff + tests; docs-lint (doc limits, named paths)
 make backend    # back-lint + back-build + back-test
 make frontend   # front-lint + front-build + front-test + front-contract
 make setup      # once per clone: each commit runs `make pre-commit` (lint only)

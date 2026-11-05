@@ -6,13 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tools.comments import comment_of
 from tools.markers import (
     ADVICE,
     LAYER_LINTED,
     MARKERS,
     NOT_READ,
     check,
-    comment_of,
     matches,
     scan,
     syntax_of,
