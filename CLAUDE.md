@@ -101,11 +101,8 @@ overlap these (`enhancement` is `feat` under another name).
   translation key counts), `foundation` (groundwork inside the app that later
   features stand on, though nobody would ask for it on its own), `feat` (a new
   capability or resource), `documentation`.
-- **Size** (at most one, alongside the type): `minor` is a small change — it
-  may be folded into another PR on the same ground, though it doesn't have to
-  be, and among issues of the same priority it goes first, being cheap.
-  `refactor` is a big one — a refactor, or anything large — and flags the PR
-  for the independent review.
+- **Size** (at most one, alongside the type): `refactor` is a big change — a
+  refactor, or anything large — and flags the PR for the independent review.
 - **Stage** (at most one): `planning` and `human`. Both mean **do not start**,
   absolutely, and they are the only thing that does: an issue carrying neither
   is startable the moment it exists, including one filed a minute ago. An issue
@@ -138,9 +135,9 @@ together. A `planning` issue that would change how another is built blocks it.
 taken. When we start *actually working* an issue (not just planning), assign
 the user and tell them.
 
-**Two skills carry the working protocols** — `issue-batch` and
-`independent-review` (which `issue-batch` depends on) — so this file can hold
-the reasoning and they can hold the steps. Each one names its own scope and when
+**Three skills carry the working protocols** — `issue-batch`, `ci-merge` and
+`independent-review` (each depending on the next) — so this file can hold the
+reasoning and they can hold the steps. Each one names its own scope and when
 to reach for it; invoke them rather than reconstructing a procedure from memory,
 and name them when briefing a subagent. Where a rule here is stated in one line
 and a skill has ten, the line is the rule and the skill is how to keep it; where
