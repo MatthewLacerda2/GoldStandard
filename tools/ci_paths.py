@@ -55,8 +55,9 @@ LAYERS: dict[str, tuple[str, ...]] = {
         *_SHARED,
         "!**/*.md",
     ),
-    # No `!**/*.md`: Prettier checks frontend/'s Markdown too.
-    "frontend": ("frontend/**", *_SHARED),
+    # No `!**/*.md`: Prettier checks frontend/'s Markdown too. .gitattributes
+    # names the frontend's merge drivers, and their tests merge with it.
+    "frontend": ("frontend/**", ".gitattributes", *_SHARED),
 }
 
 # Tracked files no layer's gates read. A change to only these runs just the

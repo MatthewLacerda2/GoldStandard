@@ -136,7 +136,7 @@ Three things a worktree does *not* isolate:
 - **Anything under `~`.** Bun's and pip's caches are shared, which is fine, and is
   the reason parallel gate runs are cheap here.
 - **The repository config.** Every worktree reads the same `.git/config`, so a
-  `git config` run in one (`make setup`'s `core.hooksPath` included) changes it
+  `git config` run in one (`make setup`'s hook path and merge drivers included) changes it
   for all of them and for the main checkout.
 
 A worktree costs `backend/.venv` and `frontend/node_modules` — hundreds of

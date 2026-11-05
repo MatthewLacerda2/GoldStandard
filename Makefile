@@ -150,10 +150,12 @@ front-install:
 # ---------------------------------------------------------------------------
 # Clone setup and the pre-commit hook  (`make setup` once per clone)
 # ---------------------------------------------------------------------------
-# One setting in the repository config, so it covers every worktree of the
-# clone at once. It replaces any hooks path set before, which also stops hooks
-# kept in .git/hooks from running. The path is relative to each worktree, so a
-# worktree on a branch that predates .githooks/ runs no hook at all.
+# Settings in the repository config, so they cover every worktree of the
+# clone at once. The hooks path replaces any set before, which also stops
+# hooks kept in .git/hooks from running. The path is relative to each
+# worktree, so a worktree on a branch that predates .githooks/ runs no hook at
+# all. The merge drivers `.gitattributes` names are defined here too: git runs
+# only a driver its config defines (frontend/scripts/merge-driver.sh).
 .PHONY: setup pre-commit-scope pre-commit pre-commit-back pre-commit-front pre-commit-tools
 .PHONY: back-fix front-fix
 setup:
@@ -161,6 +163,8 @@ setup:
 	@echo "setup: each commit and merge now runs 'make pre-commit' (.githooks/), in every worktree of this clone."
 	@echo "setup: hooks in .git/hooks no longer run, and a branch without .githooks/ runs none."
 	@echo "setup: to commit work in progress anyway, use 'git commit --no-verify'."
+	sh frontend/scripts/merge-driver.sh install
+	@echo "setup: merges and rebases now settle locale JSON, routeTree.gen.ts and the house-rule registries (.gitattributes)."
 
 # The layers the index changes, as one loop: the hook reads it through
 # `pre-commit-scope`, and a `make pre-commit` by hand reads it here. tools/ is
