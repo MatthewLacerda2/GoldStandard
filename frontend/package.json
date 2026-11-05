@@ -10,6 +10,7 @@
     "check": "tsc --noEmit && eslint . && prettier --check .",
     "fix": "eslint --fix . && prettier --write .",
     "test": "vitest run",
+    "contract": "bun scripts/check-contract.ts",
     "prepare": "husky"
   },
   "dependencies": {

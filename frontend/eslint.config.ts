@@ -122,9 +122,10 @@ export default tseslint.config(
       "better-tailwindcss/no-unknown-classes": "off",
     },
   },
-  // ESLint rule sources and their tests are Node modules, not DOM/Tailwind code.
+  // ESLint rule sources, the gate scripts and their tests are Node modules,
+  // not DOM/Tailwind code.
   {
-    files: ["eslint-rules/**"],
+    files: ["eslint-rules/**", "scripts/**"],
     rules: {
       "better-tailwindcss/no-unknown-classes": "off",
       "local/no-hand-rolled-form-control": "off",
