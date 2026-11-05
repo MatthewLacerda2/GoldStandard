@@ -21,7 +21,9 @@ extend-immutable-calls = [
 
 [tool.ruff.lint.per-file-ignores]
 # Tests do not need return-type annotations on every fixture/test function.
-"tests/**" = ["ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "ANN204", "B008"]
+# `**/` so the glob means the same from backend/ and from the root, where
+# `make tools-lint` reads this file for tools/ (and tools/tests/).
+"**/tests/**" = ["ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "ANN204", "B008"]
 
 [tool.ruff.format]
 quote-style = "double"

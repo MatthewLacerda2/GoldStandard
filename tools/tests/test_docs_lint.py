@@ -141,6 +141,78 @@ class History(unittest.TestCase):
         self.assertEqual(rules({"CLAUDE.md": text}), [("CLAUDE.md", "history", 3)])
 
 
+class Allows(unittest.TestCase):
+    ALLOW = "<!-- lint: allow(claude-md) it is generated -->"
+
+    def test_a_file_allow_counts_anywhere_on_a_line_outside_a_fence(self) -> None:
+        text = lines(301) + f"Generated. {self.ALLOW} Do not edit.\n"
+        self.assertEqual(rules({"CLAUDE.md": text}), [])
+
+    def test_a_file_allow_shown_in_a_fence_is_an_example(self) -> None:
+        for fence in ("```", "~~~~"):
+            text = lines(300) + f"{fence}md\n{self.ALLOW}\n{fence}\n"
+            self.assertEqual(len(rules({"CLAUDE.md": text})), 1, fence)
+        toc = "```\n<!-- lint: allow(reference-toc) why -->\n```\n" + lines(100)
+        self.assertEqual(len(rules({"docs/guide.md": toc})), 1)
+
+    def test_a_code_allow_must_be_a_comment_not_a_string(self) -> None:
+        code = '"""Shows the allow:\n\n# lint: allow(skill-code) why\n"""\n' + "x = 1\n" * 400
+        self.assertEqual(len(rules({".claude/skills/demo/x.py": code})), 1)
+
+    def test_the_allow_must_be_inside_the_comment(self) -> None:
+        between = "<!-- a --> lint: allow({}) a reason <!-- b -->\n"
+        text = between.format("history") + "See #12.\n"
+        self.assertEqual(rules({"CLAUDE.md": text}), [("CLAUDE.md", "history", 2)])
+        self.assertEqual(len(rules({"CLAUDE.md": lines(301) + between.format("claude-md")})), 1)
+
+
+class WhereSkillsLive(unittest.TestCase):
+    def test_a_page_directly_under_skills_is_capped(self) -> None:
+        path = ".claude/skills/README.md"
+        self.assertIn((path, "skill-doc", 1), rules({path: lines(501, "## Contents\n")}))
+
+    def test_a_nested_skills_folder_is_held_too(self) -> None:
+        path = "frontend/.claude/skills/demo/SKILL.md"
+        self.assertEqual(rules({path: FRONTMATTER + "See #12.\n"}), [(path, "history", 5)])
+        self.assertEqual(rules({path: "# Demo\n"}), [(path, "skill-frontmatter", 1)])
+
+
+class FrontmatterAsYamlReadsIt(unittest.TestCase):
+    def problems(self, text: str) -> list[str]:
+        return [v.message for v in lint({SKILL: text}, {SKILL: text}.get)]
+
+    def test_a_comment_ends_a_plain_value(self) -> None:
+        self.assertEqual(self.problems("---\nname: demo  # the folder\ndescription: D.\n---\n"), [])
+
+    def test_an_unquoted_colon_is_flagged_and_a_quoted_one_passes(self) -> None:
+        self.assertEqual(len(self.problems("---\nname: demo\ndescription: Use when: x\n---\n")), 1)
+        self.assertEqual(self.problems('---\nname: demo\ndescription: "Use when: x"\n---\n'), [])
+
+    def test_a_byte_order_mark_is_named(self) -> None:
+        self.assertIn("byte-order mark", self.problems("\ufeff" + FRONTMATTER)[0])
+
+
+class NotReferences(unittest.TestCase):
+    def test_anchors_and_hashes_glued_to_a_word_pass(self) -> None:
+        for line in ("[jump](#2-install)", "see [x](page.md#3)", "page.html#3", "C#12", "F#"):
+            with self.subTest(line=line):
+                self.assertEqual(rules({"CLAUDE.md": line + "\n"}), [])
+
+    def test_a_ranking_cannot_be_told_from_a_reference(self) -> None:
+        self.assertEqual(len(rules({"CLAUDE.md": "the #1 rule\n"})), 1)
+
+
+class TocShapes(unittest.TestCase):
+    def test_a_colon_or_an_underlined_heading_counts(self) -> None:
+        for head in ("## Contents:\n", "Contents\n========\n", "Table of contents\n---\n"):
+            with self.subTest(head=head):
+                self.assertEqual(rules({"docs/guide.md": lines(101, head)}), [])
+
+    def test_a_shorter_fence_inside_a_longer_one_does_not_close_it(self) -> None:
+        text = "````\n```\n## Contents\n````\n" + lines(100)
+        self.assertEqual(len(rules({"docs/guide.md": text})), 1)
+
+
 class TheRepository(unittest.TestCase):
     def test_tracked_files_are_read_from_git(self) -> None:
         tracked = tracked_files(ROOT)

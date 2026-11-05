@@ -28,7 +28,7 @@ def _cap(doc: Doc) -> tuple[str, int] | None:
     """The cap rule that holds this file and its limit, if one does."""
     if doc.is_claude_md:
         return "claude-md", CLAUDE_MD_LIMIT
-    if doc.skill is None:
+    if not doc.in_skills:
         return None
     if doc.is_markdown:
         return "skill-doc", SKILL_DOC_LIMIT

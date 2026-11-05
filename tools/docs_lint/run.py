@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path, PurePosixPath
 
 from tools.docs_lint import caps, frontmatter, history, toc
-from tools.docs_lint.core import SKILLS_DIR, Doc, Violation
+from tools.docs_lint.core import Doc, Violation
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -23,10 +23,9 @@ RULES: tuple[Callable[[Doc], list[Violation]], ...] = (
 
 
 def is_read(path: str) -> bool:
-    """Whether any rule reads this file: every Markdown page, and every file in a
-    skill folder."""
-    posix = PurePosixPath(path)
-    return posix.suffix == ".md" or posix.is_relative_to(SKILLS_DIR)
+    """Whether any rule reads this file: every Markdown page, and every file
+    under a `.claude/skills/` folder."""
+    return PurePosixPath(path).suffix == ".md" or "/.claude/skills/" in f"/{path}"
 
 
 def lint(tracked: Iterable[str], read: Callable[[str], str | None]) -> list[Violation]:

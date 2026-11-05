@@ -2,8 +2,9 @@
 
 The version is pinned once, in `backend/requirements-dev.txt`: locally `make
 tools-lint` runs the backend venv's ruff, which that file installed, and CI's
-`tools` job installs the pin it reads from the same file. The rules are
-`backend/pyproject.toml`'s, passed with `--config`. A second pin or a second
+`tools` job installs the pin it reads from the same file, and `tools-lint`
+fails on a local ruff off that pin. The rules are `backend/pyproject.toml`'s,
+passed with `--config`. A second pin or a second
 config is how the two would drift apart, so these tests fail on one.
 """
 
@@ -44,6 +45,11 @@ class OneRuff(unittest.TestCase):
         self.assertEqual(len(runs), 2, "tools-lint runs `ruff check` and `ruff format`")
         for line in runs:
             self.assertIn(f"--config {CONFIG} tools", line)
+
+    def test_a_local_ruff_off_the_pin_fails(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertRegex(makefile, rf"(?m)^RUFF_PIN := .*{re.escape(REQUIREMENTS)}")
+        self.assertIn('"ruff $(RUFF_PIN)"', target(makefile, "tools-lint"))
 
 
 if __name__ == "__main__":

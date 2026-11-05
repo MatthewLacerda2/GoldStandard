@@ -16,10 +16,13 @@ ones, so a skill made here also loads when uploaded to claude.ai or the API:
   it truncates a listing's description past 1,536 characters)
 
 The frontmatter is read without a YAML library (the standard library has
-none). A top-level `key: value` is understood, its value going on over any
-indented lines that follow (folded with spaces) and stripped of one pair of
-surrounding quotes, and so is a `|` or `>` block scalar (with an optional `-`
-or `+`). Any other shape (a nested mapping, a list) is skipped.
+none), so this is not a YAML parser: it reads the shapes a skill's frontmatter
+takes. A top-level `key: value`, its value going on over any indented lines
+that follow (folded with spaces); a plain value ends at a ` #` comment, and a
+quoted one is what its quotes hold. A `|` or `>` block scalar (with an optional
+`-` or `+`). Any other shape (a nested mapping, a list) is skipped. One mistake
+YAML rejects is caught, since it leaves the skill with no metadata: a plain
+value holding `: `, which must be quoted.
 """
 
 from __future__ import annotations
@@ -39,15 +42,21 @@ _KEY_LINE = re.compile(r"([A-Za-z0-9_-]+):(?:\s+(.*))?")
 _BLOCK_SCALARS = frozenset({"|", ">", "|-", ">-", "|+", ">+"})
 
 
-def _unquote(value: str) -> str:
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-        return value[1:-1]
-    return value
+def _plain(value: str) -> tuple[str, str | None]:
+    """A one-line or folded value as YAML reads it, and what YAML would reject
+    in it, if anything."""
+    if value[:1] in "\"'":
+        close = value.find(value[0], 1)
+        return (value[1:close], None) if close > 0 else (value[1:], "an unclosed quote")
+    value = re.split(r"\s#", value, maxsplit=1)[0].strip()
+    if ": " in value or value.endswith(":"):
+        return value, "a `: ` in an unquoted value, which YAML rejects: quote the value"
+    return value, None
 
 
-def fields(text: str) -> dict[str, str] | None:
-    """The frontmatter's top-level scalar keys, or `None` when the text does not
-    open with a closed `---` block."""
+def fields(text: str) -> tuple[dict[str, str], list[str]] | None:
+    """The frontmatter's top-level scalar keys and the mistakes found reading
+    them, or `None` when the text does not open with a closed `---` block."""
     lines = text.splitlines()
     if not lines or lines[0].rstrip() != "---":
         return None
@@ -55,6 +64,7 @@ def fields(text: str) -> dict[str, str] | None:
     if end is None:
         return None
     found: dict[str, str] = {}
+    mistakes: list[str] = []
     at = 1
     while at < end:
         match = _KEY_LINE.fullmatch(lines[at].rstrip())
@@ -69,11 +79,14 @@ def fields(text: str) -> dict[str, str] | None:
         if first in _BLOCK_SCALARS:
             joiner = "\n" if first[0] == "|" else " "
             found[key] = joiner.join(line for line in more if line).strip()
-        elif not first and more and more[0] and (_KEY_LINE.fullmatch(more[0]) or more[0][0] == "-"):
+            continue
+        if not first and more and more[0] and (_KEY_LINE.fullmatch(more[0]) or more[0][0] == "-"):
             continue  # a nested mapping or a list
-        else:
-            found[key] = _unquote(" ".join(part for part in [first, *more] if part))
-    return found
+        value, mistake = _plain(" ".join(part for part in [first, *more] if part))
+        found[key] = value
+        if mistake:
+            mistakes.append(f"`{key}` has {mistake}")
+    return found, mistakes
 
 
 def _name_problems(name: str, folder: str) -> list[str]:
@@ -108,12 +121,16 @@ def _description_problems(description: str) -> list[str]:
 
 
 def check(doc: Doc) -> list[Violation]:
-    if not doc.is_skill_entry or doc.skill is None:
+    folder = doc.skill
+    if folder is None or not doc.is_skill_entry:
         return []
-    found = fields(doc.text)
-    if found is None:
+    if doc.text.startswith("\ufeff"):
+        return [violation(doc, RULE, "opens with a byte-order mark: save it without one")]
+    read = fields(doc.text)
+    if read is None:
         message = "no frontmatter: open with a `---` block holding `name` and `description`"
         return [violation(doc, RULE, message)]
-    problems = _name_problems(found.get("name", ""), doc.skill)
+    found, problems = read
+    problems += _name_problems(found.get("name", ""), folder)
     problems += _description_problems(found.get("description", ""))
     return [violation(doc, RULE, problem) for problem in problems]

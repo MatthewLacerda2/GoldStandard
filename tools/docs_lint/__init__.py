@@ -8,6 +8,7 @@ what to do:
     claude-md          a file named `CLAUDE.md`, anywhere, is at most 300 lines
     skill-doc          a `.md` under `.claude/skills/` is at most 500 lines
     skill-code         a code file under `.claude/skills/` is at most 400 lines
+                       (a `.claude/skills/` folder at any depth counts)
     skill-frontmatter  a `SKILL.md` opens with the `name` and `description`
                        a skill needs to load
     reference-toc      a long reference page carries a table of contents
@@ -22,8 +23,9 @@ loaded by nobody else.
 An exception is written where it applies, with its reason: a one-line HTML
 comment `<!-- lint: allow(<rule>) <why> -->` on the line, or in the run of such
 comments directly above it; for a whole-file cap, anywhere in the file (in a
-code file, as a comment: `# lint: allow(<rule>) <why>`). There is no list of
-exceptions in a config file.
+code file, as a comment: `# lint: allow(<rule>) <why>`). An allow shown inside
+a code fence, or in a string, is an example and excuses nothing. There is no
+list of exceptions in a config file.
 
     python3.14 -m tools.docs_lint      # from the repository root
 """
