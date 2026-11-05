@@ -54,3 +54,10 @@ def test_a_tests_folder_above_the_tree_exempts_nothing(tmp_path):
 def test_a_missing_or_empty_root_fails(tmp_path):
     for root in (tmp_path / "missing", tmp_path):
         assert house_lint.main(["--lengths", str(root)]) == 1
+
+
+def test_mutmuts_working_copy_inside_the_tree_is_skipped(tmp_path):
+    (tmp_path / "ok.py").write_text("x = 1\n")
+    (tmp_path / "mutants").mkdir()
+    (tmp_path / "mutants/big.py").write_text("x = 1\n" * (house_lint.MAX_FILE_LINES + 1))
+    assert house_lint.scan(tmp_path, lengths_only=True) == []
