@@ -44,6 +44,7 @@ beforeAll(() => {
   vi.spyOn(console, "log").mockImplementation(() => {});
   repo = mkdtempSync(join(tmpdir(), "baseline-base-"));
   git("init", "-q");
+  // lint: allow(layer-read) a file of the throwaway repository, not of this one
   commit("before the gate", { "README.md": "x" });
   commit("the gate", {
     "scripts/check-x.ts": "export {};\n",

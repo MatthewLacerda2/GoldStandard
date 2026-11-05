@@ -42,6 +42,7 @@ frontend: front-lint front-deadcode front-build front-test front-contract
 tools: docs-lint tools-lint
 	$(TOOLS_PYTHON) -m unittest discover --start-directory tools/tests --top-level-directory .
 	$(TOOLS_PYTHON) -m tools.markers
+	$(TOOLS_PYTHON) -m tools.layer_reads
 
 tools-lint: tools-ruff
 	$(RUFF) check --config backend/pyproject.toml tools

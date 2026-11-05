@@ -24,6 +24,7 @@ def _template_repo(tmp_path_factory: pytest.TempPathFactory) -> Path:
     repo.write("backend/mutation-sensitive.txt", SENSITIVE_LIST)
     repo.write(GUARD, GUARD_SOURCE)
     repo.write("backend/services/fuel.py", "def litres(n):\n    return n * 2\n")
+    # lint: allow(layer-read) written into the throwaway repository, not read from this one
     repo.write(".gitignore", "mutants/\n")
     repo.commit()
     # What `make back-mutate-diff` and the gate compare against.

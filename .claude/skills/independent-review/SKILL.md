@@ -129,7 +129,8 @@ Paste every list whose trigger the PR hits.
   its own tests say so; caching cannot mask a failure; permissions and secrets
   minimal; a test that reads a file outside its own layer has that file in its
   layer's paths in `tools/ci_paths.py`, or a change to the file alone skips the
-  test in CI.
+  test in CI. `tools/layer_reads.py` catches a read through a literal path; one
+  built at run time, or a whole directory copied, is still the reviewer's.
 
 ## Answering the findings
 

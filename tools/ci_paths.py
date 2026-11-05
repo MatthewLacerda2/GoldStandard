@@ -22,7 +22,9 @@ change that merges unchecked and turns `main` red.
 
 Every tracked file is either claimed by a layer or listed in `UNGATED`, and
 `tools/tests/test_ci_paths.py` holds the repository to that, so a new top-level
-folder cannot slip past every gate unnoticed.
+folder cannot slip past every gate unnoticed. A file a layer's code reads from
+outside the layer belongs in that layer's patterns too, and
+`tools/layer_reads.py` fails on one that is missing.
 
 An empty or unreadable diff runs everything: there is nothing to say it was
 safe to skip.
