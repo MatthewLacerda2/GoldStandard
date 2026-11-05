@@ -23,11 +23,15 @@ survivor: backend/CLAUDE.md, "Mutation testing".
 """
 
 import asyncio
+import json
 import os
 import platform
 import subprocess
 import sys
+from fnmatch import fnmatch
 from pathlib import Path
+
+import asyncpg
 
 from tools import mutation_db
 
@@ -148,24 +152,50 @@ def _admin_dsn() -> str:
     from core.config import get_settings
     from core.database import normalize_database_url
 
-    url = normalize_database_url(os.environ.get("DATABASE_URL") or get_settings().DATABASE_URL)
-    head = url.rpartition("/")[0].replace("postgresql+asyncpg://", "postgresql://")
-    return f"{head}/postgres"
+    url = os.environ.get("DATABASE_URL") or get_settings().DATABASE_URL
+    return mutation_db.admin_dsn(normalize_database_url(url))
+
+
+# Postgres down or refusing us, or settings that do not load: mutmut has failed
+# on it too (or will), and says so.
+_UNREACHABLE = (OSError, ValueError, asyncpg.PostgresError, asyncpg.InterfaceError)
 
 
 def _sweep(base: str) -> None:
+    """Drop this worktree's mutation databases, never raising: in the driver's
+    ``finally`` a traceback would replace mutmut's exit code and the diagnosis."""
     try:
         dropped = asyncio.run(mutation_db.sweep(_admin_dsn(), base))
-    except OSError as exc:
-        print(f"[back-mutate] could not reach Postgres to drop the test databases: {exc}")
+    except _UNREACHABLE as exc:
+        print(f"[back-mutate] could not drop the test databases: {type(exc).__name__}: {exc}")
         return
     if dropped:
         print(f"[back-mutate] dropped {len(dropped)} leftover mutation database(s)")
 
 
+def native_windows() -> bool:
+    """Whether this is native Windows, saying where to go when it is. Every
+    entry point that runs mutants asks first, before any other work."""
+    if platform.system() != "Windows":
+        return False
+    print(NATIVE_WINDOWS, file=sys.stderr)
+    return True
+
+
+def unmatched(mutants: Path, names: list[str]) -> list[str]:
+    """The names no generated mutant matches (mutmut asserts and stops on
+    one, and a bare word the shell expanded, ``utils`` for ``utils*``, is the
+    usual cause). Read from the ``.meta`` files the generation step writes."""
+    keys = [
+        key
+        for meta in mutants.rglob("*.meta")
+        for key in json.loads(meta.read_text()).get("exit_code_by_key", {})
+    ]
+    return [n for n in names if not any(key == n or fnmatch(key, n) for key in keys)]
+
+
 def main(argv: list[str]) -> int:
-    if platform.system() == "Windows":
-        print(NATIVE_WINDOWS, file=sys.stderr)
+    if native_windows():
         return 2
     names = _names(argv)
     if names is None:
@@ -185,7 +215,13 @@ def main(argv: list[str]) -> int:
     try:
         command = [sys.executable, "-m", "mutmut", "run", *with_clean_pass_names(names)]
         code = subprocess.call(command, cwd=BACKEND, env=env)
-        if code != 0:
+        if code != 0 and (missing := unmatched(BACKEND / "mutants", names)):
+            print(
+                f"[back-mutate] no mutant matches {', '.join(missing)}: a function's mutants are"
+                " `<module>.x_<function>__mutmut_*`, a module's `<module>*` (quote the glob)",
+                file=sys.stderr,
+            )
+        elif code != 0:
             explain_failed_run(BACKEND / "mutants", env)
         return code
     finally:

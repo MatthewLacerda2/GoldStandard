@@ -73,10 +73,11 @@ back-test:
 # Mutation testing (backend/CLAUDE.md, "Mutation testing"). The mutants run
 # locally only, never in `backend`, `check` or CI: they need minutes and
 # Postgres. CI runs only the read-only half, `back-mutation-gate`.
-# ONLY="<mutant-name glob>" for what you changed, ALL=1 for the whole scope; a
-# bare run refuses.
+# ONLY="<mutant-name glob> ..." for what you changed, ALL=1 for the whole scope;
+# a bare run refuses. Each name is single-quoted: unquoted, the shell in
+# backend/ would expand `utils*` to `utils`, which matches no mutant.
 back-mutate:
-	cd backend && $(PYTHON) -m tools.mutate $(if $(ALL),--all) $(ONLY)
+	cd backend && $(PYTHON) -m tools.mutate $(if $(ALL),--all) $(foreach name,$(ONLY),'$(name)')
 
 # The sensitive functions this branch changed, and the `## Mutation` block the
 # gate reads. PR=<n> writes it into that PR's body; NO_RUN=1 rewrites it from

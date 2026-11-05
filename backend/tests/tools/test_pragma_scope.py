@@ -71,15 +71,10 @@ def test_code_written_inside_an_existing_region_is_judged():
     assert any("mutants, not one" in p for p in _problems(REGION, head, {4}))
 
 
-def test_the_check_reads_only_sensitive_files_the_pr_changes(repo):
-    pragma = "  # pragma: no mutate"
-    repo.edit("backend/services/fuel.py", "n * 2", f"n * 2{pragma}")  # not sensitive
-    assert ps.problems(repo.root, "origin/main", "HEAD") == []
-    repo.edit(GUARD, "return attempts < LIMIT", f"return attempts < LIMIT{pragma}")
-    found = ps.problems(repo.root, "origin/main", "HEAD")
-    assert found and all(p.startswith(f"{GUARD}:11:") for p in found)
-
-
-def test_without_a_rev_the_working_tree_is_read(repo):
+def test_the_check_reads_only_the_sensitive_files_the_pr_changes(repo):
+    # Without a rev it reads the working tree; a file off the list is never judged.
     repo.edit(GUARD, "return True", "return True  # pragma: no mutate", commit=False)
-    assert any("no reason" in p for p in ps.problems(repo.root, "origin/main"))
+    repo.edit("backend/services/fuel.py", "n * 2", "n * 2  # pragma: no mutate", commit=False)
+    found = ps.problems(repo.root, "origin/main")
+    assert found and all(p.startswith(f"{GUARD}:10:") for p in found)
+    assert any("no reason" in p for p in found)

@@ -57,8 +57,10 @@ also_copy = [
     ".env",
 ]
 # The whole suite: mutmut records which tests reach each function and runs only
-# those against its mutants. A hand-picked list produces false survivors.
-pytest_add_cli_args_test_selection = ["tests"]
+# those against its mutants. A hand-picked list produces false survivors. The
+# one exclusion is `tests/tools`, the dev tools' own tests: nothing they test
+# is mutated, and they would only slow every first pass.
+pytest_add_cli_args_test_selection = ["tests", "--ignore=tests/tools"]
 # Never the default `fork`: it runs the suite in mutmut's own process and forks
 # every mutant from it, so each one inherits the conftest that process
 # imported. The fork server keeps test code out of the parent, each mutant

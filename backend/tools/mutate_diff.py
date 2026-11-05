@@ -123,8 +123,10 @@ def verdicts(root: Path, work: Plan) -> tuple[dict[str, str], list[str]]:
 
 
 def report(
-    root: Path, base: str, paths: list[str], entries: list[str], work: Plan, found: dict[str, str]
+    paths: list[str], content: str, work: Plan, found: dict[str, str], diff: gate.Expected
 ) -> block.Report:
+    """The block for a run: ``found`` the verdicts, ``diff`` what the gate
+    computes from the diff (its ``deleted`` and ``module-level`` lines)."""
     counts: dict[str, int] = {}
     for status in found.values():
         counts[status] = counts.get(status, 0) + 1
@@ -134,13 +136,13 @@ def report(
         if status not in block.SETTLED
     ]
     return block.Report(
-        content=gate.content_hash(root, paths),
+        content=content,
         files=paths,
         mutated={
             g.removesuffix("__mutmut_*"): (p.mutants, p.source) for g, p in work.functions.items()
         },
         counts=counts,
-        lines=survivors + work.unmutated + gate.expected(root, base, paths, entries).lines,
+        lines=survivors + work.unmutated + diff.lines,
     )
 
 
@@ -150,10 +152,10 @@ def _gh(*args: str, stdin: str | None = None) -> str:
     ).stdout
 
 
-def _dirty(root: Path, entries: list[str]) -> list[str]:
-    """Uncommitted or untracked paths under ``backend/`` or guarded anywhere."""
-    status = gate.git(root, "status", "--porcelain", "--untracked-files=all").splitlines()
-    paths = (line[3:].split(" -> ")[-1] for line in status)
+def dirty(status: str, entries: list[str]) -> list[str]:
+    """Of ``git status --porcelain``, the paths under ``backend/`` or guarded
+    anywhere: what the block's hash would not see."""
+    paths = (line[3:].split(" -> ")[-1] for line in status.splitlines())
     return sorted(p for p in paths if p.startswith("backend/") or gate.guarded(p, entries))
 
 
@@ -163,8 +165,9 @@ def _write_report(root: Path, result: block.Report) -> None:
 
 
 def _refusal(root: Path, entries: list[str], pr: str | None) -> str | None:
-    if dirty := _dirty(root, entries):
-        return f"commit or remove first: {', '.join(dirty)}"
+    status = gate.git(root, "status", "--porcelain", "--untracked-files=all")
+    if found := dirty(status, entries):
+        return f"commit or remove first: {', '.join(found)}"
     here = gate.git(root, "rev-parse", "HEAD").strip()
     if pr:
         there = _gh("pr", "view", pr, "--json", "headRefOid", "-q", ".headRefOid").strip()
@@ -176,6 +179,8 @@ def _refusal(root: Path, entries: list[str], pr: str | None) -> str | None:
 
 
 def main(argv: list[str], root: Path = gate.REPO_ROOT) -> int:
+    if mutate.native_windows():
+        return 2
     pr = gate.option(argv, "--pr")
     # The gate takes its merge base and its list from `main` as GitHub has it.
     if subprocess.run(["git", "fetch", "--quiet", "origin", "main"], cwd=root).returncode:
@@ -203,7 +208,9 @@ def main(argv: list[str], root: Path = gate.REPO_ROOT) -> int:
             file=sys.stderr,
         )
         return 2
-    result = report(root, base, paths, entries, work, found)
+    blob_of = gate.blobs(root, paths)
+    diff = gate.expected(root, base, paths, entries, blob_of=blob_of)
+    result = report(paths, gate.hash_of(paths, blob_of), work, found, diff)
     _write_report(root, result)  # first: a `gh` failure must not lose a long run
     if pr:
         body = block.splice(_gh("pr", "view", pr, "--json", "body", "-q", ".body"), result)

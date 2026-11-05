@@ -102,11 +102,7 @@ def _split_url(url: str) -> tuple[str, str]:
 
 async def _admin_connect() -> asyncpg.Connection:
     """A raw connection to the maintenance ``postgres`` database."""
-    head, _ = _split_url(_base_url())
-    # Strip the SQLAlchemy driver marker for a raw asyncpg connection.
-    return await asyncpg.connect(
-        head.replace("postgresql+asyncpg://", "postgresql://") + "/postgres"
-    )
+    return await asyncpg.connect(mutation_db.admin_dsn(_base_url()))
 
 
 async def _ensure_database(db_name: str) -> None:
@@ -123,7 +119,7 @@ async def _ensure_database(db_name: str) -> None:
 async def _drop_database(name: str) -> None:
     conn = await _admin_connect()
     try:
-        await conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        await mutation_db.drop(conn, name)
     finally:
         await conn.close()
 

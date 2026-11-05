@@ -85,8 +85,10 @@ for the tests: each test process gets a database of its own
 content only: commit the killing test before the run.
 
 **On Windows it runs under WSL, and a refusal never means "skip it".** mutmut
-cannot run on native Windows; the driver says so and how to move (a checkout
-inside the WSL filesystem, not `/mnt/c`).
+cannot run on native Windows, so `back-mutate` and `back-mutate-diff` refuse
+there before doing anything and say how to move (a checkout inside the WSL
+filesystem, not `/mnt/c`). `back-mutation-gate` runs no mutant and does not
+refuse.
 
 **Triage: every survivor ends in a decision.**
 

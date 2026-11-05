@@ -29,7 +29,11 @@ def test_every_sensitive_path_exists_and_mutmut_mutates_it():
 
 def test_the_gates_own_files_are_guarded_never_mutated():
     entries = _entries()
-    for path in ("backend/tools/mutation_gate.py", ".github/workflows/mutation-gate.yml"):
+    for path in (
+        "backend/tools/mutation_gate.py",
+        "backend/mutation-sensitive.txt",
+        ".github/workflows/mutation-gate.yml",
+    ):
         assert gate.guarded(path, entries) and not gate.is_sensitive(path, entries)
 
 

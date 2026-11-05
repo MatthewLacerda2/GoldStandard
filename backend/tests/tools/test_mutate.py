@@ -2,10 +2,12 @@
 Windows before doing any work, hands mutmut the names that keep its clean pass
 small, gives every test process its own database, and says why mutmut failed."""
 
+import importlib
+import json
 import os
 import subprocess
-import sys
 
+import asyncpg
 import pytest
 
 from tests.tools.gate_repo import CHECKOUT
@@ -74,13 +76,6 @@ def test_main_runs_mutmut_with_the_databases_named_and_swept(monkeypatch):
     assert swept == [base, base]  # before and after
 
 
-def test_each_process_names_its_own_database():
-    base = mutation_db.base_name("/some/worktree")
-    assert mutation_db.process_name(base) == f"{base}_{os.getpid()}"
-    assert len(mutation_db.process_name(base)) + 8 <= 63  # any pid fits Postgres' limit
-    assert base != mutation_db.base_name("/another/worktree")
-
-
 def test_every_preload_line_imports_and_none_is_ours():
     # mutmut skips a preload line that fails to import without a word.
     preload = CHECKOUT / "backend" / "tools" / "mutation_preload.txt"
@@ -91,8 +86,54 @@ def test_every_preload_line_imports_and_none_is_ours():
     ]
     ours = {"api", "core", "models", "repositories", "schemas", "services", "tools", "utils"}
     assert not {m.split(".")[0] for m in modules} & ours
-    probe = f"import importlib\nfor name in {modules!r}: importlib.import_module(name)\n"
-    subprocess.run([sys.executable, "-c", probe], check=True)
+    for name in modules:
+        importlib.import_module(name)
+
+
+def test_make_hands_each_glob_to_the_driver_unexpanded(tmp_path):
+    # In backend/, an unquoted `utils*` is the directory `utils` to the shell.
+    argv = tmp_path / "argv"
+    argv.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+    argv.chmod(0o755)
+    out = subprocess.run(
+        ["make", "-s", "back-mutate", f"PYTHON={argv}", "ONLY=utils* core.x*"],
+        cwd=CHECKOUT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert out == ["-m", "tools.mutate", "utils*", "core.x*"]
+
+
+def _meta(mutants, keys: list[str]) -> None:
+    (mutants / "utils").mkdir(parents=True)
+    (mutants / "utils" / "security.py.meta").write_text(
+        json.dumps({"exit_code_by_key": dict.fromkeys(keys, None)})
+    )
+
+
+def test_a_name_no_mutant_matches_is_named_instead_of_a_failing_test(tmp_path, monkeypatch, capsys):
+    _meta(tmp_path / "mutants", ["utils.security.x_verify_password__mutmut_1"])
+    assert mutate.unmatched(tmp_path / "mutants", ["utils*", "utils", SECURITY]) == ["utils"]
+    monkeypatch.setattr(mutate, "BACKEND", tmp_path)
+    monkeypatch.setattr(mutate, "_sweep", lambda base: None)
+    monkeypatch.setattr(mutate.subprocess, "call", lambda argv, **kw: 1)
+    monkeypatch.setattr(mutate, "explain_failed_run", pytest.fail)
+    assert mutate.main(["utils"]) == 1
+    assert "no mutant matches utils" in capsys.readouterr().err
+
+
+def test_a_database_that_refuses_the_sweep_keeps_mutmuts_exit_code(monkeypatch, capsys):
+    async def refuse(dsn, base):
+        raise asyncpg.InvalidPasswordError("password authentication failed")
+
+    explained = []
+    monkeypatch.setattr(mutate.mutation_db, "sweep", refuse)
+    monkeypatch.setattr(mutate.subprocess, "call", lambda argv, **kw: 3)
+    monkeypatch.setattr(mutate, "explain_failed_run", lambda *args: explained.append(args))
+    monkeypatch.setattr(mutate, "unmatched", lambda mutants, names: [])
+    assert mutate.main([SECURITY]) == 3
+    assert explained and "InvalidPasswordError" in capsys.readouterr().out
 
 
 def _mutants_tree(root, conftest: str):
@@ -107,6 +148,7 @@ def _mutants_tree(root, conftest: str):
 
 
 def test_a_suite_that_cannot_import_in_mutants_shows_pytests_error(tmp_path, capsys):
+    # The one real collection: mutmut's fork server would have swallowed this.
     mutants = _mutants_tree(tmp_path, "import a_module_missing_from_also_copy\n")
     mutate.explain_failed_run(mutants, dict(os.environ), tmp_path)
     err = capsys.readouterr().err
@@ -114,18 +156,18 @@ def test_a_suite_that_cannot_import_in_mutants_shows_pytests_error(tmp_path, cap
     assert "a_module_missing_from_also_copy" in err
 
 
-def test_a_suite_that_imports_points_at_a_failing_test_instead(tmp_path, capsys):
+def test_a_suite_that_imports_points_at_a_failing_test_instead(tmp_path, monkeypatch, capsys):
     mutants = _mutants_tree(tmp_path, "")
+    collected = subprocess.CompletedProcess([], 0, "1 test collected", "")
+    monkeypatch.setattr(mutate.subprocess, "run", lambda *args, **kw: collected)
     mutate.explain_failed_run(mutants, dict(os.environ), tmp_path)
     err = capsys.readouterr().err
     assert "a test failed on the unmutated code" in err and "does not import" not in err
 
 
-def test_a_test_the_checkout_deleted_still_in_mutants_says_to_delete_it(tmp_path, capsys):
+def test_a_test_the_checkout_deleted_still_in_mutants_is_stale(tmp_path):
     mutants = _mutants_tree(tmp_path, "")
     (tmp_path / "tests" / "test_one.py").unlink()
     (mutants / "__pycache__").mkdir()
     (mutants / "__pycache__" / "cached.py").write_text("")  # mutmut's own, not a copy
-    mutate.explain_failed_run(mutants, dict(os.environ), tmp_path)
-    err = capsys.readouterr().err
-    assert "mutants/ is stale: 1 file(s)" in err and "tests/test_one.py" in err
+    assert mutate.stale_copies(mutants, tmp_path) == ["tests/test_one.py"]

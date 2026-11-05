@@ -1,6 +1,6 @@
 """The throwaway repository the mutation tools' tests drive (the ``repo``
-fixture in this directory's conftest), and ``CHECKOUT``, this repository's
-root, for the tests that read its real files.
+fixture in this directory's conftest), its sources, and ``CHECKOUT``, this
+repository's root, for the tests that read its real files.
 
 A plain module, so tests may import it.
 """
@@ -8,18 +8,9 @@ A plain module, so tests may import it.
 import subprocess
 from pathlib import Path
 
-# The checkout's root, asked of git: under `make back-mutate` the tests run
-# from a copy inside `backend/mutants/`, where a path relative to this file
-# would point into the copy.
-CHECKOUT = Path(
-    subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        cwd=Path(__file__).parent,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-)
+# The checkout's root. These tests never run inside mutmut's copy
+# (`pyproject.toml` leaves `tests/tools` out of its selection).
+CHECKOUT = Path(__file__).resolve().parents[3]
 
 GUARD = "backend/utils/guard.py"
 GUARD_SOURCE = """\

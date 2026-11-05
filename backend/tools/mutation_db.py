@@ -23,6 +23,18 @@ import asyncpg
 ENV = "GS_MUTATION_DB"
 
 
+def admin_dsn(database_url: str) -> str:
+    """The maintenance ``postgres`` database of the server ``database_url``
+    (a normalized SQLAlchemy asyncpg URL) names, as a raw asyncpg DSN."""
+    head = database_url.rpartition("/")[0]
+    return f"{head.replace('postgresql+asyncpg://', 'postgresql://')}/postgres"
+
+
+async def drop(conn: asyncpg.Connection, name: str) -> None:
+    """Drop ``name``, cutting any connection still open to it."""
+    await conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+
+
 def base_name(repo_root: str) -> str:
     """``test_gs_mut_<12 hex>``: this worktree's, computed by the driver.
 
@@ -47,7 +59,7 @@ async def sweep(admin_dsn: str, base: str) -> list[str]:
         )
         names = sorted(row["datname"] for row in rows)
         for name in names:
-            await conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+            await drop(conn, name)
     finally:
         await conn.close()
     return names
