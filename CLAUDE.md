@@ -51,15 +51,21 @@ these can be overridden by the user** (see the closing note).
   with no downside is **implemented, not proposed**: implementing now and
   validating later beats waiting. The exception is **changing a decision** —
   what this template teaches: a layer boundary, an API contract, the design
-  system's tokens, a lint rule, a rule or convention in this file. There you
-  propose and the user decides, unless one option is a plain win-win, which you
-  take. **Making a description true or complete is never the exception**: any
-  README, comment, docstring, skill or `CLAUDE.md` that is stale, or missing
-  something that matters for developing or using the template, is fixed on your
-  own say-so. That licence covers describing what is already decided, never
-  deciding something new: a convention that isn't in the file yet is a change to
-  it. Initiative still runs through the normal flow (a worktree branch, the
+  system's tokens, what a lint rule allows, a rule or convention in this file.
+  There you propose and the user decides, unless one option is a plain win-win,
+  which you take. **Making a description true or complete is never the
+  exception**: any README, comment, docstring, skill or `CLAUDE.md` that is
+  stale, or missing something that matters for developing or using the
+  template, is fixed on your own say-so, and so is a missing check for a
+  convention already written down (*A convention a machine can check*, in the
+  working agreement). That licence covers what is already decided, never
+  deciding something new: a convention that isn't in the file yet is a change
+  to it. Initiative still runs through the normal flow (a worktree branch, the
   gates, a PR), and an issue carrying `planning` or `human` is never started.
+- **The template is generic.** Nothing in its code, docs or skills names the
+  projects it came from or the incidents that led to a rule; the issue and the
+  PR keep the story. A rule that seems to need its story to justify it is not
+  showing its value yet: make the rule show its value, not the story.
 - **Overriding these rules.** In the end, all rules may be overridden by the
   user — so long as the user says why, and the explanation still holds in the
   current context.
@@ -76,19 +82,24 @@ override them with a reason that holds.
 An issue is the *purpose and direction* of a piece of work, written before it —
 an intention, not a spec. A future Claude reads it cold, often unattended, with
 nobody to ask, so it says what problem it solves and what done looks like. Its
-plan may not survive contact with the code: let
-what you discover refine it, and never treat an incomplete or slightly-wrong
-issue as a reason to stop. When the work diverges, the **pull request is the
-source of truth** for what was done; if the gap matters later, reflect it back
-into the issue or file a new one.
+plan may not survive contact with the code: let what you discover refine it,
+and never treat an incomplete or slightly-wrong issue as a reason to stop. When
+the work diverges, the **pull request is the source of truth** for what was
+done; if the gap matters later, reflect it back into the issue or file a new
+one.
 
-**File what you notice — it is a duty, not an option.** Whatever you find — a
-bug, a gap, a stale doc, a way to make development faster or need less work —
-is folded into the task at hand or filed as an issue right away, batch or not,
-never dropped and never saved for the end. Fold in what is small or in the way;
-file the rest, because a branch that grows to cover everything it noticed is
-one nobody can follow. If the user postpones something that must still happen,
-file it then and there.
+**File an issue only on a signal**: it has bitten or will bite, or leaving it
+costs more than fixing it now. A finding that is small or in the way is folded
+into the task at hand; one with no signal is dropped; any other is filed right
+away, not saved for the end, because a branch that grows to cover everything
+it noticed is one nobody can follow. If the user postpones something that must
+still happen, file it then and there.
+
+**A change that needs the user's approval is never folded in**: one that
+changes a decision (*Take the initiative*), changes how the user sees or
+understands their existing data, changes stored data, or needs a migration.
+**A bug or a documentation fix never needs it**: it is filed without
+`planning` and merged without waiting for one.
 
 **Labels.** `make labels` is the set, with each one's meaning; run it once in a
 repo made from this template — it also deletes GitHub's stock labels, which
@@ -105,13 +116,14 @@ overlap these (`enhancement` is `feat` under another name).
   refactor, or anything large — and flags the PR for the independent review.
 - **Stage** (at most one): `planning` and `human`. Both mean **do not start**,
   absolutely, and they are the only thing that does: an issue carrying neither
-  is startable the moment it exists, including one filed a minute ago. An issue
-  you file gets `planning` when it would change a decision (*Take the
-  initiative*) or the product's design, conflict with a rule here, or when the
-  idea itself isn't settled yet — a postponed, half-formed ask is filed so it
-  isn't lost, never so it gets built. The user settles it first. A `fix`
-  usually should not; the deciding happened when the code broke. `human` is for
-  what an agent cannot finish alone.
+  is startable the moment it exists, including one filed a minute ago.
+  **Claude settles the design instead of asking for a stage label**: it states
+  the decisions with a recommendation each, the user answers, and the answers
+  go into the issue, filed startable. The exception Claude applies itself: a
+  finding made unattended that needs the user's approval is filed with
+  `planning` and raised at the next check-in. A half-formed ask the user
+  postpones gets it too: it is filed so it isn't lost, never so it gets built.
+  `human` is for what an agent cannot finish alone.
 - **`agent`** — on every issue Claude files without being asked. It only records
   who decided to file it; the issue is treated like any other.
 
@@ -128,10 +140,8 @@ gets **worked**.
 **Blocked by / Blocks** and **sub-issues**; there are no rigid batches. Split by
 responsibility, never by parallelism — sub-issues that all land in the same file
 are one branch. Never split an API change into a backend half and a frontend
-half: `make front-contract` holds the answer each request reads to its
-endpoint by field name and kind (list, object, scalar), but a scalar's type,
-nullability and request bodies are still mirrored by hand. A `planning` issue
-that would change how another is built blocks it.
+half: `make front-contract` holds only part of the contract between them. A
+`planning` issue that would change how another is built blocks it.
 
 **Assignment** — no assignee means free for grabs; an assignee means it's
 taken. When we start *actually working* an issue (not just planning), assign
@@ -148,8 +158,7 @@ finds it.
 
 ### Pull Requests
 
-Run the gates locally first (see the no-drift meta-pattern) — green before you
-push. A PR need not address an issue; when it closes one, its description says
+A PR need not address an issue; when it closes one, its description says
 `Closes #N` — check the number, because a wrong one closes the wrong issue
 silently. **A fix carries a test that fails without it.**
 
@@ -175,9 +184,9 @@ to ask for a review.
     PR is where that theme lands. Keep the PR open while the user is still adding
     to it; when they seem done, offer the merge, and merge on their word.
   - Either way, once merging is approved carry it through without pausing: label
-    the PR `queue`, and the queue merges it as soon as CI is green. If it hands
-    the PR back, fix forward or report. A PR the user said to leave alone waits
-    for them.
+    the PR `queue`, and the merge queue (`make queue`, `ci-merge`) merges it as
+    soon as CI is green. If it hands the PR back, fix forward or report. A PR
+    the user said to leave alone waits for them.
 - **"Do" / "resolve" / "work" an issue** means the full chain by default, no
   asking between steps: assign the user, create the worktree, implement, run the
   gates, push, and open a ready-for-review PR — assigned to them, closing the
@@ -187,8 +196,8 @@ to ask for a review.
   the bottleneck, and tag the user.
 - **A PR the gates cannot fully judge gets an independent review before it
   merges** — database access, the API contract, auth, a refactor, CI and the
-  gates. The `independent-review` skill has the triggers and how to keep the
-  reviewer unbiased; run it on request for any PR, batch or not.
+  gates. The `independent-review` skill keeps the reviewer unbiased; run it on
+  request for any PR, batch or not.
 - **Decisions are written down, never waited on.** A judgement call the issue
   left open is yours to take when something points the way — a rule in this
   file, a convention the codebase already follows (the worked `items` example
@@ -215,10 +224,18 @@ instruction wins.
 - **Don't multiply Markdown.** Do not create new Markdown files without asking
   the user first. You may edit existing ones, as long as you tell the user what
   you changed.
-- **Prefer expression over description.** An expressive, declarative structure
-  (code, config, a linter rule that enforces a convention) is preferred over
-  prose documenting that the convention exists. Make the codebase state the rule;
-  don't just write about it.
+- **A convention a machine can check is a gate, not a sentence.** Finding what
+  can be enforced is Claude's job: a new convention ships with its check, and a
+  written one a check could hold gets it on Claude's own say-so. A check has
+  tests (a case it must flag, one it must pass), runs in `make check` and CI,
+  takes exceptions inline with a written reason, and says in its failure what
+  is wrong and what to do. **What a check enforces is not repeated in prose**:
+  the check speaks when something is wrong, which is when an agent needs to
+  hear it.
+- **Memory is the developer's; what the project follows lives in the project.**
+  Claude's local memory holds only the developer's preferences and their
+  machine's setup; anything the project should follow goes into a `CLAUDE.md`,
+  a skill or a doc.
 
 ## The no-drift meta-pattern
 
@@ -242,9 +259,7 @@ A red gate is never handed off as "probably pre-existing": re-run that target on
 **Gates block on correctness; signals inform on quality.** Mutation testing
 (backend/CLAUDE.md) is a signal: Claude runs it locally, only on the code that
 needs it, and it is never a score. The one exception is sensitive code
-(`backend/mutation-sensitive.txt`): the `mutation gate` check holds a PR that
-changes it until a run on the functions it touched is in its body, every
-survivor answered. CI only reads that block; the mutants never run there.
+(`backend/mutation-sensitive.txt`), which the `mutation gate` check holds.
 
 ## Server-start guardrails
 
@@ -267,9 +282,6 @@ needs a running app, ask them to start it.
 - Name each session after what it's doing.
 - Cloud sessions are welcome — they keep worktrees off the local disk — but not
   required.
-- Merging is the merge queue's (`make queue`): label a reviewed, ready pull
-  request `queue` and it waits for CI, rebases, merges and cleans up, handing
-  back only what needs somebody (`ci-merge`, *Feeding the merge queue*).
 
 ## Upgrade paths (intentionally deferred in the skeleton)
 
@@ -277,5 +289,4 @@ needs a running app, ask them to start it.
   when schema changes need to be destructive/ordered.
 - **Typed SDK:** generate `lib/schemas/` from the backend OpenAPI spec. Until
   then they are written by hand, and `make front-contract` holds them to
-  `frontend/openapi.json` (written by `make openapi`; `make back-build` fails
-  when it is stale).
+  `frontend/openapi.json` (`make openapi` writes it).
