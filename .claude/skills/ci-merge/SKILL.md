@@ -34,7 +34,8 @@ flight at once.
 while working, `make check` before marking it ready. CI runs these exact
 targets, so a local green is a real prediction — as long as your environment
 matches CI's (*CI as it runs today*, below). A `.venv` or a `node_modules` that
-has drifted from its manifest is green on nothing.
+has drifted from its manifest is green on nothing; every backend gate refuses a
+`.venv` off its pins (`back-pins`), and `node_modules` is still yours to check.
 
 **Not every red is the branch's.**
 

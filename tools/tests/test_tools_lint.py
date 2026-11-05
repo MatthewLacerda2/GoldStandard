@@ -5,7 +5,9 @@ tools-lint` runs the backend venv's ruff, which that file installed, and CI's
 `tools` job installs the pin it reads from the same file, and `tools-lint`
 fails on a local ruff off that pin. The rules are `backend/pyproject.toml`'s,
 passed with `--config`. A second pin or a second
-config is how the two would drift apart, so these tests fail on one.
+config is how the two would drift apart, so these tests fail on one. The same
+holds for the house length limits: `tools-lint` runs the backend's
+`house_lint.py` over `tools/` with its length rules, not a copy of them.
 """
 
 from __future__ import annotations
@@ -49,7 +51,12 @@ class OneRuff(unittest.TestCase):
     def test_a_local_ruff_off_the_pin_fails(self) -> None:
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         self.assertRegex(makefile, rf"(?m)^RUFF_PIN := .*{re.escape(REQUIREMENTS)}")
-        self.assertIn('"ruff $(RUFF_PIN)"', target(makefile, "tools-lint"))
+        self.assertRegex(makefile, r"(?m)^tools-lint: tools-ruff$")
+        self.assertIn('"ruff $(RUFF_PIN)"', target(makefile, "tools-ruff"))
+
+    def test_the_backends_length_limits_reach_tools(self) -> None:
+        recipe = target((ROOT / "Makefile").read_text(encoding="utf-8"), "tools-lint")
+        self.assertIn("\t$(TOOLS_PYTHON) backend/tools/house_lint.py --lengths tools\n", recipe)
 
 
 if __name__ == "__main__":

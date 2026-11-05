@@ -12,9 +12,13 @@ TOOLS_PYTHON ?= python3.14
 # backend/requirements-dev.txt and the rules in backend/pyproject.toml, so the
 # two cannot disagree. Locally it is the backend venv's (`make back-install`),
 # and tools-lint fails if that venv has drifted from the pin; CI installs the
-# same pin and passes RUFF=ruff.
+# same pin and passes RUFF=ruff. The backend's file and test length limits
+# reach tools/ the same way: house_lint.py's length rules, run on tools/.
 RUFF ?= backend/.venv/bin/ruff
 RUFF_PIN := $(shell sed -n 's/^ruff==//p' backend/requirements-dev.txt)
+# What tools-lint reads outside tools/: the pre-commit hook counts these as
+# part of tools/, so a change to them lints tools/ and an unstaged one is refused.
+TOOLS_LINT_READS := backend/requirements-dev.txt backend/pyproject.toml backend/tools/house_lint.py
 
 .DEFAULT_GOAL := check
 
@@ -34,16 +38,20 @@ frontend: front-lint front-build front-test front-contract
 # reads the docs belongs here, as a target `tools` lists beside `docs-lint`.
 # docs-lint goes first: it needs nothing installed, so a docs-only change gets
 # its verdict even where tools-lint has no ruff to run.
-.PHONY: tools tools-lint docs-lint
+.PHONY: tools tools-lint tools-ruff tools-fix docs-lint
 tools: docs-lint tools-lint
 	$(TOOLS_PYTHON) -m unittest discover --start-directory tools/tests --top-level-directory .
 	$(TOOLS_PYTHON) -m tools.markers
 
-tools-lint:
-	@found="$$($(RUFF) --version 2>/dev/null)"; [ "$$found" = "ruff $(RUFF_PIN)" ] || { \
-		echo "tools-lint: $(RUFF) is '$${found:-missing}', the pin is ruff $(RUFF_PIN): run make back-install"; exit 1; }
+tools-lint: tools-ruff
 	$(RUFF) check --config backend/pyproject.toml tools
 	$(RUFF) format --check --config backend/pyproject.toml tools
+	$(TOOLS_PYTHON) backend/tools/house_lint.py --lengths tools
+
+# The ruff tools-lint runs is the pinned one.
+tools-ruff:
+	@found="$$($(RUFF) --version 2>/dev/null)"; [ "$$found" = "ruff $(RUFF_PIN)" ] || { \
+		echo "tools-ruff: $(RUFF) is '$${found:-missing}', the pin is ruff $(RUFF_PIN): run make back-install"; exit 1; }
 
 # The size and shape of what an agent loads (CLAUDE.md files and skills), and
 # that the paths and make targets the docs and comments name exist.
@@ -53,7 +61,15 @@ docs-lint:
 # ---------------------------------------------------------------------------
 # Backend gates  (run from backend/, driven by $(PYTHON))
 # ---------------------------------------------------------------------------
-.PHONY: back-lint back-build back-test back-install openapi back-mutate back-mutate-diff back-mutation-gate
+.PHONY: back-pins back-lint back-build back-test back-install openapi back-mutate back-mutate-diff back-mutation-gate
+# Every backend gate starts by checking that PYTHON's packages are the ones
+# requirements*.txt pins: a venv made before a pin moved judges nothing. Once
+# per make run, in well under a second.
+back-pins:
+	cd backend && $(PYTHON) tools/pins.py requirements.txt requirements-dev.txt
+
+back-lint back-build back-test: back-pins
+
 back-lint:
 	cd backend && $(PYTHON) -m ruff check .
 	cd backend && $(PYTHON) -m ruff format --check .
@@ -128,7 +144,8 @@ front-install:
 # clone at once. It replaces any hooks path set before, which also stops hooks
 # kept in .git/hooks from running. The path is relative to each worktree, so a
 # worktree on a branch that predates .githooks/ runs no hook at all.
-.PHONY: setup pre-commit-scope pre-commit pre-commit-back pre-commit-front back-fix front-fix
+.PHONY: setup pre-commit-scope pre-commit pre-commit-back pre-commit-front pre-commit-tools
+.PHONY: back-fix front-fix
 setup:
 	git config core.hooksPath .githooks
 	@echo "setup: each commit and merge now runs 'make pre-commit' (.githooks/), in every worktree of this clone."
@@ -136,8 +153,11 @@ setup:
 	@echo "setup: to commit work in progress anyway, use 'git commit --no-verify'."
 
 # The layers the index changes, as one loop: the hook reads it through
-# `pre-commit-scope`, and a `make pre-commit` by hand reads it here.
-staged_layers = for l in backend frontend; do git diff --cached --quiet -- $$l || echo $$l; done
+# `pre-commit-scope`, and a `make pre-commit` by hand reads it here. tools/ is
+# not a layer, but it has a lint gate of its own and is held the same way, over
+# every path that lint reads. `layer_paths` sets p to the paths of layer l.
+layer_paths = case $$l in tools) p="tools $(TOOLS_LINT_READS)";; *) p=$$l;; esac
+staged_layers = for l in backend frontend tools; do $(layer_paths); git diff --cached --quiet -- $$p || echo $$l; done
 STAGED_LAYERS ?= $(shell $(staged_layers))
 
 # The hook runs this while git's environment still points at the index being
@@ -147,11 +167,11 @@ STAGED_LAYERS ?= $(shell $(staged_layers))
 # an unstaged edit, an untracked file, or, under `git commit <path>`, a staged
 # file the pathspec leaves out.
 pre-commit-scope:
-	@layers="$(STAGED_LAYERS)"; for l in $$layers; do \
-		if ! git diff --quiet -- $$l || [ -n "$$(git ls-files --others --exclude-standard -- $$l)" ]; then \
-			echo "pre-commit: $$l/ has changes that are not part of this commit, and lint reads the files on disk." >&2; \
-			git diff --name-only -- $$l | sed 's/^/pre-commit:   /' >&2; \
-			git ls-files --others --exclude-standard -- $$l | sed 's/^/pre-commit:   /' >&2; \
+	@layers="$(STAGED_LAYERS)"; for l in $$layers; do $(layer_paths); \
+		if ! git diff --quiet -- $$p || [ -n "$$(git ls-files --others --exclude-standard -- $$p)" ]; then \
+			echo "pre-commit: $$l lint would read changes that are not part of this commit (it reads the files on disk):" >&2; \
+			git diff --name-only -- $$p | sed 's/^/pre-commit:   /' >&2; \
+			git ls-files --others --exclude-standard -- $$p | sed 's/^/pre-commit:   /' >&2; \
 			echo "pre-commit: stage what belongs and commit without a path, or unstage the rest and set it" >&2; \
 			echo "pre-commit: aside: git stash push --keep-index --include-untracked" >&2; \
 			exit 1; \
@@ -164,14 +184,19 @@ pre-commit-scope:
 # A fast check that reads the whole repository joins the prerequisites here.
 # docs-lint is one: it reads the docs on disk, which pre-commit-scope does not
 # compare with the index.
-pre-commit: docs-lint pre-commit-back pre-commit-front
+pre-commit: docs-lint pre-commit-back pre-commit-front pre-commit-tools
 	@echo "pre-commit: ok"
 
+# A touched layer's tools are checked against their pins first (back-pins,
+# tools-ruff), which also catches tools that are not installed at all.
 pre-commit-back:
 	@if [ -z "$(filter backend,$(STAGED_LAYERS))" ]; then \
 		echo "pre-commit: backend skipped, nothing staged under backend/."; \
-	elif ! (cd backend && $(PYTHON) -m ruff --version) >/dev/null 2>&1; then \
-		echo "pre-commit: no ruff for PYTHON=$(PYTHON) (run from backend/): run 'make back-install'."; \
+	elif ! (cd backend && command -v $(PYTHON)) >/dev/null 2>&1; then \
+		echo "pre-commit: no interpreter at PYTHON=$(PYTHON) (run from backend/): run 'make back-install'."; \
+		exit 1; \
+	elif ! pins="$$($(MAKE) -s --no-print-directory back-pins 2>&1)"; then \
+		echo "$$pins" | sed 's/^/pre-commit: /'; \
 		exit 1; \
 	elif ! $(MAKE) --no-print-directory back-lint; then \
 		echo "pre-commit: backend lint failed. Fix: make back-fix PYTHON=$(PYTHON) (file and test length by hand)."; \
@@ -189,14 +214,30 @@ pre-commit-front:
 		exit 1; \
 	fi
 
+pre-commit-tools:
+	@if [ -z "$(filter tools,$(STAGED_LAYERS))" ]; then \
+		echo "pre-commit: tools skipped, nothing staged under tools/."; \
+	elif ! ruff="$$($(MAKE) -s --no-print-directory tools-ruff 2>&1)"; then \
+		echo "$$ruff" | sed 's/^/pre-commit: /'; \
+		exit 1; \
+	elif ! $(MAKE) --no-print-directory tools-lint; then \
+		echo "pre-commit: tools lint failed. Fix: make tools-fix (file and test length by hand)."; \
+		exit 1; \
+	fi
+
 # What a failed lint points at. Every fixer runs even when one leaves errors
 # behind, the formatter last, and the target fails if a fixer left errors.
 # House-lint findings and type errors are not theirs: those are fixed by hand.
-back-fix:
+# A fixer off its pin would rewrite code into a shape the pinned lint rejects.
+back-fix: back-pins
 	cd backend && { $(PYTHON) -m ruff check --fix .; s=$$?; $(PYTHON) -m ruff format . && exit $$s; }
 
 front-fix:
 	cd frontend && { $(BUN) run eslint --fix .; s=$$?; $(BUN) run prettier --write . && exit $$s; }
+
+tools-fix: tools-ruff
+	{ $(RUFF) check --fix --config backend/pyproject.toml tools; s=$$?; \
+		$(RUFF) format --config backend/pyproject.toml tools && exit $$s; }
 
 # ---------------------------------------------------------------------------
 # Regression check  (CI's `regression` job, from this checkout; not a gate)

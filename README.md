@@ -57,9 +57,11 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
 - **`make check` is the law.** `make backend` and `make frontend` each run their
   layer's lint + build + test, and `make tools` lints and tests the repository's
   own tooling and runs the docs lint and the marker check; CI calls the same
-  targets. Gates must be green before pushing. Once `make setup` has run, each
-  commit runs the fast half, `make pre-commit`: the lint gate of every layer it
-  touches, no tests and no build.
+  targets. Gates must be green before pushing. Every backend gate first checks
+  the venv against the `==` pins in `backend/requirements*.txt` and stops with
+  `run make back-install` when it has drifted (`back-pins`). Once `make setup`
+  has run, each commit runs the fast half, `make pre-commit`: the lint gate of
+  every layer it touches, and of `tools/`, no tests and no build.
 - **One check says CI passed.** `.github/workflows/ci.yml` runs on every ready
   pull request and every push to `main`, skips the layers a change did not
   touch (`tools/ci_paths.py` holds the list), and ends in a `CI ok` job that
@@ -82,11 +84,12 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
 - **A fix proves itself.** A pull request closing an issue labelled `fix` must
   change a test that fails on its base: CI's `regression` job runs the changed
   tests there (`make regression PR=N` does it locally, `tools/regression.py`).
-- **Length discipline (backend):** files ≤ 350 lines of code, endpoint
-  handlers ≤ 50, tests ≤ 50 (blank lines, comments and docstrings don't
-  count) — enforced by a custom AST linter (`backend/tools/house_lint.py`), not by
-  honor system. Ruff enforces that type annotations exist; the same AST linter
-  enforces that the ones on a `@router` handler are Pydantic I/O models —
+- **Length discipline (backend and `tools/`):** files ≤ 350 lines of code,
+  endpoint handlers ≤ 50, tests ≤ 50 (blank lines, comments and docstrings
+  don't count) — enforced by a custom AST linter (`backend/tools/house_lint.py`),
+  not by honor system; `make tools` runs its length rules on `tools/`. Ruff
+  enforces that type annotations exist; the same AST linter enforces
+  that the ones on a `@router` handler are Pydantic I/O models —
   every request and response body is a schema type, a `list` of one, or `None`,
   with path/query scalars and injected dependencies exempt. That is a
   structural check only: what the fields inside a model must contain is yours
@@ -153,8 +156,9 @@ the repository config, so it covers every worktree of the clone at once,
 replaces any hooks path set before, and stops hooks kept in `.git/hooks` from
 running. The path is relative, so a worktree on a branch older than `.githooks/`
 runs no hook. A commit that touches a layer needs that layer installed in its
-worktree (`make back-install` / `make front-install`), and the layer's working
-tree must match what is staged, since lint reads the files on disk.
+worktree (`make back-install` / `make front-install`; `tools/` uses the
+backend's ruff), and the layer's working tree must match what is staged,
+since lint reads the files on disk.
 
 ## Protecting `main` (one-time setup)
 
