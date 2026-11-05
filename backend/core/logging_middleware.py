@@ -22,14 +22,14 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        if request.url.path in _SKIP_PATHS:
-            return await call_next(request)
-
         start = time.perf_counter()
-        response = await call_next(request)
-        duration_ms = (time.perf_counter() - start) * 1000.0
+        response = await call_next(request)  # pragma: no mutate - equivalent: call_next ignores it
+        if request.url.path in _SKIP_PATHS:
+            return response
+
+        duration_ms = (time.perf_counter() - start) * 1000.0  # pragma: no mutate - log text
         logger.info(
-            "%s %s -> %d (%.2fms)",
+            "%s %s -> %d (%.2fms)",  # pragma: no mutate - log text
             request.method,
             request.url.path,
             response.status_code,

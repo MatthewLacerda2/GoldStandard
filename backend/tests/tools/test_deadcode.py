@@ -27,6 +27,15 @@ def test_a_function_and_a_class_nothing_uses_are_flagged(tmp_path: Path):
     assert sorted(_messages(root)) == ["unused class 'Dead'", "unused function 'dead'"]
 
 
+def test_mutmuts_working_copy_is_not_source(tmp_path: Path):
+    """``mutants/`` copies the code and its tests: a copy can neither be dead
+    nor keep an allow in the source alive."""
+    root = _project(tmp_path, "def kept():  # lint: allow(deadcode) a script calls it\n    pass\n")
+    (root / "mutants").mkdir()
+    (root / "mutants" / "app.py").write_text("def dead():\n    pass\n\n\nkept()\n")
+    assert check(root) == []
+
+
 def test_fields_entry_points_and_convention_names_pass(tmp_path: Path):
     app = """
 from fastapi import APIRouter

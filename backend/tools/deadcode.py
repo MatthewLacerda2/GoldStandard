@@ -55,7 +55,9 @@ from vulture.utils import get_decorator_name
 BACKEND = Path(__file__).resolve().parents[1]
 TESTS = "tests"
 MIN_CONFIDENCE = 60
-EXCLUDE = ["*/.venv/*"]
+# Not source: the virtualenv, and `mutants/`, mutmut's working copy (`make back-mutate`).
+SKIPPED = (".venv", "mutants")
+EXCLUDE = [f"*/{name}/*" for name in SKIPPED]
 GATED = frozenset({"attribute", "class", "function", "method", "property", "unreachable_code"})
 
 # fnmatch patterns against a decorator's source text: what it decorates is
@@ -124,7 +126,7 @@ def scan(root: Path, exclude: list[str]) -> list[tuple[Path, int, str]]:
 
 def _sources(root: Path) -> list[Path]:
     paths = sorted(root.rglob("*.py"))
-    return [p for p in paths if ".venv" not in p.relative_to(root).parts]
+    return [p for p in paths if not set(SKIPPED) & set(p.relative_to(root).parts)]
 
 
 def allows(root: Path) -> list[Allow]:
