@@ -31,6 +31,9 @@ never pushes it over. Any other string still counts.
   first 15 lines; `tests/**` is exempt.
 - Endpoint handler ≤ 50 lines. Test ≤ 50 lines.
 
+The root `tools/` folder is held to the same limits: `make tools` runs
+`house_lint.py --lengths tools`, the length rules alone.
+
 ## No promises in comments (`marker`, also `tools/house_lint.py`)
 
 A comment carrying `TODO`, `FIXME`, `XXX` or `HACK` as a whole upper-case word
@@ -47,7 +50,9 @@ for new resources rather than inventing a new one.
 
 ## Gate before pushing
 
-`make backend` = `back-lint` (ruff + ruff-format + `house_lint.py`) ·
+`make backend` = `back-pins` first (`tools/pins.py`: the venv against every
+`==` pin in `requirements*.txt`; `make back-install` when it fails) ·
+`back-lint` (ruff + ruff-format + `house_lint.py`) ·
 `back-build` (imports `main`, and fails when `frontend/openapi.json` no longer
 matches what the endpoints answer: run `make openapi` and commit it) ·
 `back-test` (pytest). Green before you push. Once `make setup` has run, each

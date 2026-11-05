@@ -243,6 +243,12 @@ class TheMakeTarget(Scratch):
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("-m ruff format .", self.calls())
 
+    def test_tools_fix_formats_even_when_errors_are_left(self) -> None:
+        self.make_tools_fail()
+        done = self.make("tools-fix", f"RUFF={self.stub}")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("format --config backend/pyproject.toml tools", self.calls())
+
 
 if __name__ == "__main__":
     unittest.main()
