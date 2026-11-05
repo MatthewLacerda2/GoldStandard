@@ -11,7 +11,8 @@
       "parameters": {
         "strict_required_status_checks_policy": false,
         "required_status_checks": [
-          { "context": "CI ok", "integration_id": 15368 }
+          { "context": "CI ok", "integration_id": 15368 },
+          { "context": "mutation gate", "integration_id": 15368 }
         ]
       }
     }

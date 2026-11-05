@@ -1,0 +1,34 @@
+# Sensitive code: a PR into `main` that changes any of these paths merges only
+# with mutation run on the functions it touched, and every mutant not killed
+# answered in writing (the `mutation gate` check, `backend/tools/mutation_gate.py`;
+# how: backend/CLAUDE.md, "Mutation testing"). Here a weak test is a leak
+# nobody notices, so mutation is forced rather than a signal.
+#
+# One path per line, from the repo root; a directory ends in `/`. Every
+# sensitive path must be in `[tool.mutmut] source_paths` (a test checks). A new
+# file of this kind joins the list in the PR that creates it. The check reads
+# the list as `main`'s tip, the merge base and the PR have it, together, so
+# removing an entry does not free its file in the same PR.
+#
+# The auth surface (independent-review's *Auth* trigger points here).
+backend/utils/security.py
+backend/api/deps.py
+# The login handler: decorated, so mutmut makes no mutant of it, and a change
+# to it is a `no mutant` line that names the test covering it.
+backend/api/v1/auth.py
+# The throttle in front of login: a limit that silently stops limiting.
+backend/core/rate_limiter.py
+#
+# `hash-only`: guarded (hashed, and named in the block) but never mutated: the
+# gate's own files, so a PR that changes how it judges says so in its block.
+# CI runs `main`'s copy of all of them anyway. Not guarded: the Makefile recipe
+# that runs the gate and the mutmut pin in `backend/requirements-dev.txt`, which
+# the independent review's *CI and the gates* trigger covers.
+hash-only backend/mutation-sensitive.txt
+hash-only backend/tools/mutation_gate.py
+hash-only backend/tools/mutation_block.py
+hash-only backend/tools/mutation_source.py
+hash-only backend/tools/mutate_diff.py
+hash-only backend/tools/pragma_scope.py
+hash-only backend/tools/mutmut_view.py
+hash-only .github/workflows/mutation-gate.yml

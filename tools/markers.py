@@ -62,6 +62,8 @@ FILES = {
         "**/.prettierignore",
         "**/nginx.conf",
         "**/baseline.txt",
+        "backend/mutation-sensitive.txt",
+        "backend/tools/mutation_preload.txt",
     ),
     "css": ("**/*.css",),
     "html": ("**/*.html",),

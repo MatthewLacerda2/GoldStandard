@@ -400,7 +400,8 @@ def check_source(path: Path, source: str) -> list[str]:
 
 def iter_python_files(root: Path) -> list[Path]:
     """Yield Python files under ``root``, skipping caches and virtualenvs."""
-    skip = {".venv", "__pycache__", ".ruff_cache", ".pytest_cache", ".git"}
+    # `mutants/` is mutmut's working copy (`make back-mutate`), not source.
+    skip = {".venv", "__pycache__", ".ruff_cache", ".pytest_cache", ".git", "mutants"}
     return sorted(p for p in root.rglob("*.py") if not any(part in skip for part in p.parts))
 
 

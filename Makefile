@@ -53,7 +53,7 @@ docs-lint:
 # ---------------------------------------------------------------------------
 # Backend gates  (run from backend/, driven by $(PYTHON))
 # ---------------------------------------------------------------------------
-.PHONY: back-lint back-build back-test back-install openapi
+.PHONY: back-lint back-build back-test back-install openapi back-mutate back-mutate-diff back-mutation-gate
 back-lint:
 	cd backend && $(PYTHON) -m ruff check .
 	cd backend && $(PYTHON) -m ruff format --check .
@@ -70,6 +70,31 @@ openapi:
 
 back-test:
 	cd backend && $(PYTHON) -m pytest
+
+# Mutation testing (backend/CLAUDE.md, "Mutation testing"). The mutants run
+# locally only, never in `backend`, `check` or CI: they need minutes and
+# Postgres. CI runs only the read-only half, `back-mutation-gate`.
+# ONLY="<mutant-name glob> ..." for what you changed, ALL=1 for the whole scope;
+# a bare run refuses. Each name is single-quoted: unquoted, the shell in
+# backend/ would expand `utils*` to `utils`, which matches no mutant.
+back-mutate:
+	cd backend && $(PYTHON) -m tools.mutate $(if $(ALL),--all) $(foreach name,$(ONLY),'$(name)')
+
+# The sensitive functions this branch changed, and the `## Mutation` block the
+# gate reads. PR=<n> writes it into that PR's body; NO_RUN=1 rewrites it from
+# the results in backend/mutants/.
+back-mutate-diff:
+	cd backend && $(PYTHON) -m tools.mutate_diff $(if $(PR),--pr $(PR)) $(if $(NO_RUN),--no-run)
+
+# The `mutation gate` check (.github/workflows/mutation-gate.yml): runs no
+# mutant. PR=<n> reads that PR's body (or PR_BODY), BASE=<ref> (origin/main),
+# REV=<sha> (HEAD; the pragma check reads the working tree without it). Both
+# halves report before it fails.
+back-mutation-gate:
+	cd backend && status=0; \
+	$(PYTHON) -m tools.pragma_scope $(if $(BASE),--base $(BASE)) $(if $(REV),--rev $(REV)) || status=1; \
+	$(PYTHON) -m tools.mutation_gate $(if $(PR),--pr $(PR)) $(if $(BASE),--base $(BASE)) $(if $(REV),--rev $(REV)) || status=1; \
+	exit $$status
 
 back-install:
 	cd backend && $(PYTHON) -m venv --clear .venv

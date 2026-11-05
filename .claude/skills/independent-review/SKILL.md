@@ -32,7 +32,8 @@ Before the merge, when the PR hits any **trigger**:
   `frontend/src/lib/schemas/`. `make front-contract` checks each request's
   answer by field name and kind; a scalar's type, nullability and request
   bodies have only this review.
-- **Auth** — `backend/api/deps.py`, `backend/utils/security.py`, which side of
+- **Auth** — a sensitive path of `backend/mutation-sensitive.txt` (not its
+  `hash-only` entries, the mutation gate's own files), which side of
   `get_current_user` a router sits on in `backend/api/endpoints.py`, or how
   `frontend/src/lib/api/client.ts` carries the token.
 - **A refactor**, on either side: code moved across files or layers with the

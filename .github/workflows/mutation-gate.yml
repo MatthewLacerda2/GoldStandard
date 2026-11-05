@@ -1,0 +1,83 @@
+name: mutation gate
+# A pull request into `main` that changes sensitive code
+# (`backend/mutation-sensitive.txt`) merges only with mutation run on the
+# functions it touched: its body carries the `## Mutation` block
+# `make back-mutate-diff` writes, for the content the PR has now, with a
+# decision on every line, and every pragma it adds or grows there hides exactly
+# one mutant. A PR that touches nothing sensitive passes in seconds.
+#
+# Not drift: CI runs the read-only half, `make back-mutation-gate`, which runs
+# no mutant (`backend/tools/mutation_gate.py`, `backend/tools/pragma_scope.py`).
+# The mutants themselves run locally only, by design: minutes against a
+# Postgres, which is why the block is trusted to be the tool's output and the
+# tool refuses anything uncommitted or unpushed.
+#
+# A separate required check, by its job name `mutation gate`, beside `CI ok`.
+# It cannot sit under `CI ok`'s `needs:`: it is another event in another
+# workflow.
+#
+# `pull_request_target`, not `pull_request`: the workflow, the Makefile and the
+# gate's code all come from the BASE branch, so a PR cannot weaken the code
+# that judges it. The PR head is fetched as git objects only, never checked
+# out, nothing from it runs, and the token is read-only; the body, base and
+# head reach the script through `env`, never its text. This matters because
+# fork PRs run it too. The flip side: a change to the gate takes effect for
+# the PRs judged after it merges, and the PR that first adds this file is not
+# judged by it.
+#
+# `edited` re-runs it when the body changes, so pasting the block or writing a
+# decision turns it green without a push. Drafts are skipped (a draft cannot
+# merge); `ready_for_review` brings the run that counts. No `paths:` filter: a
+# required check that never reports leaves a PR pending forever.
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  mutation-gate:
+    name: mutation gate
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The base branch, with full history for the merge base.
+      # No token left in the checkout's git config: nothing after this step
+      # needs one but the fetch below, which is handed it for that command only.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch the PR head as data
+        run: |
+          auth="$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git -c "http.extraheader=AUTHORIZATION: basic $auth" fetch --no-tags origin "$HEAD_SHA"
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          TOKEN: ${{ github.token }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      # The pragma check asks mutmut which mutants a pragma hides: the mutmut
+      # the base pins, and nothing else of the backend.
+      - name: Install mutmut
+        run: python -m pip install --quiet "$(grep -E '^mutmut==' backend/requirements-dev.txt)"
+
+      - name: Check the Mutation block and the pragmas
+        run: make back-mutation-gate PYTHON=python BASE="origin/$BASE_REF" REV="$HEAD_SHA"
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}

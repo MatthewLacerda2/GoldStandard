@@ -3,6 +3,8 @@ __pycache__/
 *.py[codz]
 .pytest_cache/
 .ruff_cache/
+# mutmut's working copy and results (`make back-mutate`)
+mutants/
 
 # Python build output. Anchored to the repo root so the pattern does not also
 # ignore frontend/src/lib (the typed API SDK layer).
