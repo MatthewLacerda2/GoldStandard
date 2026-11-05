@@ -103,6 +103,14 @@ class PythonTests(unittest.TestCase):
             changed_tests("pytest", "t.py", PYTEST, base).tests, ("t.py::TestGroup::test_one",)
         )
 
+    def test_renaming_or_reindenting_a_class_changes_none_of_its_tests(self) -> None:
+        head = PYTEST.replace("class TestGroup:", "class TestRenamed:")
+        head = head.replace(
+            "    class TestInner:\n        def test_two(self):\n            assert True",
+            "class TestInner:\n    def test_two(self):\n        assert True",
+        )
+        self.assertEqual(changed_tests("pytest", "t.py", head, PYTEST), Chosen((), WHOLE))
+
     def test_only_a_helper_changed_judges_the_whole_file(self) -> None:
         # Classes pytest does not collect (no `Test*`, or an `__init__`) are helpers too.
         head = PYTEST.replace("pass", "return").replace("return 1", "return 2")
@@ -150,6 +158,18 @@ class VitestTests(unittest.TestCase):
         chosen = changed_tests("vitest", "x.test.tsx", head, VITEST)
         self.assertEqual(chosen.tests, ())
         self.assertIn("lines 15-17, lines 20-20 have no name of their own", chosen.why)
+
+    def test_wrapping_tests_in_a_new_describe_changes_none(self) -> None:
+        head = VITEST.replace(
+            'it("works", () => {});', 'describe("new", () => {\n  it("works", () => {});\n});'
+        )
+        self.assertEqual(changed_tests("vitest", "x.test.ts", head, VITEST), Chosen((), WHOLE))
+
+    def test_names_that_join_alike_are_shared(self) -> None:
+        # `-t` matches the joined name: `a > b` at the top is `b` inside `a`.
+        base = 'describe("a", () => {\n  it("b", () => {});\n});\n'
+        head = base + 'it("a > b", () => {});\n'
+        self.assertEqual(changed_tests("vitest", "x.test.ts", head, base).tests, ())
 
     def test_a_change_in_a_hook_judges_the_whole_file(self) -> None:
         head = edit(VITEST, "setUp(", "setUpAgain(")

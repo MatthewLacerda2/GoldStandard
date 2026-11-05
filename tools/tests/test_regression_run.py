@@ -33,7 +33,10 @@ OLD = (
     "    def test_old(self):\n        self.fail('fails on every commit')\n"
 )
 CASE = "T(unittest.TestCase)"
+# The imports, and a decorator that does not keep its method's name.
+HIDE = "import unittest\nfrom tools import thing\ndef hide(f):\n    return lambda self: f(self)\n"
 NEW = "    def test_new(self):\n        self.assertEqual(thing.{call}, 6)\n"
+HIDDEN = NEW.format(call="double(2) + 2").replace("def test_new", "@hide\n    def test_hidden")
 
 
 class ScratchRepository(unittest.TestCase):
@@ -139,6 +142,25 @@ class PerTest(ScratchRepository):
         self.assertIn("  Mixin.test_mixed\n  T.test_new\n", out)
         self.assertIn("Ran 2 tests", out)
         self.assertIn("Refused:", out)
+
+    def hidden_fix(self, *new: str) -> tuple[int, str]:
+        """Commit the fix, and `new` tests after the older one."""
+        self.write("tools/thing.py", FIXED)
+        older = OLD.format(cls=CASE).split("\n", 2)[2]  # without its imports
+        self.commit("tools/tests/test_thing.py", HIDE + older + "".join(new))
+        return self.run_step()
+
+    def test_a_test_a_decorator_hides_cannot_pass(self) -> None:
+        # Without `functools.wraps` the method is no longer `T.test_hidden`.
+        code, out = self.hidden_fix(NEW.format(call="double(2) + 2"), HIDDEN)
+        self.assertIn("named, but no test here runs it: T.test_hidden", out)
+        self.assertIn("cannot be judged", out)
+        self.assertEqual(code, 1)
+
+    def test_every_named_test_hidden_runs_the_whole_file(self) -> None:
+        code, out = self.hidden_fix(HIDDEN)
+        self.assertIn("no test here is one of those named: running the whole file", out)
+        self.assertEqual(code, 0, out)  # the older failing test counts again: a documented limit
 
     def test_a_change_to_no_test_judges_the_whole_file(self) -> None:
         self.write("tools/thing.py", FIXED)

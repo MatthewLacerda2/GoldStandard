@@ -218,8 +218,13 @@ def narrowed(head: Path, base: str, t: Target) -> Target:
     """`t` cut down to the tests the change adds or changes, saying which, or
     left whole, saying why."""
     path = str(PurePosixPath(t.layer, t.path))
-    head_text = shown(head, "HEAD", path) or ""
-    tests, why = changed_tests(t.runner, t.path, head_text, shown(head, base, path))
+    head_text, base_text = shown(head, "HEAD", path) or b"", shown(head, base, path)
+    tests, why = changed_tests(
+        t.runner,
+        t.path,
+        head_text.decode(errors="replace"),
+        None if base_text is None else base_text.decode(errors="replace"),
+    )
     lines = [f"{t}: judging the whole file: {why}."]
     if tests:
         lines = [f"{t}: judging the tests the change adds or changes:", *(f"  {n}" for n in tests)]
@@ -228,15 +233,9 @@ def narrowed(head: Path, base: str, t: Target) -> Target:
     return t._replace(tests=tests)
 
 
-def shown(head: Path, rev: str, path: str) -> str | None:
+def shown(head: Path, rev: str, path: str) -> bytes | None:
     """`path` as commit `rev` has it, or `None` when it has no such file."""
-    done = subprocess.run(
-        ("git", "show", f"{rev}:{path}"),
-        cwd=head,
-        capture_output=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    done = subprocess.run(("git", "show", f"{rev}:{path}"), cwd=head, capture_output=True)
     return None if done.returncode else done.stdout
 
 
@@ -247,11 +246,7 @@ def lay_over(head: Path, worktree: Path, paths: list[str], present: set[str]) ->
         dest = worktree / path
         if path in present:
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(
-                subprocess.run(
-                    ("git", "show", f"HEAD:{path}"), cwd=head, check=True, stdout=subprocess.PIPE
-                ).stdout
-            )
+            dest.write_bytes(shown(head, "HEAD", path) or b"")
         elif dest.is_file():
             dest.unlink()
 

@@ -104,9 +104,10 @@ def pytest_outcome(code: int, junit: str) -> str:
     a `<failure>`; a setup or collection one is an `<error>`, and an exit code
     past 1 means the file did not import or ran nothing. A pass needs a test
     that ran, not one skipped."""
-    if not junit:
+    try:
+        report = ElementTree.fromstring(junit)
+    except ElementTree.ParseError:  # none, or cut short by a kill
         return BROKEN
-    report = ElementTree.fromstring(junit)
     if code == 0:
         ran = any(case.find("skipped") is None for case in report.iter("testcase"))
         return PASSED if ran else BROKEN
@@ -133,7 +134,9 @@ def vitest_outcome(code: int, report: str) -> str:
 
 
 def unittest_outcome(code: int, report: str) -> str:
-    """From `UNITTEST`'s exit code and report: a pass needs a test that ran."""
+    """From `UNITTEST`'s exit code and report. A pass needs a test that ran,
+    and every named test found: one a decorator hid never ran, so a pass
+    proves nothing for it (a failure of another still counts)."""
     try:
         done = json.loads(report)
     except ValueError:
@@ -141,7 +144,7 @@ def unittest_outcome(code: int, report: str) -> str:
     if not done.get("loaded"):
         return BROKEN
     if code == 0:
-        return PASSED if done.get("ran") else BROKEN
+        return PASSED if done.get("ran") and not done.get("unmatched") else BROKEN
     return judged(done["failures"], py_missing)
 
 
@@ -177,15 +180,19 @@ def cases(suite):
 def qualname(test):
     return getattr(getattr(type(test), test._testMethodName, None), "__qualname__", "")
 chosen = [t for t in cases(suite) if qualname(t) in names]
+unmatched = sorted(names - {qualname(t) for t in chosen}) if chosen else []
 if chosen:
     suite = unittest.TestSuite(chosen)
 elif names:
     print("no test here is one of those named: running the whole file")
+if unmatched:
+    print("named, but no test here runs it:", *unmatched)
 loaded = not loader.errors and suite.countTestCases() > 0
 print("\\n".join(loader.errors))
 run = loaded and unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
 ran = run.testsRun - len(run.skipped) if run else 0
-Path(report).write_text(json.dumps({"loaded": loaded, "ran": ran, "failures": failures}))
+done = {"loaded": loaded, "ran": ran, "unmatched": unmatched, "failures": failures}
+Path(report).write_text(json.dumps(done))
 sys.exit(0 if run and run.wasSuccessful() else 1)
 """
 

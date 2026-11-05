@@ -169,9 +169,12 @@ class HowItIsJudged(unittest.TestCase):
         skipped = '<testsuites><testcase name="t"><skipped/></testcase></testsuites>'
         self.assertEqual(pytest_outcome(0, skipped), BROKEN)
         self.assertEqual(pytest_outcome(0, ""), BROKEN)
+        self.assertEqual(pytest_outcome(1, "<testsuites><testcase"), BROKEN)  # cut short
         report = {"loaded": True, "failures": []}
         self.assertEqual(unittest_outcome(0, json.dumps({**report, "ran": 0})), BROKEN)
         self.assertEqual(unittest_outcome(0, json.dumps({**report, "ran": 1})), PASSED)
+        hidden = {**report, "ran": 1, "unmatched": ["T.test_hidden"]}
+        self.assertEqual(unittest_outcome(0, json.dumps(hidden)), BROKEN)
 
     def test_no_target_is_refused(self) -> None:
         self.assertTrue(verdict({}))

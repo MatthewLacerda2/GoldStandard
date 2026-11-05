@@ -4,9 +4,10 @@
 same file failing there, for whatever reason, proves nothing for the change.
 A test is a Python test function with its decorators, or a vitest `it` /
 `test` call from its name to its closing parenthesis. It is changed when the
-head file has it and the base's version has no test of the same name with the
-same source: no diff is read, so how `git diff` is configured changes nothing,
-and dropping a decorator changes its test. The names:
+head file has it and no test of the base's version has its source, dedented:
+no diff is read, so how `git diff` is configured changes nothing, dropping a
+decorator changes its test, and renaming its class or wrapping it in a new
+`describe` does not. The names:
 
     pytest    node ids, `tests/x.py::TestA::test_b`: one names every case of
               a parametrized test
@@ -30,9 +31,17 @@ Limits:
   move a test's span; unbalanced brackets judge the whole file.
 - Tests made by `test.extend` (a fixture-carrying `test` of another name) are
   not found.
+- A vitest test written inside a helper function that a `describe` calls is
+  named without that `describe`, so `-t` selects nothing and the run cannot
+  be judged.
+- pytest's collection is read from names alone: a test a `Test*` class
+  inherits from a base of another name, `__test__ = False`, and an inherited
+  `__init__` are not seen.
 - unittest matches a method by its `__qualname__`: a decorator that does not
-  keep it (no `functools.wraps`) hides the test. When no named test matches,
-  the runner runs the whole file and says so.
+  keep it (no `functools.wraps`) hides the test. Some named tests hidden: the
+  run cannot pass (`tools/regression_runners.py`). All of them hidden: the
+  whole file runs, and an older test failing in it counts again, as it did
+  before tests were judged one by one.
 
 Pure.
 """
@@ -41,6 +50,7 @@ from __future__ import annotations
 
 import ast
 import re
+import textwrap
 from collections import Counter
 from typing import NamedTuple
 
@@ -302,10 +312,13 @@ class Chosen(NamedTuple):
 
 
 def _found(runner: str, text: str) -> list[tuple[Test, str]] | None:
-    """Each test of `text`, with its source."""
+    """Each test of `text`, with its source, dedented: what is around it (its
+    class or `describe`, how deep it sits) is not part of it."""
     tests = vitest_tests(text) if runner == "vitest" else python_tests(text, runner)
-    lines = text.splitlines()
-    return None if tests is None else [(t, "\n".join(lines[t.first - 1 : t.last])) for t in tests]
+    lines = text.split("\n")  # as `ast` and the scanner count them
+    if tests is None:
+        return None
+    return [(t, textwrap.dedent("\n".join(lines[t.first - 1 : t.last]))) for t in tests]
 
 
 def changed_tests(runner: str, path: str, head: str, base: str | None) -> Chosen:
@@ -315,15 +328,16 @@ def changed_tests(runner: str, path: str, head: str, base: str | None) -> Chosen
     if now is None or before is None:
         side = "head's" if now is None else "base's"
         return Chosen((), f"the {side} version of the file cannot be read for its tests")
-    old = {(t.parts, source) for t, source in before}
-    changed = [t for t, source in now if (t.parts, source) not in old]
+    old = {source for _, source in before}
+    changed = [t for t, source in now if source not in old]
     if not changed:
         return Chosen((), "no test the change adds or changes is found, only code around them")
-    shared = Counter(t.parts for t, _ in now if t.parts)
-    alone = [t for t in changed if t.parts and shared[t.parts] == 1]
+    names = {t: selector(runner, path, t.parts) for t, _ in now if t.parts}
+    shared = Counter(names.values())
+    alone = [t for t in changed if t in names and shared[names[t]] == 1]
     rest = ", ".join(f"lines {t.first}-{t.last}" for t in changed if t not in alone)
     why = rest and f"the changed tests at {rest} have no name of their own to be run by"
     if not alone:
         return Chosen((), why)
-    tests = tuple(sorted({selector(runner, path, t.parts) for t in alone}))
+    tests = tuple(sorted(names[t] for t in alone))
     return Chosen(tests, why and f"not judged: {why}")
