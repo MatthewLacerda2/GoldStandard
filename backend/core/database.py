@@ -6,10 +6,11 @@ admin seed). Schema upgrades beyond additive `create_all` should go through
 Alembic; this skeleton intentionally ships no migrations.
 """
 
+import math
 from collections.abc import Callable
 from typing import Any, NamedTuple
 
-from sqlalchemy import exists, func, insert, make_url, select, text
+from sqlalchemy import URL, exists, func, insert, make_url, select, text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncSession,
@@ -31,18 +32,52 @@ _TEXT_KEYS = frozenset(
     | {"command_timeout", "prepared_statement_cache_size"}
 )
 
+
+def _seconds(value: str) -> float:
+    """asyncpg's `timeout`: a finite number of seconds, more than none."""
+    seconds = float(value)
+    if not (math.isfinite(seconds) and seconds > 0):
+        raise ValueError  # `_number` names the key
+    return seconds
+
+
+def _count(value: str) -> int:
+    """A cache size or lifetime, where 0 turns it off."""
+    count = int(value)
+    if count < 0:
+        raise ValueError  # `_number` names the key
+    return count
+
+
+def _libpq_seconds(value: str) -> int | None:
+    """libpq's `connect_timeout`: whole seconds, where zero or less waits forever
+    (asyncpg's `None`)."""
+    seconds = int(value)
+    return seconds if seconds > 0 else None
+
+
 # asyncpg's parameters that take a number nobody converts: converted here, and
-# passed beside the URL. `statement_cache_size=0` is what a pooler in
-# transaction mode needs.
-_NUMBER_KEYS: dict[str, Callable[[str], float]] = {
-    "timeout": float,
-    "statement_cache_size": int,
-    "max_cached_statement_lifetime": int,
-    "max_cacheable_statement_size": int,
+# passed beside the URL. `statement_cache_size=0` turns asyncpg's statement
+# cache off; behind a pooler in transaction mode SQLAlchemy also needs
+# `prepared_statement_cache_size=0` (a URL key that passes through) and a
+# `prepared_statement_name_func`, which no URL can carry.
+_NUMBER_KEYS: dict[str, Callable[[str], Any]] = {
+    "timeout": _seconds,
+    "statement_cache_size": _count,
+    "max_cached_statement_lifetime": _count,
+    "max_cacheable_statement_size": _count,
 }
 
-# libpq's names for what asyncpg takes under another.
-_RENAMED = {"sslmode": "ssl", "connect_timeout": "timeout"}
+# libpq's names for what asyncpg takes under another, and what its value becomes:
+# text that stays in the URL (no converter), or a value converted to what libpq
+# means by it and passed beside the URL.
+_RENAMED: dict[str, tuple[str, Callable[[str], Any] | None]] = {
+    "sslmode": ("ssl", None),
+    "connect_timeout": ("timeout", _libpq_seconds),
+}
+
+# Keys a URL may repeat: asyncpg's multi-host form, `?host=a:5432&host=b:5432`.
+_REPEATABLE = frozenset({"host", "port"})
 
 # Any number: advisory locks belong to one database, and this is the only one taken.
 _BOOTSTRAP_LOCK = 4_242_001
@@ -68,8 +103,9 @@ def database_target(url: str) -> DatabaseTarget:
     argument, in text, and those hosts append libpq's: `sslmode` becomes `ssl`,
     `connect_timeout` becomes `timeout`, `application_name` a server setting,
     and a `channel_binding` that only prefers it is dropped. asyncpg's own
-    numeric keys are converted. Any other key is refused here, naming it,
-    rather than failing the first connection.
+    numeric keys are converted. A key set twice (but for the multi-host
+    `host` and `port`), a number out of range and any other key are refused
+    here, naming the key, rather than failing the first connection.
     """
     for scheme in ("postgresql://", "postgres://"):
         if url.startswith(scheme):
@@ -79,18 +115,24 @@ def database_target(url: str) -> DatabaseTarget:
         return DatabaseTarget(url, {})
     parsed = make_url(url)
     query = dict(parsed.query)
-    for libpq, name in _RENAMED.items():
-        if libpq in query and name in query:
+    for key, value in query.items():
+        if isinstance(value, tuple) and key not in _REPEATABLE:
+            # pragma: no mutate start - text nobody parses: the message is read by people
+            raise ValueError(f"DATABASE_URL sets `{key}` more than once: keep one")
+            # pragma: no mutate end
+    connect_args: dict[str, Any] = {}
+    for libpq, (name, convert) in _RENAMED.items():
+        if libpq not in query:
+            continue
+        if name in query:
             # pragma: no mutate start - text nobody parses: the message is read by people
             raise ValueError(f"DATABASE_URL sets both `{libpq}` and `{name}`: keep one")
             # pragma: no mutate end
-    connect_args: dict[str, Any] = {}
-    if "sslmode" in query:
-        query["ssl"] = query.pop("sslmode")
-    if "connect_timeout" in query:
-        # libpq's whole seconds, where zero or less waits forever (asyncpg's `None`).
-        seconds = _number("connect_timeout", query.pop("connect_timeout"), int)
-        connect_args["timeout"] = seconds if seconds > 0 else None
+        value = query.pop(libpq)
+        if convert is None:
+            query[name] = value
+        else:
+            connect_args[name] = _number(libpq, value, convert)
     for key, convert in _NUMBER_KEYS.items():
         if key in query:
             connect_args[key] = _number(key, query.pop(key), convert)
@@ -102,10 +144,7 @@ def database_target(url: str) -> DatabaseTarget:
             # pragma: no mutate start - text nobody parses: the message is read by people
             raise ValueError(f"DATABASE_URL sets `{key}`, which asyncpg does not take from a URL")
             # pragma: no mutate end
-    # pragma: no mutate start - equivalent: hide_password=None hides nothing either
-    rendered = parsed.set(query=query).render_as_string(hide_password=False)
-    # pragma: no mutate end
-    return DatabaseTarget(rendered, connect_args)
+    return DatabaseTarget(_with_password(parsed.set(query=query)), connect_args)
 
 
 def normalize_database_url(url: str) -> str:
@@ -114,7 +153,15 @@ def normalize_database_url(url: str) -> str:
     return database_target(url).url
 
 
-def _number(key: str, value: str, convert: Callable[[str], float]) -> float:
+def _with_password(url: URL) -> str:
+    """The URL as text, password included, which `str(url)` would mask."""
+    return url.render_as_string(  # pragma: no mutate - equivalent: hide_password=None hides nothing either
+        hide_password=False,
+    )
+
+
+def _number(key: str, value: str, convert: Callable[[str], Any]) -> Any:
+    """`convert(value)`, or an error naming the key when the value is not one it takes."""
     try:
         return convert(value)
     except ValueError:

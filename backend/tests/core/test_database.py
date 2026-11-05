@@ -49,20 +49,25 @@ def test_connect_timeout_keeps_libpqs_meaning(seconds, timeout):
 
 def test_asyncpgs_numeric_keys_arrive_as_numbers():
     """SQLAlchemy passes text, and asyncpg does arithmetic with these."""
-    query = "timeout=2.5&statement_cache_size=0&max_cached_statement_lifetime=60"
+    query = "timeout=0.5&statement_cache_size=0&max_cached_statement_lifetime=60"
     target = database.database_target(f"{ASYNC}?{query}&max_cacheable_statement_size=1024")
     assert target.url == ASYNC
     assert target.connect_args == {
-        "timeout": 2.5,
+        "timeout": 0.5,
         "statement_cache_size": 0,
         "max_cached_statement_lifetime": 60,
         "max_cacheable_statement_size": 1024,
     }
 
 
-@pytest.mark.parametrize("pair", ["connect_timeout=1.5", "timeout=soon", "statement_cache_size=x"])
+@pytest.mark.parametrize(
+    "pair",
+    ["connect_timeout=1.5", "timeout=soon", "timeout=0", "timeout=-1", "timeout=nan"]
+    + ["timeout=inf", "statement_cache_size=x", "statement_cache_size=-1"],
+)
 def test_a_number_key_that_is_not_its_number_is_refused(pair):
-    """libpq's ``connect_timeout`` is whole seconds; a cache size is a count."""
+    """libpq's ``connect_timeout`` is whole seconds; asyncpg's ``timeout`` has to end
+    and to allow some time; a cache size is a count."""
     with pytest.raises(ValueError, match=f"`{pair}`"):
         database.normalize_database_url(f"postgres://u:p@db/app?{pair}")
 
@@ -93,6 +98,20 @@ def test_a_key_asyncpg_does_not_take_is_refused_by_name(key):
 def test_keys_asyncpg_takes_pass_through():
     query = {"target_session_attrs": "any", "command_timeout": "9", "ssl": "require"}
     url = make_url(ASYNC).set(query={**query, "prepared_statement_cache_size": "0"})
+    target = database.database_target(url.render_as_string(hide_password=False))
+    assert make_url(target.url) == url and target.connect_args == {}
+
+
+@pytest.mark.parametrize("key", ["connect_timeout", "application_name", "sslmode"])
+def test_a_key_set_twice_is_refused_by_name(key):
+    """Both values would reach asyncpg together, as a pair it cannot read."""
+    with pytest.raises(ValueError, match=f"`{key}` more than once"):
+        database.normalize_database_url(f"postgres://u:p@db/app?{key}=1&{key}=2")
+
+
+def test_a_multi_host_url_passes_through():
+    """asyncpg's one form that repeats a key: a primary and its standbys."""
+    url = make_url("postgresql+asyncpg://u:p@/app?host=a:5432&host=b:5432&port=1&port=2")
     target = database.database_target(url.render_as_string(hide_password=False))
     assert make_url(target.url) == url and target.connect_args == {}
 
@@ -201,8 +220,17 @@ async def empty_database(engine, monkeypatch):
         await _drop_and_create(engine, name, create=False)
 
 
-async def test_workers_starting_together_seed_one_admin(empty_database):
-    """Every worker or replica bootstraps at startup; none may crash on the others."""
+@pytest.mark.parametrize("built", [False, True], ids=["empty", "schema-built"])
+async def test_workers_starting_together_seed_one_admin(empty_database, built):
+    """Every worker or replica bootstraps at startup; none may crash on the others.
+
+    On an empty database they race on the schema first; on one whose schema is
+    built (a first deploy after a migration step, say) only the seed is left.
+    """
+    if built:
+        async with empty_database.begin() as conn:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await conn.run_sync(Base.metadata.create_all)
     await asyncio.gather(*(database.init_db() for _ in range(3)))
     async with empty_database.connect() as conn:
         assert await conn.scalar(select(func.count()).select_from(User)) == 1
