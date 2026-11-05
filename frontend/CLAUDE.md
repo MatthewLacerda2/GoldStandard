@@ -54,9 +54,22 @@ on that line or on the line directly above it — the same spelling the
 backend's `house_lint.py` reads. ESLint's own `eslint-disable` comments still
 silence it, as they do any rule, and nothing yet asks them for a reason.
 
+## Dead code (`make front-deadcode`)
+
+`scripts/check-deadcode.ts` runs knip (`knip.ts`), which fails on a file
+nothing imports, an export nothing imports and a dependency nothing uses, and
+`scripts/check-i18n-keys.ts`, which fails on a locale key nothing in `src/`
+reads (tests don't count). Delete what they name. An export that stays on
+purpose says why on itself, once, `/** @keep <why> */`; a keep tag spelled
+any other way, without a reason or on an export something imports fails, and
+so does `@public`, `@beta` or `@alias`, which knip always skips. A key or
+namespace read in a way the check cannot see goes in its `KEPT`, with the
+reason. Vendored `components/ui/` primitives keep their whole API.
+
 ## Gate before pushing
 
 `make frontend` = `front-lint` (`bun run check`: tsc + eslint + prettier) ·
+`front-deadcode` (`scripts/check-deadcode.ts`: knip + `@keep` + i18n keys) ·
 `front-build` (vite) · `front-test` (vitest) · `front-contract`
 (`scripts/check-contract.ts`). Green before you push. Once `make setup` has
 run, each commit touching `frontend/` runs `front-lint` first; `make front-fix`

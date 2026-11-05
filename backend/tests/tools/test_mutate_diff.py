@@ -127,7 +127,7 @@ def test_main_mutates_the_changed_function_and_writes_the_block_into_the_pr(
     assert runs == [[ALLOWED]]
     [body] = edits
     assert body.startswith("Why.") and "Closes #7" in body
-    assert block.parse(body).content == gate.content_hash(repo.root, [GUARD])
+    assert block.parse(body).content == gate.hash_of([GUARD], gate.blobs(repo.root, [GUARD]))
 
 
 def test_a_dirty_tree_or_a_pr_at_another_commit_is_refused(monkeypatch):

@@ -18,5 +18,3 @@ void i18n
     supportedLngs: ["en", "pt", "es"],
     interpolation: { escapeValue: false },
   });
-
-export default i18n;

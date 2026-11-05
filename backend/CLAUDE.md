@@ -48,12 +48,26 @@ line directly above it.
 `schemas/items.py`, `repositories/items.py`, `models/item.py`. Copy its shape
 for new resources rather than inventing a new one.
 
+## Dead code (enforced by `tools/deadcode.py`)
+
+A function, class, method or attribute nothing uses fails, and so does one
+only `tests/` uses: delete it with the test that is its only use. Framework
+entry points (route handlers, fixtures, validators) pass by decorator
+(`IGNORE_DECORATORS`), names a framework calls by convention by `IGNORE_NAMES`,
+each with its reason; an entry nothing matches fails, so add one with the code
+that needs it. Code that stays on purpose says why where it is:
+`# lint: allow(deadcode) <why>` at the end of the reported line, or alone on
+the line above it. Vulture's `# noqa` excuses nothing. ORM columns and
+Pydantic fields are never reported; the frontend's contract gate judges the
+fields it reads.
+
 ## Gate before pushing
 
 `make backend` = `back-pins` first (`tools/pins.py`: the venv against every
 `==` pin in `requirements*.txt`; `make back-install` when it fails) ·
 `back-lint` (ruff + ruff-format + `house_lint.py`) ·
-`back-build` (imports `main`, and fails when `frontend/openapi.json` no longer
+`back-deadcode` (`tools/deadcode.py`: code nothing calls, or only the tests
+do) · `back-build` (imports `main`, and fails when `frontend/openapi.json` no longer
 matches what the endpoints answer: run `make openapi` and commit it) ·
 `back-test` (pytest). Green before you push. Once `make setup` has run, each
 commit touching `backend/` runs `back-lint` first; `make back-fix` fixes what ruff can.
