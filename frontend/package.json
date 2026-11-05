@@ -10,7 +10,7 @@
     "check": "tsc --noEmit && tsc --noEmit -p scripts && eslint . && prettier --check .",
     "test": "vitest run",
     "contract": "bun scripts/check-contract.ts",
-    "deadcode": "knip --no-config-hints --reporter symbols --reporter ./scripts/knip-hint.ts && bun scripts/check-i18n-keys.ts"
+    "deadcode": "bun scripts/check-deadcode.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "5.105.0",

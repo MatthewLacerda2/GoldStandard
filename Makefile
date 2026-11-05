@@ -129,7 +129,7 @@ front-lint:
 	cd frontend && $(BUN) run check
 
 # Files, exports and dependencies nothing uses (knip, knip.ts), and locale
-# keys nothing reads (scripts/check-i18n-keys.ts).
+# keys nothing reads (scripts/check-deadcode.ts runs every part).
 front-deadcode:
 	cd frontend && $(BUN) run deadcode
 

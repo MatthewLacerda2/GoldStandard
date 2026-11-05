@@ -5,16 +5,17 @@
 // test file is not a reader: a key only a test asks for is shown to nobody.
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { judge, readsIn } from "./i18n-keys/find";
+import { isReader, judge, readsIn } from "./i18n-keys/find";
 
 const NAME = "check-i18n-keys";
 const FRONTEND = join(import.meta.dirname, "..");
 const SRC = join(FRONTEND, "src");
 const LOCALES = join(SRC, "i18n", "locales");
 
-/** Keys read in a way the check cannot see (a whole namespace asked for by a
- *  bare word, say), each with its reason. An entry that no longer holds is
- *  reported, so the list stays true. */
+/** Keys read in a way the check cannot see (`find.ts` lists the forms), each
+ *  with its reason. An entry is a key or a namespace (`"items.status"` keeps
+ *  every key under it). An entry without a reason, or that excuses nothing,
+ *  is reported, so the list stays true. */
 const KEPT: Readonly<Record<string, string>> = {};
 
 const locales = readdirSync(LOCALES)
@@ -24,7 +25,7 @@ const locales = readdirSync(LOCALES)
     tree: JSON.parse(readFileSync(join(LOCALES, file), "utf8")) as unknown,
   }));
 const sources = readdirSync(SRC, { recursive: true, encoding: "utf8" })
-  .filter((path) => /\.tsx?$/.test(path) && !/\.test\.tsx?$/.test(path))
+  .filter(isReader)
   .map((path) => ({
     file: path,
     text: readFileSync(join(SRC, path), "utf8"),
@@ -36,7 +37,7 @@ for (const { key, files } of unused) {
 }
 for (const key of staleKept) {
   console.error(
-    `${NAME}: KEPT names "${key}", which is read now or in no locale — delete the entry.`,
+    `${NAME}: KEPT names "${key}" without a reason, or it excuses nothing (read now, or in no locale) — give the reason or delete the entry.`,
   );
 }
 if (unused.length + staleKept.length > 0) {

@@ -52,11 +52,14 @@ for new resources rather than inventing a new one.
 
 A function, class, method or attribute nothing uses fails, and so does one
 only `tests/` uses: delete it with the test that is its only use. Framework
-entry points (route handlers, fixtures, validators) pass by decorator, names a
-framework calls by convention by `IGNORE_NAMES`, each with its reason. Code
-that stays on purpose says why where it is: `# lint: allow(deadcode) <why>` on
-the reported line or the one above. ORM columns and Pydantic fields are never
-reported; the frontend's contract gate judges the fields it reads.
+entry points (route handlers, fixtures, validators) pass by decorator
+(`IGNORE_DECORATORS`), names a framework calls by convention by `IGNORE_NAMES`,
+each with its reason; an entry nothing matches fails, so add one with the code
+that needs it. Code that stays on purpose says why where it is:
+`# lint: allow(deadcode) <why>` at the end of the reported line, or alone on
+the line above it. Vulture's `# noqa` excuses nothing. ORM columns and
+Pydantic fields are never reported; the frontend's contract gate judges the
+fields it reads.
 
 ## Gate before pushing
 

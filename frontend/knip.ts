@@ -1,8 +1,9 @@
 import type { KnipConfig } from "knip";
 
-// The whole-program half of the dead-code gate (`bun run deadcode`, run by
-// `make front-deadcode`): files nothing imports, exports nothing imports, and
-// dependencies nothing uses. ESLint and tsc only see one file at a time.
+// The whole-program half of the dead-code gate (`scripts/check-deadcode.ts`,
+// run by `make front-deadcode`): files nothing imports, exports nothing
+// imports, and dependencies nothing uses. ESLint and tsc see one file at a
+// time.
 //
 // Most entry points come from knip's plugins, which read this repo's own
 // config: vite (index.html -> src/main.tsx), TanStack Router (the generated
@@ -16,7 +17,10 @@ const config: KnipConfig = {
     // or not. Their helper modules in subfolders are judged like any other.
     "scripts/*.ts",
     // Vendored shadcn primitives keep their whole API, the parts nothing uses
-    // yet included: they are added with `bunx shadcn add`, never trimmed.
+    // yet included, and so do the dependencies they import (lucide-react):
+    // the template ships the set a page composes from (frontend/CLAUDE.md,
+    // never hand-roll a control), added with `bunx shadcn add` and never
+    // trimmed, so the next page finds `<Select>` there rather than rolling one.
     "src/components/ui/**",
   ],
   // An export used in its own file is alive; whether it needs `export` is a
@@ -24,6 +28,8 @@ const config: KnipConfig = {
   ignoreExportsUsedInFile: true,
   // The exception, written on the export itself with its reason:
   //   /** @keep <why nothing imports it yet, and why it stays> */
+  // `scripts/check-deadcode.ts` fails a tag without a reason, and one on an
+  // export knip would not report anyway.
   tags: ["-keep"],
 };
 

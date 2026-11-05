@@ -7,7 +7,7 @@ policy in ``tools/deadcode.py``'s docstring.
 
 from pathlib import Path
 
-from tools.deadcode import check
+from tools.deadcode import check, unmatched_entries
 
 
 def _project(tmp_path: Path, app: str, test: str = "") -> Path:
@@ -83,3 +83,42 @@ used()
         "allow(deadcode) without a reason",
         "unused function 'unexcused'",
     ]
+
+
+def test_an_allow_excuses_one_line_only(tmp_path: Path):
+    """A trailing allow excuses its own line; one alone, the line below."""
+    app = """
+class Dead:  # lint: allow(deadcode) kept for the example
+    def method(self):
+        pass
+
+
+# lint: allow(deadcode) kept for the example
+def kept():
+    pass
+def next_one():
+    pass
+"""
+    assert _messages(_project(tmp_path, app)) == [
+        "unused method 'method'",
+        "unused function 'next_one'",
+    ]
+
+
+def test_noqa_excuses_nothing(tmp_path: Path):
+    app = "def dead():  # noqa\n    pass\n\n\ndef dead_too():  # noqa: V103\n    pass\n"
+    assert sorted(_messages(_project(tmp_path, app))) == [
+        "unused function 'dead'",
+        "unused function 'dead_too'",
+    ]
+
+
+def test_an_ignore_entry_nothing_matches_is_reported(tmp_path: Path):
+    _project(tmp_path, "def dispatch():\n    pass\n")
+    unmatched = unmatched_entries(tmp_path)
+    assert "IGNORE_NAMES names 'dispatch', which matches nothing in the backend" not in unmatched
+    assert "IGNORE_DECORATORS names '@*router.*', which matches nothing in the backend" in unmatched
+
+
+def test_every_ignore_entry_matches_backend_code():
+    assert unmatched_entries() == []

@@ -6,14 +6,22 @@
 //      key kept in a field or prop (`labelKey: "items.heading"`);
 //   2. it is a plural variant (`items.count_one`) of a key that is read:
 //      code asks for the base and i18next picks the suffix from the count;
-//   3. it sits under the static head of a template literal:
-//      t(`items.columns.${column}`) reads every key under `items.columns.`;
-//   4. a dotted ancestor is a string literal: `items.form` kept in a
-//      constant and completed later, or a subtree read whole.
-// A bare top-level word ("items") never counts as an ancestor: it is as
-// likely a domain value (a query key, a route) as a namespace, and would
-// keep a whole dead subtree alive. So the check can miss a dead key, but a
-// key it reports is read nowhere.
+//   3. it starts with the static head of a template literal, when that head
+//      is two segments or more: t(`items.columns.${column}`) reads every key
+//      under `items.columns.`, t(`items.status_${s}`) every `items.status_*`;
+//   4. a dotted ancestor of two segments or more is a string literal:
+//      `items.form` kept in a constant and completed later, or a subtree read
+//      whole.
+// One segment is never enough, for an ancestor or a template head: "items"
+// or `form.${name}` is as likely a query key or a DOM id as a namespace, and
+// would keep a whole dead subtree alive.
+//
+// So the check can be wrong both ways. A literal that happens to spell a key
+// keeps that key alive. And a key built in a way it does not see is reported
+// though read: concatenation (`"items.columns." + c`), `useTranslation`'s
+// `keyPrefix`, i18next's `context` suffix, a one-segment head. That key goes
+// in `KEPT` (check-i18n-keys.ts) with the reason, or is asked for in a form
+// the check reads.
 import ts from "typescript";
 
 /** A locale file's name and its parsed JSON. */
@@ -42,7 +50,15 @@ export interface Unused {
 }
 
 const PLURAL_SUFFIX = /_(?:ordinal_)?(?:zero|one|two|few|many|other)$/;
-const KEY_HEAD = /^[\w-]+(?:\.[\w-]+)*\.$/;
+// Two segments or more, optionally ending in the separator before the
+// interpolation: `a.b.`, `a.b_`, `a.b`.
+const KEY_HEAD = /^[\w-]+(?:\.[\w-]+)+\.?$/;
+
+/** Whether a file under `src/` is read for keys: a test is not a reader, as
+ *  a key only a test asks for is shown to nobody. */
+export function isReader(path: string): boolean {
+  return /\.tsx?$/.test(path) && !/\.test\.tsx?$/.test(path);
+}
 
 /** Every leaf key of a locale tree, dotted: `{a: {b: "x"}}` -> `["a.b"]`. */
 export function leafKeys(tree: unknown, prefix = ""): string[] {
@@ -83,8 +99,16 @@ export function isRead(key: string, reads: Reads): boolean {
     .some((_, i) => literals.has(parts.slice(0, i + 2).join(".")));
 }
 
+/** The `kept` entry covering `key`: the key itself, or a namespace above it. */
+function keptBy(key: string, kept: Readonly<Record<string, string>>) {
+  return Object.keys(kept).find(
+    (entry) => key === entry || key.startsWith(`${entry}.`),
+  );
+}
+
 /** The keys of every locale that nothing reads, and the `kept` entries that
- *  no longer hold: the key is gone from every locale, or it is read now. */
+ *  are wrong: no reason, no key under them in any locale, or every key under
+ *  them read anyway. */
 export function judge(
   locales: Locale[],
   reads: Reads,
@@ -96,11 +120,16 @@ export function judge(
       carriers.set(key, [...(carriers.get(key) ?? []), file]);
     }
   }
-  const unused = [...carriers]
-    .filter(([key]) => !(key in kept) && !isRead(key, reads))
-    .map(([key, files]) => ({ key, files }));
-  const staleKept = Object.keys(kept).filter(
-    (key) => !carriers.has(key) || isRead(key, reads),
-  );
+  const excused = new Set<string>();
+  const unused: Unused[] = [];
+  for (const [key, files] of carriers) {
+    if (isRead(key, reads)) continue;
+    const entry = keptBy(key, kept);
+    if (entry === undefined) unused.push({ key, files });
+    else excused.add(entry);
+  }
+  const staleKept = Object.entries(kept)
+    .filter(([entry, why]) => !excused.has(entry) || !/\w/.test(why))
+    .map(([entry]) => entry);
   return { unused, staleKept };
 }
