@@ -11,8 +11,6 @@ import subprocess
 import unittest
 from pathlib import Path
 
-from tools.tests.test_tools_lint import target
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -26,9 +24,9 @@ def dry_run(goal: str) -> list[str]:
 
 class BackendPins(unittest.TestCase):
     def test_every_requirement_file_is_checked(self) -> None:
-        recipe = target((ROOT / "Makefile").read_text(encoding="utf-8"), "back-pins")
+        recipe = dry_run("back-pins")[0] + " "
         for path in sorted((ROOT / "backend").glob("requirements*.txt")):
-            self.assertIn(f" {path.name}", recipe)
+            self.assertIn(f" {path.name} ", recipe)
 
     def test_each_backend_gate_checks_the_pins_first_and_once(self) -> None:
         for goal in ("backend", "back-lint", "back-build", "back-test"):
