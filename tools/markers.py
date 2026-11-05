@@ -77,10 +77,12 @@ FILES = {
     "html": ("**/*.html",),
 }
 
-# Tracked files no check reads: they take no comments (JSON, the lockfile), are
-# prose that names the words to explain them (Markdown), or are generated.
+# Tracked files no check reads: they take no comments (JSON, JSON Lines, the
+# lockfile), are prose that names the words to explain them (Markdown), or are
+# generated.
 NOT_READ = (
     "**/*.json",
+    "**/*.jsonl",
     "**/*.lock",
     "**/*.md",
     "frontend/.prettierrc",

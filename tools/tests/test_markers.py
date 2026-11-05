@@ -126,9 +126,7 @@ class WhichFiles(unittest.TestCase):
             for path in tracked()
             if syntax_of(path) is None and not matches(path, LAYER_LINTED + NOT_READ)
         ]
-        self.assertEqual(
-            stray, [], "add these to FILES or NOT_READ in tools/markers.py"
-        )
+        self.assertEqual(stray, [], "add these to FILES or NOT_READ in tools/markers.py")
 
     def test_a_file_that_is_not_utf8_is_a_finding_not_a_crash(self) -> None:
         with tempfile.TemporaryDirectory() as root:
