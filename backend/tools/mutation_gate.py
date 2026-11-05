@@ -21,8 +21,7 @@ tool works on committed, pushed content only.
 
 A PR that touches nothing guarded passes and asks nothing. Guarded is the list
 as the base branch's tip, the merge base and the head have it, together, so a
-PR cannot leave the gate by deleting its own entry; and the mutmut pin
-(``PIN_FILE``), when it moves, since it decides which mutants exist. CI runs the **base
+PR cannot leave the gate by deleting its own entry. CI runs the **base
 branch's** copy of this module on the PR head read as git objects (``--rev``),
 so a PR cannot weaken the code that judges it
 (``.github/workflows/mutation-gate.yml``). Standard library only.
@@ -46,9 +45,6 @@ from tools import mutation_source as source
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BASE_REF = "origin/main"
 SENSITIVE_LIST = "backend/mutation-sensitive.txt"
-# The mutmut pin: a PR that moves it changes which mutants exist, so it carries
-# the block too. The file's other lines do not count.
-PIN_FILE = "backend/requirements-dev.txt"
 # An entry with this prefix is guarded (hashed and named in the block) but
 # never mutated: the gate's own files.
 HASH_ONLY = "hash-only "
@@ -89,8 +85,13 @@ def guarded(path: str, entries: list[str]) -> bool:
 
 
 def git(root: Path, *args: str, check: bool = True) -> str:
+    """``git`` with paths as they are: unquoted, a non-ASCII name included."""
     return subprocess.run(
-        ["git", *args], cwd=root, capture_output=True, text=True, check=check
+        ["git", "-c", "core.quotePath=false", *args],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=check,
     ).stdout
 
 
@@ -110,25 +111,21 @@ def read_many(root: Path, specs: list[str]) -> dict[str, str]:
     found, at = {}, 0
     for spec in specs:
         header_end = out.index(b"\n", at)
+        # `<sha> <type> <size>`, then that many bytes and a newline; or one
+        # line saying it is missing (or ambiguous), with nothing after it.
         header = out[at:header_end].split()
         at = header_end + 1
-        if header[-1] == b"missing" or header[1] != b"blob":
+        if len(header) != 3:
             found[spec] = ""
             continue
         size = int(header[2])
-        found[spec] = out[at : at + size].decode("utf-8", "replace")
+        found[spec] = out[at : at + size].decode("utf-8", "replace") if header[1] == b"blob" else ""
         at += size + 1
     return found
 
 
 def merge_base(root: Path, base_ref: str, rev: str = "HEAD") -> str:
     return git(root, "merge-base", base_ref, rev).strip()
-
-
-def mutmut_pin(text: str) -> list[str]:
-    """The ``mutmut`` lines of a requirements file: which mutmut runs, and so
-    which mutants exist."""
-    return [line.strip() for line in text.splitlines() if line.strip().lower().startswith("mutmut")]
 
 
 def sensitive_entries(
@@ -142,27 +139,23 @@ def sensitive_entries(
 
 def touched(root: Path, base: str, entries: list[str], rev: str = "HEAD") -> list[str]:
     """Guarded paths whose content differs between ``base`` and ``rev`` (a
-    mode change alone is no change), and the requirements file when its
-    mutmut pin moved."""
-    raw = git(root, *DIFF, "--raw", "--no-abbrev", base, rev, "--").splitlines()
-    # `:<old mode> <new mode> <old blob> <new blob> <status>\t<path>`
-    rows = [line.split("\t", 1) for line in raw if line.startswith(":")]
-    changed = [p for meta, p in rows if meta.split()[2] != meta.split()[3]]
-    found = {p for p in changed if guarded(p, entries)}
-    if PIN_FILE in changed:
-        pins = read_many(root, [f"{base}:{PIN_FILE}", f"{rev}:{PIN_FILE}"])
-        if mutmut_pin(pins[f"{base}:{PIN_FILE}"]) != mutmut_pin(pins[f"{rev}:{PIN_FILE}"]):
-            found.add(PIN_FILE)
-    return sorted(found)
+    mode change alone is no change)."""
+    # With `-z`, `:<old mode> <new mode> <old blob> <new blob> <status>\0<path>\0`,
+    # the path as it is: no quoting, whatever characters it holds.
+    fields = git(root, *DIFF, "--raw", "-z", "--no-abbrev", base, rev, "--").split("\0")
+    rows = zip(fields[0::2], fields[1::2], strict=False)
+    changed = [p for meta, p in rows if meta.startswith(":") and meta.split()[2] != meta.split()[3]]
+    return sorted(p for p in changed if guarded(p, entries))
 
 
 def blobs(root: Path, paths: list[str], rev: str = "HEAD") -> dict[str, str]:
     """Each path's blob as ``rev`` has it; a path it lacks is left out."""
     found = {}
     if paths:
-        for line in git(root, "ls-tree", rev, "--", *paths).splitlines():
-            meta, path = line.split("\t", 1)
-            found[path] = meta.split()[2]
+        for row in git(root, "ls-tree", "-z", rev, "--", *paths).split("\0"):
+            if row:
+                meta, path = row.split("\t", 1)
+                found[path] = meta.split()[2]
     return found
 
 

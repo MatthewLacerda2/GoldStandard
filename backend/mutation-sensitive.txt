@@ -21,10 +21,9 @@ backend/core/rate_limiter.py
 #
 # `hash-only`: guarded (hashed, and named in the block) but never mutated: the
 # gate's own files, so a PR that changes how it judges says so in its block.
-# CI runs `main`'s copy of all of them anyway. Also guarded, without an entry:
-# the mutmut pin in `backend/requirements-dev.txt`, when it moves. Not guarded:
-# the Makefile recipe that runs the gate, which the independent review's
-# *CI and the gates* trigger covers.
+# CI runs `main`'s copy of all of them anyway. Not guarded: the Makefile recipe
+# that runs the gate and the mutmut pin in `backend/requirements-dev.txt`, which
+# the independent review's *CI and the gates* trigger covers.
 hash-only backend/mutation-sensitive.txt
 hash-only backend/tools/mutation_gate.py
 hash-only backend/tools/mutation_block.py

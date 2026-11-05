@@ -17,7 +17,8 @@ import hashlib
 import re
 from dataclasses import dataclass, field
 
-_FILE = re.compile(r"^(---|\+\+\+) (?:[ab]/(.*)|/dev/null)$")
+# A path holding a space ends in a tab on these lines.
+_FILE = re.compile(r"^(---|\+\+\+) (?:[ab]/(.*?)\t?|/dev/null)$")
 _HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
 

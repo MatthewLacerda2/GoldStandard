@@ -58,7 +58,14 @@ def test_a_token_from_another_issuer_is_refused():
         decode_access_token(_token(iss="someone-else"))
 
 
-@pytest.mark.parametrize("claim", ["exp", "iat", "iss", "aud", "sub"])
+@pytest.mark.parametrize("claim", ["exp", "iat", "sub"])
 def test_a_token_missing_a_required_claim_is_refused(claim):
+    # Only the `require` list refuses these: PyJWT accepts a token without them.
+    with pytest.raises(jwt.MissingRequiredClaimError):
+        decode_access_token(_token(**{claim: None}))
+
+
+@pytest.mark.parametrize("claim", ["iss", "aud"])
+def test_the_issuer_and_audience_checks_refuse_a_token_without_them(claim):
     with pytest.raises(jwt.MissingRequiredClaimError):
         decode_access_token(_token(**{claim: None}))

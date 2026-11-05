@@ -126,9 +126,11 @@ def changed_files(root: Path, base_ref: str, base: str, rev: str | None) -> list
     included, when None) changes from ``base`` and still has."""
     entries = gate.sensitive_entries(root, base_ref, rev or "HEAD", base)
     head = [rev] if rev is not None else []
-    paths = set(gate.git(root, "diff", "--name-only", "--no-renames", base, *head, "--").split())
+    paths = set(
+        gate.git(root, "diff", "--name-only", "--no-renames", base, *head, "--").splitlines()
+    )
     if rev is None:
-        paths |= set(gate.git(root, "ls-files", "--others", "--exclude-standard").split())
+        paths |= set(gate.git(root, "ls-files", "--others", "--exclude-standard").splitlines())
     return sorted(
         p
         for p in paths

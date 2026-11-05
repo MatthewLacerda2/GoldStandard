@@ -167,12 +167,15 @@ def parse(body: str) -> Report | None:
 
 def consistent(report: Report) -> bool:
     """Whether the survivor lines are the ones the counts call for (one per
-    mutant not killed) and the counts add up to the mutants of the functions
-    run. The ``DIFF_LINES`` are the gate's to recompute."""
+    mutant not killed), the counts add up to the mutants of the functions run,
+    and each function run had at least one. The ``DIFF_LINES`` are the gate's
+    to recompute."""
     listed = Counter(d.status for d in report.lines if d.status not in DIFF_LINES)
     expected = {s: n for s, n in report.counts.items() if s not in SETTLED and n}
     total = sum(n for n, _ in report.mutated.values())
-    return dict(listed) == expected and sum(report.counts.values()) == total
+    # A function with no mutant is a `no mutant` line, never a count of 0.
+    counted = all(n > 0 for n, _ in report.mutated.values())
+    return counted and dict(listed) == expected and sum(report.counts.values()) == total
 
 
 def _carried(old: Report, new: Report) -> dict[str, str]:

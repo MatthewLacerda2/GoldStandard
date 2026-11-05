@@ -186,11 +186,15 @@ def unmatched(mutants: Path, names: list[str]) -> list[str]:
     """The names no generated mutant matches (mutmut asserts and stops on
     one, and a bare word the shell expanded, ``utils`` for ``utils*``, is the
     usual cause). Read from the ``.meta`` files the generation step writes."""
-    keys = [
-        key
-        for meta in mutants.rglob("*.meta")
-        for key in json.loads(meta.read_text()).get("exit_code_by_key", {})
-    ]
+    keys: list[str] = []
+    for meta in mutants.rglob("*.meta"):
+        try:
+            keys += json.loads(meta.read_text()).get("exit_code_by_key", {})
+        except json.JSONDecodeError, UnicodeDecodeError:
+            # A run killed while writing it: its names are unknown, not absent,
+            # so nothing can be said to match nothing.
+            print(f"[back-mutate] {meta} is unreadable; delete mutants/", file=sys.stderr)
+            return []
     return [n for n in names if not any(key == n or fnmatch(key, n) for key in keys)]
 
 

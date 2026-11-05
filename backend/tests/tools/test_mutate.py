@@ -171,3 +171,10 @@ def test_a_test_the_checkout_deleted_still_in_mutants_is_stale(tmp_path):
     (mutants / "__pycache__").mkdir()
     (mutants / "__pycache__" / "cached.py").write_text("")  # mutmut's own, not a copy
     assert mutate.stale_copies(mutants, tmp_path) == ["tests/test_one.py"]
+
+
+def test_a_truncated_meta_file_says_nothing_matches_nothing(tmp_path, capsys):
+    (tmp_path / "utils").mkdir()
+    (tmp_path / "utils" / "security.py.meta").write_text('{"exit_code_by_key": {"utils.sec')
+    assert mutate.unmatched(tmp_path, ["utils"]) == []
+    assert "unreadable" in capsys.readouterr().err

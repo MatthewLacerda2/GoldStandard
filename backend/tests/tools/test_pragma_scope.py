@@ -78,3 +78,12 @@ def test_the_check_reads_only_the_sensitive_files_the_pr_changes(repo):
     found = ps.problems(repo.root, "origin/main")
     assert found and all(p.startswith(f"{GUARD}:10:") for p in found)
     assert any("no reason" in p for p in found)
+
+
+def test_a_sensitive_path_with_a_space_is_found(repo, monkeypatch):
+    path = "backend/utils/my dir/ação.py"
+    monkeypatch.setattr(ps.gate, "sensitive_entries", lambda *args: ["backend/utils/my dir/"])
+    repo.write(path, "def f(x):\n    return x  # pragma: no mutate\n")
+    repo.commit()
+    base = ps.gate.merge_base(repo.root, "origin/main")
+    assert ps.changed_files(repo.root, "origin/main", base, "HEAD") == [path]

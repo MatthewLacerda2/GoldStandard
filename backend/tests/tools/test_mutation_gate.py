@@ -145,11 +145,6 @@ def test_a_guarded_file_gone_from_the_head_is_a_deleted_line():
     assert (line.status, line.name) == (block.DELETED, GUARD)
 
 
-def test_only_the_pins_mutmut_line_counts():
-    assert gate.mutmut_pin("ruff==1\nmutmut==3.8.1\n") == gate.mutmut_pin("ruff==2\nmutmut==3.8.1")
-    assert gate.mutmut_pin("mutmut==3.8.1") != gate.mutmut_pin("mutmut==3.9.0")
-
-
 def test_the_list_is_read_at_the_base_the_merge_base_and_the_head(monkeypatch):
     # So removing an entry does not free its file in the same PR, and an entry
     # `main` adds after the branch point guards the branch.
@@ -161,23 +156,34 @@ def test_the_list_is_read_at_the_base_the_merge_base_and_the_head(monkeypatch):
 
 
 def _raw(path: str, old: str, new: str, mode: str = "100644") -> str:
-    return f":100644 {mode} {old * 40} {new * 40} M\t{path}"
+    """One file of ``git diff --raw -z``."""
+    return f":100644 {mode} {old * 40} {new * 40} M\0{path}\0"
 
 
-def test_only_guarded_content_and_a_moved_mutmut_pin_are_touched(monkeypatch):
+def test_only_guarded_content_is_touched(monkeypatch):
     raw = [
         _raw(GUARD, "a", "a", mode="100755"),  # a mode change is no change
         _raw("backend/services/fuel.py", "a", "b"),  # not guarded
-        _raw(gate.PIN_FILE, "a", "b"),
     ]
-    monkeypatch.setattr(gate, "git", lambda root, *args, **kw: "\n".join(raw))
-    pins = {"base": "ruff==1\nmutmut==3.8.1\n", "head": "ruff==2\nmutmut==3.8.1\n"}
-    monkeypatch.setattr(
-        gate, "read_many", lambda root, specs: {s: pins[s.partition(":")[0]] for s in specs}
-    )
+    monkeypatch.setattr(gate, "git", lambda root, *args, **kw: "".join(raw))
     assert gate.touched(None, "base", [GUARD], "head") == []
-    pins["head"] = "mutmut==3.9.0\n"
-    assert gate.touched(None, "base", [GUARD], "head") == [gate.PIN_FILE]
+    raw.append(_raw(GUARD, "a", "b"))
+    assert gate.touched(None, "base", [GUARD], "head") == [GUARD]
+
+
+def test_a_count_of_zero_is_no_run():
+    # The tool writes a function with no mutant as a `no mutant` line, so a
+    # function "mutated" with 0 mutants would vouch for nothing.
+    body = _body(counts={"killed": 4}).replace(f"`{ALLOWED}` (4,", f"`{ALLOWED}` (0,")
+    report = block.parse(body.replace("result: 4 killed", "result: nothing to mutate"))
+    assert report.mutated[ALLOWED][0] == 0 and not block.consistent(report)
+    assert _problems(block.render(report))
+
+
+def test_a_function_listed_with_another_source_is_not_this_prs_own():
+    body = _body().replace(f"#{HASHES['x_allowed']})", "#00000000)")
+    (problem,) = _problems(body)
+    assert "not this PR's own" in problem
 
 
 def test_the_diff_ignores_what_a_users_git_config_would_change():
@@ -215,3 +221,26 @@ def test_the_check_reads_the_heads_commits_as_objects(repo):
     repo.git("checkout", "--quiet", "main")
     assert _check(repo, "", rev=head) == 1
     assert _check(repo, body, rev=head) == 0
+
+
+def test_one_batch_read_keeps_its_place_past_a_tree_or_a_missing_path(repo):
+    specs = ["HEAD:backend", f"HEAD:{GUARD}", "HEAD:nowhere.py", "HEAD:backend/services/fuel.py"]
+    read = gate.read_many(repo.root, specs)
+    assert read["HEAD:backend"] == "" and read["HEAD:nowhere.py"] == ""
+    assert read[f"HEAD:{GUARD}"] == GUARD_SOURCE
+    assert read["HEAD:backend/services/fuel.py"].startswith("def litres")
+
+
+def test_a_path_with_a_space_or_an_accent_is_read_as_it_is(repo):
+    path = "backend/utils/my dir/ação.py"
+    repo.write(path, "def f(x):\n    return x\n")
+    repo.commit()
+    repo.git("update-ref", "refs/remotes/origin/main", "HEAD")
+    repo.edit(path, "return x", "return x + 1")
+    base = gate.merge_base(repo.root, "origin/main")
+    entries = ["backend/utils/my dir/"]
+    assert gate.touched(repo.root, base, entries) == [path]
+    assert gate.file_lines(repo.root, base, [path])[path].new == {2}
+    assert list(gate.expected(repo.root, base, [path], entries).functions) == [
+        "utils.my dir.ação.x_f"
+    ]

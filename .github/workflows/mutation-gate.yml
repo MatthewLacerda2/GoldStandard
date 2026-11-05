@@ -50,15 +50,21 @@ jobs:
     timeout-minutes: 5
     steps:
       # The base branch, with full history for the merge base.
+      # No token left in the checkout's git config: nothing after this step
+      # needs one but the fetch below, which is handed it for that command only.
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.base.ref }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Fetch the PR head as data
-        run: git fetch --no-tags origin "$HEAD_SHA"
+        run: |
+          auth="$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git -c "http.extraheader=AUTHORIZATION: basic $auth" fetch --no-tags origin "$HEAD_SHA"
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          TOKEN: ${{ github.token }}
 
       - uses: actions/setup-python@v7
         with:

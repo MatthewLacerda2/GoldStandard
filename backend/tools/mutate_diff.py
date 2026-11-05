@@ -90,13 +90,17 @@ def plan_file(plan: Plan, path: str, text: str, lines: set[int]) -> None:
 
 def plan(root: Path, base: str, paths: list[str], entries: list[str]) -> Plan:
     """What to run over the touched sensitive ``.py`` files that still exist
-    (the gate's own files are hashed, never mutated)."""
+    (the gate's own files are hashed, never mutated). Each is read as ``HEAD``
+    has it, the blob the gate hashes, not as the working tree spells it."""
     result = Plan()
-    sources = [p for p in paths if p.endswith(".py") and gate.is_sensitive(p, entries)]
-    sources = [p for p in sources if (root / p).is_file()]
+    present = gate.blobs(root, paths)
+    sources = [
+        p for p in paths if p in present and p.endswith(".py") and gate.is_sensitive(p, entries)
+    ]
     lines = gate.file_lines(root, base, sources)
+    texts = gate.read_many(root, [f"HEAD:{p}" for p in sources]) if sources else {}
     for path in sources:
-        plan_file(result, path, (root / path).read_text(), lines.get(path, source.Lines()).new)
+        plan_file(result, path, texts[f"HEAD:{path}"], lines.get(path, source.Lines()).new)
     return result
 
 

@@ -3,3 +3,5 @@ pytest==9.2.0
 pytest-asyncio==1.4.1
 httpx==0.28.1
 mutmut==3.8.1
+# A backend test reads the mutation gate's workflow; only libcst brought it before.
+pyyaml==6.0.3
