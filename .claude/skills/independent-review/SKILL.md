@@ -39,8 +39,8 @@ Before the merge, when the PR hits any **trigger**:
 - **A refactor**, on either side: code moved across files or layers with the
   intent of unchanged behaviour, or any PR adding more than ~1000 lines.
 - **CI and the gates** — `.github/workflows/`, the `Makefile`,
-  `backend/tools/house_lint.py`, `frontend/eslint-rules/`,
-  `frontend/eslint.config.ts`, or the lint and test config the gates run.
+  `backend/tools/`, `frontend/eslint-rules/`, `frontend/scripts/`,
+  `frontend/eslint.config.ts`, `frontend/knip.ts`, or the lint and test config the gates run.
 
 And **on demand**: whenever the user asks for a PR to be reviewed, open or
 already merged (*Catching up on a merged PR*, below).

@@ -34,13 +34,6 @@ export function classTokens(value: string): string[] {
   return value.split(/\s+/).filter(Boolean);
 }
 
-/** True when the JSX element name is a lowercase intrinsic (e.g. `input`). */
-export function isIntrinsicElement(
-  name: TSESTree.JSXTagNameExpression,
-): name is TSESTree.JSXIdentifier {
-  return name.type === "JSXIdentifier" && /^[a-z]/.test(name.name);
-}
-
 /** True when the file path is inside a `components/ui` directory. */
 export function isUiComponentFile(filename: string): boolean {
   return /[\\/]components[\\/]ui[\\/]/.test(filename);

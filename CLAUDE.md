@@ -227,8 +227,8 @@ check that only runs in CI, or only locally.
 ```
 make check      # everything
 make tools      # tools/: ruff + length limits + tests; docs-lint (doc limits, named paths)
-make backend    # back-pins (the venv against its pins) + back-lint + back-build + back-test
-make frontend   # front-lint + front-build + front-test + front-contract
+make backend    # back-pins (the venv against its pins) + back-lint + back-deadcode + back-build + back-test
+make frontend   # front-lint + front-deadcode + front-build + front-test + front-contract
 make setup      # once per clone: each commit runs `make pre-commit` (lint only)
 ```
 

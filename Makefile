@@ -28,8 +28,8 @@ TOOLS_LINT_READS := backend/requirements-dev.txt backend/pyproject.toml backend/
 .PHONY: check backend frontend
 check: tools backend frontend
 
-backend: back-lint back-build back-test
-frontend: front-lint front-build front-test front-contract
+backend: back-lint back-deadcode back-build back-test
+frontend: front-lint front-deadcode front-build front-test front-contract
 
 # ---------------------------------------------------------------------------
 # Repository tools  (tools/: stdlib-only Python serving the whole repo)
@@ -61,19 +61,24 @@ docs-lint:
 # ---------------------------------------------------------------------------
 # Backend gates  (run from backend/, driven by $(PYTHON))
 # ---------------------------------------------------------------------------
-.PHONY: back-pins back-lint back-build back-test back-install openapi back-mutate back-mutate-diff back-mutation-gate
+.PHONY: back-pins back-lint back-deadcode back-build back-test back-install openapi back-mutate back-mutate-diff back-mutation-gate
 # Every backend gate starts by checking that PYTHON's packages are the ones
 # requirements*.txt pins: a venv made before a pin moved judges nothing. Once
 # per make run, in well under a second.
 back-pins:
 	cd backend && $(PYTHON) tools/pins.py requirements.txt requirements-dev.txt
 
-back-lint back-build back-test: back-pins
+back-lint back-deadcode back-build back-test: back-pins
 
 back-lint:
 	cd backend && $(PYTHON) -m ruff check .
 	cd backend && $(PYTHON) -m ruff format --check .
 	cd backend && $(PYTHON) tools/house_lint.py
+
+# Code nothing calls, or only the tests do (vulture; the policy is in the
+# tool's docstring).
+back-deadcode:
+	cd backend && $(PYTHON) -m tools.deadcode
 
 # Imports the app (the build) and checks frontend/openapi.json, the contract
 # the frontend's types are held to, against what its endpoints answer.
@@ -119,9 +124,14 @@ back-install:
 # ---------------------------------------------------------------------------
 # Frontend gates  (run from frontend/, driven by $(BUN))
 # ---------------------------------------------------------------------------
-.PHONY: front-lint front-build front-test front-contract front-install
+.PHONY: front-lint front-deadcode front-build front-test front-contract front-install
 front-lint:
 	cd frontend && $(BUN) run check
+
+# Files, exports and dependencies nothing uses (knip, knip.ts), and locale
+# keys nothing reads (scripts/check-i18n-keys.ts).
+front-deadcode:
+	cd frontend && $(BUN) run deadcode
 
 front-build:
 	cd frontend && $(BUN) run build
