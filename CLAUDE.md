@@ -265,8 +265,10 @@ needs a running app, ask them to start it.
   sessions never collide.
 - Name each session after what it's doing.
 - Cloud sessions are welcome — they keep worktrees off the local disk — but not
-  required. There is no merge queue: nothing here is compiled, CI takes about a
-  minute, and a rebase-and-re-verify is cheap (`issue-batch` has the numbers).
+  required.
+- Merging is the merge queue's (`make queue`): label a reviewed, ready pull
+  request `queue` and it waits for CI, rebases, merges and cleans up, handing
+  back only what needs somebody (`ci-merge`, *Feeding the merge queue*).
 
 ## Upgrade paths (intentionally deferred in the skeleton)
 

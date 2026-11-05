@@ -91,20 +91,76 @@ workflows is a change here.
    of being finished, and ready means finished. A pull request that hits no
    trigger skips this step.
 3. **Mark it ready.** That is what starts CI.
-4. **Wait for the runs that should exist** on the rebased head, and check that
-   they exist (*CI as it runs today*).
-5. **Merge, once merging is approved.** `CLAUDE.md`, *Pull Requests*, says when:
-   in a batch, starting the batch was the approval; in a conversation, the
-   user's word. Nobody waits to read the code. Merge as soon as CI is green, or
-   immediately if CI does not run, and a triggered pull request once its
-   `Independent review` comment exists too. If CI fails, stop and fix forward
-   or report. A pull request the user said to leave alone waits for them.
-6. `gh pr merge`, then remove the worktree and delete the branch —
-   `deleteBranchOnMerge` is off, so both are yours to do.
+4. **Label it `queue`, once merging is approved.** `CLAUDE.md`, *Pull
+   Requests*, says when: in a batch, starting the batch was the approval; in a
+   conversation, the user's word. Nobody waits to read the code. A pull request
+   the user said to leave alone is not labelled.
+5. **The queue does the rest** (*Feeding the merge queue*, below): it waits for
+   `CI ok` on the head, rebases a conflict, merges as soon as everything is
+   green, deletes the branch and frees the worktree, and hands back what needs
+   somebody. If CI fails, the hand-back says so: fix forward or report.
 
-Within one layer, merges serialize: the second branch is rebased and
-re-verified after the first lands. Across layers they do not (`issue-batch`,
-*Merges serialize per layer, not globally*, has why).
+Merging by hand is the fallback for a repo where the queue cannot run: wait for
+`CI ok` on the head and check that it exists (*CI as it runs today*), merge
+with a merge commit, then remove the worktree and delete the branch
+(`deleteBranchOnMerge` is off).
+
+The queue merges a branch that merges cleanly as it is, without a re-run on the
+new `main`; what two branches in one layer break together shows as a red
+`main` (`issue-batch`, *Merges serialize per layer, not globally*, has why).
+
+## Feeding the merge queue
+
+`make queue` (`tools/merge_queue/`; its package docstring is the design) waits,
+rebases and merges so nobody holds a context open through CI. You read diffs
+and label; it spends no tokens.
+
+- **Label `queue` once the pull request is reviewed and ready**: marked ready,
+  and its `Independent review` comment posted when a trigger hits. The label is
+  the go-ahead, not the proof. Before every merge the queue checks it again:
+  every check `.github/rulesets/main.json` requires (today `CI ok`) passed on
+  the head commit, the review record names that head (`independent-review`,
+  *Answering the findings*), what the description closes may be closed, it
+  does not conflict with `main`, and `main` is not red.
+- **One watch per clone, in the background**:
+  `make queue ARGS=--watch > <scratchpad>/queue.log 2>&1`, and follow the log
+  for `HANDED BACK|stopped:|resume:` rather than the watch itself. A watch ends
+  after `--for` minutes (70 by default); its last line is the command that
+  resumes it, and the line before says the exit status in words. A second
+  queue on the same clone exits at once (a lock). `make queue PRS="12 14"`
+  takes named pull requests, label or not, until each merged or was handed back.
+- **Ask without acting**: `make mergeable PR=N` asks every question the queue
+  asks before it merges, read-only (a coder can ask it before readying);
+  `ARGS="--watch --dry-run"` runs one read-only pass. Never merge by hand beside
+  a running queue: a pull request that must go now is labelled.
+
+**Reading its hand-backs.** Each is one line, `queue: HANDED BACK #N: <reason>`,
+with the detail indented under it, and the reason is the first thing to fix. A
+hand-back is not a removal: the queue keeps asking, and a pull request whose
+answer turns into a pass (a push, an edited description, a review record)
+merges on its own.
+
+- **A red `CI ok`, or a conflict its rebase stopped on** (the paths are named):
+  back to the coder. The fix is a push; the queue takes the new head.
+- **No `CI ok` on the head**, or a skipped one: absent is not green. Mark it
+  draft and ready again, or push, to get a run.
+- **The review lane**: no `Independent review` record, or one naming another
+  head. Run `independent-review` on what was pushed since, then post a record
+  naming the new head. A rebase that left the change as it was needs nothing:
+  the queue counts the record for it.
+- **What it closes**: an issue labelled `planning` or `human`, a number that is
+  a pull request or a closed issue, or a branch `N-…` whose description does
+  not name #N. Each is a description edit away; a stage label only the user
+  removes.
+- **`` `main` is red: ``** is not a hand-back but a hold: a merge broke `main`
+  (two green branches, red together). The queue re-runs the failed jobs once,
+  then holds every green pull request unless its branch contains the commit
+  that broke it. Fixing it outranks the batch: a `fix` branch cut from the
+  current `main`, labelled `queue`, and the line moves once it merges.
+
+The exit status is the most urgent thing to read: 0 nothing to read, 1
+something was handed back, 3 GitHub, the network or the machine failed (run it
+again), 4 another queue holds the lock, 5 the credentials were refused.
 
 ## A red ready pull request stays ready
 
