@@ -14,9 +14,12 @@ CI_OK = checks.Required("CI ok", 15368)
 ACTIONS = 15368
 
 
-def check_run(conclusion="success", status="completed", run_id=1, name="CI ok", app=ACTIONS):
+def check_run(
+    conclusion="success", status="completed", run_id=1, name="CI ok", app=ACTIONS, suite=1
+):
     return {
         "id": run_id,
+        "check_suite": {"id": suite},
         "name": name,
         "status": status,
         "conclusion": conclusion if status == "completed" else None,
@@ -57,6 +60,7 @@ class FakeHub:
         self.pulls: dict[int, dict] = {}
         self.issues: dict[int, dict] = {}
         self.notes: dict[int, list[tuple[str, str]]] = {}
+        self.messages: dict[int, list[str]] = {}
         self.runs: dict[str, list[dict]] = {}
         self.merges: list[int] = []
         self.refusing: set[int] = set()
@@ -73,6 +77,9 @@ class FakeHub:
 
     def comments(self, number):
         return self.notes.get(number, [])
+
+    def commit_messages(self, number):
+        return self.messages.get(number, [])
 
     def check_runs(self, sha):
         return self.runs.get(sha, [])
@@ -149,7 +156,8 @@ def make_queue(hub, clone, watch=False, dry_run=False, memory=None) -> Queue:
     memory = memory or Memory(None)
     gate = judge.MainGate(hub, clone, [CI_OK], memory, dry_run)
     queue = Queue(opts, hub, clone, memory, judge.Judge(hub, clone, gate))
-    queue.after.run = lambda pull: ["cleaned."]
+    queue.after.run = lambda pull: (pull["number"] in hub.merges, ["cleaned."])
+    queue.after.cleanup = lambda pull: ["cleaned later."]
     return queue
 
 

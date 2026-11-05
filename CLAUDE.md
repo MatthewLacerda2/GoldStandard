@@ -168,15 +168,16 @@ to ask for a review.
   assigned to someone else, say so and let the user decide — you may keep
   writing the PR meanwhile.
 - **When to merge depends on how the work started.**
-  - **In a batch** (`issue-batch`), starting the batch is the approval: merge
-    each PR once its gates and CI are green and, when triggered, its independent
-    review is answered.
+  - **In a batch** (`issue-batch`), starting the batch is the approval: hand
+    each PR to the merge queue once it is ready and, when triggered, its
+    independent review is answered.
   - **In a conversation**, the conversation is usually about one theme, and its
     PR is where that theme lands. Keep the PR open while the user is still adding
     to it; when they seem done, offer the merge, and merge on their word.
-  - Either way, once merging is approved carry it through without pausing: merge
-    as soon as CI is green (or immediately if CI doesn't run). If CI fails, stop
-    and report instead. A PR the user said to leave alone waits for them.
+  - Either way, once merging is approved carry it through without pausing: label
+    the PR `queue`, and the queue merges it as soon as CI is green. If it hands
+    the PR back, fix forward or report. A PR the user said to leave alone waits
+    for them.
 - **"Do" / "resolve" / "work" an issue** means the full chain by default, no
   asking between steps: assign the user, create the worktree, implement, run the
   gates, push, and open a ready-for-review PR — assigned to them, closing the

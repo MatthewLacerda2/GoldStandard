@@ -19,15 +19,21 @@ the same name and stand in for it.
   a ready pull request whose newest `CI ok` is skipped was never checked.
 - **Red is an answer at once**, even while another context is still running.
 
-**On `main`** ([`main_red`]), the commits are walked newest first (its first
-parents: each merge and each direct push gets its own run, and `ci.yml` never
-cancels one on `main`, so a red there means a job really failed). A commit
-still running, skipped or cancelled says nothing and the one before it
+**On `main`** the verdict is **per job**, not per required context: a push
+run skips the jobs whose layer the push did not touch, so after a merge that
+turned `backend` red, a docs-only merge's green `CI ok` says nothing about the
+backend. The jobs judged are the required contexts and every job of the same
+workflow run ([`jobs`]: the check runs sharing a check suite with one). For
+each job ([`main_red`]), `main`'s first parents are walked newest first (each
+merge and each direct push gets its own run, and `ci.yml` never cancels one on
+`main`, so a red there means a job really failed). A commit on which the job
+is still running, skipped or cancelled says nothing and the one before it
 decides, unless it is a re-run of a run that failed: a red being re-run is
-still red until it says otherwise. The **red streak** is the newest commits
-that failed back to the last that passed; its oldest commit is the one that
-broke `main`, and a pull request whose branch contains it carries the fix,
-which its own green run then proves.
+still red until it says otherwise. The **red streak** is the newest commits on
+which the job failed, back to the last on which it passed; its oldest commit
+is the one that broke it. A pull request carries the fix only when its branch
+contains that commit **and** its own run ran that job and passed it
+([`proves_fixed`]): a run that skipped the job proves nothing about it.
 """
 
 from __future__ import annotations
@@ -65,9 +71,9 @@ class Verdict:
 
 @dataclass(frozen=True)
 class Red:
-    """A required context red on `main`: where the streak began, and its newest run."""
+    """A job red on `main`: where the streak began, and its newest run."""
 
-    context: str
+    check: Required
     first: str  # the oldest red commit: the one that broke it
     newest: str  # the newest red commit
     run: dict  # the newest red check run
@@ -78,7 +84,7 @@ class Red:
         how = "is being re-run" if self.rerunning else "failed"
         since = "" if self.newest == self.first else f" (red since {self.first[:7]})"
         url = self.run.get("html_url") or "the run"
-        return f"`{self.context}` {how} on `main` at {self.newest[:7]}{since}: {url}"
+        return f"`{self.check.context}` {how} on `main` at {self.newest[:7]}{since}: {url}"
 
 
 def required(ruleset: str) -> list[Required]:
@@ -163,11 +169,32 @@ def says(required: Required, runs: list[dict]) -> str | None:
     return "success" if conclusion == "success" else "red"
 
 
+def jobs(required: list[Required], commits: list[tuple[str, list[dict]]]) -> list[Required]:
+    """The required contexts and every job of the workflow runs that report one:
+    the check runs sharing a check suite with a required context, from its app."""
+    found = list(required)
+    for _, runs in commits:
+        for each in required:
+            suites = {(run.get("check_suite") or {}).get("id") for run in mine(each, runs)}
+            suites.discard(None)
+            for run in runs:
+                job = Required(run.get("name") or "", each.app)
+                in_suite = (run.get("check_suite") or {}).get("id") in suites
+                if in_suite and job.context and job not in found:
+                    found.append(job)
+    return found
+
+
+def proves_fixed(red: Red, runs: list[dict]) -> bool:
+    """Whether a head's own check runs ran `red`'s job and passed it (skipped is not)."""
+    return one(red.check, runs)[0] == GREEN
+
+
 def main_red(required: Required, commits: Iterable[tuple[str, list[dict]]]) -> Red | None:
     """`required`'s red streak on `main`, or `None` when it is not red.
 
-    `commits` are `(sha, check runs)` newest first, read lazily: the walk stops
-    at the first commit that passed.
+    `commits` are `(sha, check runs)` newest first: the walk stops at the first
+    commit on which it passed.
     """
     streak: list[tuple[str, list[dict], str]] = []
     for sha, runs in commits:
@@ -180,4 +207,4 @@ def main_red(required: Required, commits: Iterable[tuple[str, list[dict]]]) -> R
         return None
     (newest, runs, how), first = streak[0], streak[-1][0]
     found = mine(required, runs)
-    return Red(required.context, first, newest, found[-1], how == "rerunning", len(found) > 1)
+    return Red(required, first, newest, found[-1], how == "rerunning", len(found) > 1)

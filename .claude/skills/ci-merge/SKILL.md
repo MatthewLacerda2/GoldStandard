@@ -116,7 +116,9 @@ rebases and merges so nobody holds a context open through CI. You read diffs
 and label; it spends no tokens.
 
 - **Label `queue` once the pull request is reviewed and ready**: marked ready,
-  and its `Independent review` comment posted when a trigger hits. The label is
+  and its `Independent review` comment posted when a trigger hits. Label it over
+  REST, `gh api repos/{owner}/{repo}/issues/N/labels -f 'labels[]=queue'`
+  (`gh pr edit` is GraphQL, which some proxies refuse). The label is
   the go-ahead, not the proof. Before every merge the queue checks it again:
   every check `.github/rulesets/main.json` requires (today `CI ok`) passed on
   the head commit, the review record names that head (`independent-review`,
@@ -148,19 +150,22 @@ merges on its own.
   head. Run `independent-review` on what was pushed since, then post a record
   naming the new head. A rebase that left the change as it was needs nothing:
   the queue counts the record for it.
-- **What it closes**: an issue labelled `planning` or `human`, a number that is
-  a pull request or a closed issue, or a branch `N-…` whose description does
-  not name #N. Each is a description edit away; a stage label only the user
-  removes.
+- **What it closes**, in the description or in a commit message (the merge
+  commit keeps them, and `fixes #N` there closes #N too): an issue labelled
+  `planning` or `human`, a number that is a pull request or a closed issue, or
+  a branch `N-…` whose description does not name #N. A description is an edit
+  away, a commit message a reworded commit; a stage label only the user removes.
 - **`` `main` is red: ``** is not a hand-back but a hold: a merge broke `main`
-  (two green branches, red together). The queue re-runs the failed jobs once,
-  then holds every green pull request unless its branch contains the commit
-  that broke it. Fixing it outranks the batch: a `fix` branch cut from the
+  (two green branches, red together). It is judged per job, since a push run
+  skips the layers it did not touch: a later docs-only merge's green `CI ok`
+  does not clear a red `backend`. The queue re-runs the failed jobs once, then
+  holds every green pull request unless its branch contains the commit that
+  broke the job and its own run ran that job and passed it. Fixing it outranks the batch: a `fix` branch cut from the
   current `main`, labelled `queue`, and the line moves once it merges.
 
 The exit status is the most urgent thing to read: 0 nothing to read, 1
 something was handed back, 3 GitHub, the network or the machine failed (run it
-again), 4 another queue holds the lock, 5 the credentials were refused.
+again), 4 another queue holds this clone's lock, 5 the credentials were refused.
 
 ## A red ready pull request stays ready
 

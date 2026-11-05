@@ -75,6 +75,10 @@ class Queue:
         at = f"{head} {self.clone.main}"
         if self.refused.get(number, ("", ""))[0] == at:
             return self.hand_back(pull, [self.refused[number][1]])
+        if pull["draft"]:
+            # Its clocks start once it is ready: a draft's age is not time in line.
+            self.memory.forget(number)
+            return judge.DRAFT, ["it is a draft; the queue takes it once it is ready."]
         seen = self.memory.seen(number, head, datetime.now(UTC))
         waited = (datetime.now(UTC) - datetime.fromisoformat(seen["at"])).total_seconds()
         try:
@@ -95,6 +99,11 @@ class Queue:
         stops on a conflict is handed back with the paths, never resolved.
         """
         number, head = pull["number"], pull["head"]
+        if pull.get("head_repo") != pull.get("base_repo"):
+            return self.hand_back(
+                pull,
+                [*why, "Its branch is on a fork, which the queue cannot push to: rebase it there."],
+            )
         key = f"{head} {self.clone.main}"
         if key not in self.failed:
             fresh, lines = self.clone.rebase(pull["branch"], head, push=not self.dry)
@@ -113,6 +122,7 @@ class Queue:
 
     def sweep(self, pulls: list[dict]) -> bool:
         """One pass. True when it merged something (and so `main` moved)."""
+        self.settle()
         self.judge.gate.new_pass()
         self.judge.gate.state()  # said, and a new red re-run, whether or not a PR is green
         states: dict[int, str] = {}
@@ -182,7 +192,7 @@ class Queue:
         number, head = pull["number"], pull["head"]
         if self.dry:
             talk.say(f"#{number}: would merge {head[:7]} into `{repo.BASE}`.")
-            for line in self.after.run(pull):
+            for line in self.after.run(pull)[1]:
                 talk.say(f"#{number}: {line}")
             return False
         ok, why = self.hub.merge(number, head)
@@ -201,9 +211,25 @@ class Queue:
         self.memory.passed_over(others)
         self.memory.save()
         talk.say(f"merged #{number}: {pull.get('title', '')}")
-        for line in self.after.run(pull):
+        settled, lines = self.after.run(pull)
+        if not settled:
+            keep = ("number", "branch", "head_repo", "base_repo")
+            self.memory.unsettled[str(number)] = {key: pull.get(key) for key in keep}
+        for line in lines:
             talk.say(f"#{number}: {line}")
+        self.memory.save()
         return True
+
+    def settle(self) -> None:
+        """Clean up after the merges GitHub had not confirmed when they were made."""
+        for key, pull in list(self.memory.unsettled.items()):
+            merged = None if self.dry else self.hub.merged(pull["number"])
+            if merged is None:
+                continue  # unasked, or GitHub did not answer: next pass
+            del self.memory.unsettled[key]
+            lines = self.after.cleanup(pull) if merged else ["GitHub says it did not merge."]
+            for line in lines:
+                talk.say(f"#{key}: {line}")
 
     # -- the loops -----------------------------------------------------------
 

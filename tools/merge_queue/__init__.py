@@ -18,25 +18,29 @@ What it guarantees, and where each guarantee lives:
 - **The review lane is enforced, not replaced**: a pull request that hits an
   `independent-review` trigger (`tools/review_triggers.py`) merges only with an
   `Independent review` comment naming its head (`review.py`).
-- **What it closes may be closed** (`closing.py`): no issue labelled
-  `planning` or `human`, no closing keyword aimed at a pull request or at a
-  closed issue, and a branch named for an issue names it.
+- **What it closes may be closed** (`closing.py`), by its description or by a
+  commit message the merge commit keeps: no issue labelled `planning` or
+  `human`, no closing keyword aimed at a pull request or at a closed issue,
+  and a branch named for an issue names it.
 - **Fewest conflicts first, then the label priority in `CLAUDE.md`, then the
   oldest**; nothing starves; a green one never waits on a pending one it does
   not conflict with (`order.py`).
 - **A conflict with `main` is rebased in a throwaway worktree** and pushed with
-  a lease when clean; otherwise handed back with the paths. It never resolves
-  a conflict itself (`repo.py`).
-- **A red `main` blocks everything but its fix**: while a required check's
-  newest verdict on `main` is red (re-run once, in case of a blip), a green
-  pull request stays in line unless its branch contains the commit that broke
-  it, which its own green run then proves fixed (`judge.MainGate`).
+  a lease when clean; otherwise handed back with the paths (and a fork's
+  branch, which it cannot push to, is handed back). It never resolves a
+  conflict itself (`repo.py`).
+- **A red `main` blocks everything but its fix**: while any job of `main`'s
+  CI is red by its newest verdict that actually ran (per job: a push run skips
+  the layers it did not touch; re-run once, in case of a blip), a green pull
+  request stays in line unless its branch contains the commit that broke the
+  job and its own run ran that job and passed it (`main_gate.py`).
 - **The merge is a merge commit**, only while the head is the one judged
   (REST's `sha`, the `--match-head-commit` of `gh pr merge`), and an
   ambiguous 5xx is asked about before anything is concluded (`github.py`).
 - **After the merge**: the remote branch is deleted (only once GitHub says
-  merged) and the coder's worktree is freed (`aftermath.py`).
-- **One queue at a time** (a lock), and a memory that outlives a watch
+  merged, asked again on later passes when it had not said so yet) and the
+  coder's worktree is freed (`aftermath.py`).
+- **One queue per clone** (a lock), and a memory that outlives a watch
   (`state.py`).
 
 It never rebases a branch that merges cleanly: the stack is interpreted and

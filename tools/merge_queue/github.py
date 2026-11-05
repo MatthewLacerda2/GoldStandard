@@ -110,6 +110,11 @@ class GitHub:
         found = joined(talk.api(self.path(f"issues/{number}/comments?per_page=100")))
         return [((c.get("user") or {}).get("login") or "", c.get("body") or "") for c in found]
 
+    def commit_messages(self, number: int) -> list[str]:
+        """The messages of the pull request's commits (GitHub lists up to 250)."""
+        found = joined(talk.api(self.path(f"pulls/{number}/commits?per_page=100")))
+        return [(c.get("commit") or {}).get("message") or "" for c in found]
+
     def check_runs(self, sha: str) -> list[dict]:
         """Every check run on commit `sha`, re-runs included."""
         found = talk.api(self.path(f"commits/{sha}/check-runs?filter=all&per_page=100"))
@@ -120,7 +125,9 @@ class GitHub:
         when GitHub took it, else its answer."""
         try:
             talk.api(self.path(f"actions/runs/{run}/rerun-failed-jobs"), method="POST")
-        except talk.Refused as answer:
+        except (talk.Refused, talk.AuthFailed, talk.Unreachable) as answer:
+            # Best effort: a token that may not re-run (a 403) or an outage
+            # leaves the red as it is, and the line held, but stops nothing.
             return str(answer)
         return None
 

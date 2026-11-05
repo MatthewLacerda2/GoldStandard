@@ -5,7 +5,9 @@ merge*: `deleteBranchOnMerge` is off):
 
 - the remote branch is deleted **only once GitHub says merged**: deleting the
   branch of a merge that did not happen closes the pull request; and never a
-  branch on a fork, which is not this repository's to delete;
+  branch on a fork, which is not this repository's to delete. A merge GitHub
+  has not confirmed within half a minute is kept in the queue's memory and
+  asked about again on every pass (`queue.Queue.settle`);
 - each worktree on the branch is removed, and then the local branch, unless
   somebody's work is still in it ([`keep_reason`]). Never the worktree the
   queue runs in.
@@ -67,12 +69,14 @@ class Aftermath:
         self.root = root
         self.dry = dry
 
-    def run(self, pull: dict) -> list[str]:
-        """Every step, each answering with a line; one failing never stops the others."""
+    def run(self, pull: dict) -> tuple[bool, list[str]]:
+        """Whether GitHub confirmed the merge (and so the steps ran), and their lines."""
         if not self.dry and not self.settled(pull["number"]):
-            return [
-                "GitHub does not say merged yet: the branch and worktrees are left as they are."
-            ]
+            return False, ["GitHub does not say merged yet: cleaning up once it does."]
+        return True, self.cleanup(pull)
+
+    def cleanup(self, pull: dict) -> list[str]:
+        """Every step, each answering with a line; one failing never stops the others."""
         lines = []
         for step in (self.branch, self.worktrees):
             try:

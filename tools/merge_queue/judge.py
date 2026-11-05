@@ -10,18 +10,16 @@ hand-back names the first thing to do:
 4. **no conflict with `main`**: a conflicting branch gets no CI run at all, so
    this comes before CI. The queue then rebases it (`queue.Queue.rebase`);
 5. **CI passed on the head** (`checks.head`);
-6. **`main` is not red**, or the branch carries the fix ([`MainGate`]).
+6. **`main` is not red**, or the branch carries the fix (`main_gate.py`).
 
 It decides and says nothing: the queue speaks.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-
 from tools import review_triggers
-from tools.merge_queue import checks, closing, github, repo, review, talk
-from tools.merge_queue.state import Memory
+from tools.merge_queue import checks, closing, github, repo, review
+from tools.merge_queue.main_gate import MainGate
 
 DRAFT, HANDED, CONFLICT, PENDING, HELD, GREEN = (
     "draft",
@@ -31,96 +29,6 @@ DRAFT, HANDED, CONFLICT, PENDING, HELD, GREEN = (
     "held",
     "green",
 )
-HELD_LINE = (
-    "green, but `main` itself is red: it merges once `main` is green again, or now if"
-    " its branch contains the commit that broke it (it then carries the fix, which"
-    " its own green run proves)."
-)
-UNREAD = "green, but `main`'s own CI could not be read this pass; asked again on the next:"
-
-
-class MainGate:
-    """`main`'s state as the queue holds it: read once a pass, said when it changes."""
-
-    def __init__(
-        self,
-        hub: github.GitHub,
-        clone: repo.Clone,
-        required: list[checks.Required],
-        memory: Memory,
-        dry: bool,
-    ) -> None:
-        self.hub, self.clone, self.required = hub, clone, required
-        self.memory, self.dry = memory, dry
-        self.reds: list[checks.Red] | None = None  # this pass's reading
-        self.unread = ""  # why this pass could not read it
-        self.said = ""  # the last thing said about `main`
-        self.read: dict[str, list[dict]] = {}  # this pass's check runs, by commit
-
-    def new_pass(self) -> None:
-        self.reds, self.unread, self.read = None, "", {}
-
-    def runs(self) -> Iterator[tuple[str, list[dict]]]:
-        """`main`'s commits with their check runs, newest first, each asked once a pass."""
-        for sha in self.clone.main_commits():
-            if sha not in self.read:
-                self.read[sha] = self.hub.check_runs(sha)
-            yield sha, self.read[sha]
-
-    def state(self) -> list[checks.Red]:
-        """The required contexts red on `main`, a new red re-run once; said when
-        it changes. A refusal is kept for the pass: it holds the green pull
-        requests (it is `main`'s question, not theirs) and is asked again next."""
-        if self.reds is not None or self.unread:
-            return self.reds or []
-        try:
-            found = [checks.main_red(each, self.runs()) for each in self.required]
-        except talk.Refused as answer:
-            self.unread = str(answer)
-            return []
-        self.reds = [red for red in found if red is not None]
-        for red in self.reds:
-            self.rerun(red)
-        said = " ".join(red.line() for red in self.reds)
-        if said != self.said:
-            if self.reds:
-                talk.say("`main` is red:", *[red.line() for red in self.reds], HELD_LINE)
-            elif self.said:
-                talk.say("`main` is green again; the line moves.")
-            self.said = said
-        return self.reds
-
-    def rerun(self, red: checks.Red) -> None:
-        """Re-run a new red's failed jobs once, in case it is a runner's blip."""
-        run = github.run_id(red.run)
-        if red.rerunning or red.reran or run is None or run in self.memory.reruns:
-            return
-        if self.dry:
-            talk.say(f"`main`: would re-run {red.context} once: {red.line()}")
-            return
-        self.memory.reruns.add(run)
-        refused = self.hub.rerun_failed(run)
-        talk.say(
-            f"`main`: {red.line()}",
-            f"could not re-run it: {refused}"
-            if refused
-            else "re-ran it once, in case it is a blip.",
-        )
-
-    def holds(self, head: str) -> list[str]:
-        """Why `main`'s state holds this green head; empty when it does not."""
-        reds = self.state()
-        if self.unread:
-            return [UNREAD, self.unread]
-        try:
-            why = [
-                f"{red.line()}; this branch does not contain {red.first[:7]}."
-                for red in reds
-                if not self.clone.contains(head, red.first)
-            ]
-        except talk.Refused as answer:
-            return [UNREAD, str(answer)]
-        return [HELD_LINE, *why] if why else []
 
 
 class Judge:
@@ -128,17 +36,27 @@ class Judge:
         self.hub, self.clone, self.gate = hub, clone, gate
         self.labels: dict[int, list[str]] = {}  # the pull request's and its issues'
         self.reviewed: set[str] = set()  # heads whose review record was found
+        self.commits: dict[str, list[str]] = {}  # each head's commit messages
 
     def closing(self, pull: dict) -> list[str]:
         """Why what it closes may not be closed; empty when it may. Keeps the
         labels of the pull request and of the issues it closes, for the order."""
-        numbers = closing.closes(pull["body"], self.hub.repo)
-        closed = {number: self.hub.issue(number) for number in numbers}
+        repo_name = self.hub.repo
+        described = set(closing.closes(pull["body"], repo_name))
+        committed = set(closing.closes("\n".join(self.messages(pull)), repo_name))
+        closed = {number: self.hub.issue(number) for number in sorted(described | committed)}
         self.labels[pull["number"]] = [
             *pull.get("labels", []),
             *(label for item in closed.values() for label in closing.labels(item)),
         ]
-        return closing.refusal(closed) or closing.unnamed(pull["branch"], pull["body"])
+        refused = closing.refusal(closed, frozenset(committed - described))
+        return refused or closing.unnamed(pull["branch"], pull["body"], repo_name)
+
+    def messages(self, pull: dict) -> list[str]:
+        """The branch's commit messages, asked once per head."""
+        if pull["head"] not in self.commits:
+            self.commits[pull["head"]] = self.hub.commit_messages(pull["number"])
+        return self.commits[pull["head"]]
 
     def triggers(self, pull: dict) -> list[str]:
         head = pull["head"]
@@ -184,10 +102,11 @@ class Judge:
         if clash is not None or pull.get("mergeable") is False:
             where = ", ".join(f"`{p}`" for p in clash or []) or "files only GitHub sees"
             return CONFLICT, [f"it conflicts with `{repo.BASE}` in {where}."]
-        result = checks.head(self.gate.required, self.hub.check_runs(pull["head"]), waited)
+        runs = self.hub.check_runs(pull["head"])
+        result = checks.head(self.gate.required, runs, waited)
         if result.state in (checks.RED, checks.NO_RUN):
             return HANDED, result.lines
         if result.state == checks.PENDING:
             return PENDING, result.lines
-        held = self.gate.holds(pull["head"])
+        held = self.gate.holds(pull["head"], runs)
         return (HELD, held) if held else (GREEN, result.lines)

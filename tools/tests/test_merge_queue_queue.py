@@ -89,6 +89,28 @@ class CI(Pass):
         self.assertEqual(self.hub.merges, [])
         self.assertIn("HANDED BACK #1: `CI ok` was skipped", self.out.getvalue())
 
+    def test_a_drafts_clocks_start_once_it_is_ready(self) -> None:
+        drafted = pr(1, draft=True)
+        memory = Memory(None)
+        long_ago(memory, 1, drafted["head"])
+        make_queue(self.hub, self.clone, watch=True, memory=memory).sweep([drafted])
+        self.assertNotIn("1", memory.first_seen)  # readied now, it gets its grace
+        make_queue(self.hub, self.clone, watch=True, memory=memory).sweep(
+            [{**drafted, "draft": False}]
+        )
+        self.assertNotIn("HANDED BACK", self.out.getvalue())
+
+    def test_a_merge_github_had_not_confirmed_is_cleaned_up_later(self) -> None:
+        one = pr(1)
+        self.hub.green(one)
+        queue = make_queue(self.hub, self.clone)
+        queue.after.run = lambda pull: (False, ["GitHub does not say merged yet."])
+        self.assertTrue(queue.sweep([one]))
+        self.assertIn("1", queue.memory.unsettled)
+        queue.sweep([])
+        self.assertEqual(queue.memory.unsettled, {})
+        self.assertIn("#1: cleaned later.", self.out.getvalue())
+
     def test_a_refused_merge_is_handed_back(self) -> None:
         one = pr(1)
         self.hub.green(one)
@@ -171,6 +193,14 @@ class Rebase(Pass):
             "HANDED BACK #1: it conflicts with `main` in `backend/x.py`", self.out.getvalue()
         )
 
+    def test_a_fork_is_handed_back_not_rebased(self) -> None:
+        fork = pr(1, head_repo="someone/r")
+        self.clone.clashes = {frozenset((self.clone.main, fork["head"]))}
+        self.clone.rebases[fork["head"]] = "c" * 40
+        self.assertFalse(self.sweep(fork))
+        self.assertEqual(self.clone.pushed, [])
+        self.assertIn("on a fork", self.out.getvalue())
+
     def test_a_dry_run_pushes_nothing(self) -> None:
         one = pr(1)
         self.clone.clashes = {frozenset((self.clone.main, one["head"]))}
@@ -204,6 +234,21 @@ class RedMain(Pass):
         self.clone.holds.add((fix["head"], broke))
         self.assertTrue(self.sweep(stuck, fix))
         self.assertEqual(self.hub.merges, [2])
+
+    def test_a_fix_must_run_the_red_job_not_skip_it(self) -> None:
+        docs, broke = "1" * 40, "2" * 40
+        self.clone.history = [docs, broke]
+        self.hub.runs = {
+            docs: [check_run(run_id=5, suite=2), check_run("skipped", name="backend", suite=2)],
+            broke: [check_run("failure", run_id=4), check_run("failure", name="backend", run_id=4)],
+        }
+        skips = pr(1)  # cut after the break, touching only the frontend
+        self.hub.runs[skips["head"]] = [check_run(), check_run("skipped", name="backend")]
+        self.clone.holds.add((skips["head"], broke))
+        self.assertFalse(self.sweep(skips))
+        self.assertIn("did not run `backend`", self.out.getvalue())
+        self.hub.runs[skips["head"]] = [check_run(), check_run(name="backend")]
+        self.assertTrue(self.sweep(skips))
 
     def test_a_streak_names_its_oldest_commit(self) -> None:
         newest, oldest, green = "1" * 40, "2" * 40, "3" * 40

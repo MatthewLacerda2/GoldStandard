@@ -48,10 +48,20 @@ class ABranchNamedForAnIssue(unittest.TestCase):
         self.assertIsNone(closing.issue_of("feat/v2"))
 
     def test_the_description_closes_or_refers_to_it(self) -> None:
-        self.assertEqual(closing.unnamed("feat/47-q", "Closes #47"), [])
-        self.assertEqual(closing.unnamed("feat/47-q", "Leaves it open: refs #47"), [])
-        self.assertIn("#47", closing.unnamed("feat/47-q", "Closes #470")[0])
-        self.assertEqual(closing.unnamed("feat/q", ""), [])
+        self.assertEqual(closing.unnamed("feat/47-q", "Closes #47", REPO), [])
+        self.assertEqual(closing.unnamed("feat/47-q", "Leaves it open: refs #47", REPO), [])
+        self.assertIn("#47", closing.unnamed("feat/47-q", "Closes #470", REPO)[0])
+        self.assertEqual(closing.unnamed("feat/q", "", REPO), [])
+
+    def test_every_spelling_closes_reads_names_it_too(self) -> None:
+        for body in ("Closes owner/name#47", "refs https://github.com/owner/name/issues/47"):
+            self.assertEqual(closing.unnamed("feat/47-q", body, REPO), [], body)
+        self.assertNotEqual(closing.unnamed("feat/47-q", "Closes other/repo#47", REPO), [])
+
+    def test_a_commit_message_that_closes_is_named_as_one(self) -> None:
+        lines = closing.refusal({5: issue("open", "planning")}, frozenset({5}))
+        self.assertEqual(lines[0], "a commit message closes #5, which is labelled `planning`.")
+        self.assertIn("rewording the commit", lines[-1])
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ Exit status, the most urgent thing to read about the run:
 - **1** something was handed back (`grep 'HANDED BACK'` the output);
 - **3** GitHub, the network or this machine failed: nothing was decided, so run
   the same command again;
-- **4** another queue holds this repository's lock: nothing was attempted;
+- **4** another queue holds this clone's lock: nothing was attempted;
 - **5** GitHub or the remote refused the credentials (an expired token, a
   revoked key): renew them, then run it again; retrying would not help.
 
@@ -58,7 +58,11 @@ def parse(argv: list[str]) -> argparse.Namespace:
         metavar="MINUTES",
         help=f"stop after this long (default {FOR_MINUTES})",
     )
-    parser.add_argument("--dry-run", action="store_true", help="one pass that only reads")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="one pass that only reads (the queue's memory included, never written)",
+    )
     parser.add_argument("--label", default=LABEL, help="the go-ahead label")
     parser.add_argument("--poll", type=float, default=POLL_SECONDS, help="seconds between passes")
     parser.add_argument("--mergeable", type=int, metavar="PR", help="judge one PR, read-only")
@@ -121,7 +125,7 @@ def run(opts: argparse.Namespace) -> tuple[int, str]:
         hub = github.GitHub(clone.repository())
         clone.fetch([])
         required = checks.required(clone.ruleset())
-        memory = Memory(clone.common_dir() / STATE if writes else None)
+        memory = Memory(clone.common_dir() / STATE, read_only=not writes)
         judged = judge.Judge(hub, clone, judge.MainGate(hub, clone, required, memory, opts.dry_run))
         if opts.mergeable is not None:
             return mergeable(hub, clone, judged, opts.mergeable), ""

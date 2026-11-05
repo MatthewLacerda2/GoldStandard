@@ -100,5 +100,39 @@ class OnMain(unittest.TestCase):
         self.assertIsNone(self.red([], [check_run("skipped")]))
 
 
+def job(name: str, conclusion: str = "success", suite: int = 1, run_id: int = 1) -> dict:
+    return check_run(conclusion, name=name, suite=suite, run_id=run_id)
+
+
+class PerJobOnMain(unittest.TestCase):
+    """A push run skips the layers it did not touch, so `CI ok` alone can be green
+    on a `main` whose backend is red."""
+
+    def commits(self) -> list[tuple[str, list[dict]]]:
+        docs = [job("CI ok", suite=2), job("backend", "skipped", suite=2), job("other", suite=9)]
+        broke = [job("CI ok", "failure"), job("backend", "failure")]
+        return [("d" * 40, docs), ("b" * 40, broke), ("g" * 40, [job("CI ok"), job("backend")])]
+
+    def test_the_jobs_are_the_required_ones_and_their_suite_siblings(self) -> None:
+        names = [each.context for each in checks.jobs([CI_OK], self.commits())]
+        self.assertEqual(names, ["CI ok", "backend"])  # `other` is another workflow's
+
+    def test_a_docs_only_green_merge_does_not_turn_a_red_job_green(self) -> None:
+        commits = self.commits()
+        found = {
+            each.context: checks.main_red(each, commits) for each in checks.jobs([CI_OK], commits)
+        }
+        self.assertIsNone(found["CI ok"])
+        backend = found["backend"]
+        assert backend is not None
+        self.assertEqual(backend.first, "b" * 40)
+
+    def test_only_a_run_that_ran_the_job_proves_it_fixed(self) -> None:
+        red = checks.main_red(Required("backend", 15368), self.commits()[1:])
+        assert red is not None
+        self.assertFalse(checks.proves_fixed(red, [job("CI ok"), job("backend", "skipped")]))
+        self.assertTrue(checks.proves_fixed(red, [job("CI ok"), job("backend")]))
+
+
 if __name__ == "__main__":
     unittest.main()

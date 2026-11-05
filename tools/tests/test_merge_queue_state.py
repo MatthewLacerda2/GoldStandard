@@ -50,6 +50,18 @@ class TheMemory(unittest.TestCase):
         self.assertFalse(memory.first_time(1, "a", "red"))
         self.assertTrue(memory.first_time(1, "b", "red"))
 
+    def test_a_read_only_memory_reads_but_never_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as place:
+            path = Path(place) / "state.json"
+            written = Memory(path)
+            written.seen(1, "a", NOW)
+            written.save()
+            looking = Memory(path, read_only=True)
+            self.assertEqual(looking.first_seen["1"]["head"], "a")
+            looking.seen(2, "b", NOW)
+            looking.save()
+            self.assertNotIn("2", Memory(path).first_seen)
+
     def test_an_unreadable_file_is_an_empty_memory(self) -> None:
         with tempfile.TemporaryDirectory() as place:
             path = Path(place) / "state.json"

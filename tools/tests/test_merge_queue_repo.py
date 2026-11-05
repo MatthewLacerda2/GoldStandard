@@ -80,6 +80,24 @@ class Clone(unittest.TestCase):
         self.assertIn("`a.txt`", lines[0])
         self.assertEqual(git(self.origin, "rev-parse", "feat"), head)
 
+    def test_whitespace_is_part_of_the_change(self) -> None:
+        # Dedenting a guarded call out of its loop changes what it does; a
+        # whitespace-blind comparison would keep the old review record valid.
+        guarded = self.branch("guarded", "g.py", "for x in xs:\n    grant(x)\n")
+        dedented = self.branch("dedented", "g.py", "for x in xs:\n    pass\ngrant(x)\n")
+        self.clone.fetch([])
+        self.assertFalse(self.clone.same_change(guarded, dedented))
+        once = self.branch("once", "g.py", "for x in xs:\ngrant(x)\n")
+        self.assertFalse(self.clone.same_change(guarded, once))
+
+    def test_a_rebase_that_moves_the_lines_keeps_the_change(self) -> None:
+        head = self.branch("feat", "a.txt", "one\ntwo\nTHREE\n")
+        self.advance_main("a.txt", "zero\none\ntwo\nthree\n")  # shifts the hunk
+        self.clone.fetch([])
+        fresh, _ = self.clone.rebase("feat", head, push=False)
+        assert fresh is not None
+        self.assertTrue(self.clone.same_change(head, fresh))
+
     def test_a_changed_change_is_not_the_same(self) -> None:
         head = self.branch("feat", "b.txt", "new\n")
         other = self.branch("other", "b.txt", "different\n")

@@ -63,6 +63,11 @@ class Failures(unittest.TestCase):
         )
         self.assertFalse(talk.auth("HTTP 403: API rate limit exceeded"))
 
+    def test_a_rate_limit_is_put_off_not_refused(self) -> None:
+        for said in ("HTTP 403: API rate limit exceeded", "HTTP 429: secondary rate limit"):
+            self.assertTrue(talk.transport(said), said)
+            self.assertTrue(talk.rate_limited(said), said)
+
     def test_a_get_reads_every_page(self) -> None:
         command = talk.api_command("repos/o/r/pulls")
         self.assertEqual(command[:2], ["gh", "api"])

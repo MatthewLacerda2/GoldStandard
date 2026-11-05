@@ -17,7 +17,8 @@ names the head the findings were answered on (that line only, so a quoted or
 older SHA further down never stands in for it). A push after it (a fix, a
 takeover's commits) makes it stale, and so does a record that names no head.
 The one push it survives is a rebase that left the pull request's own change
-as it was: the same `git patch-id` of its diff against `main`
+as it was: the same diff against `main`, every changed line and its
+whitespace included, only the hunks' line numbers aside
 (`repo.Clone.same_change`), whoever made the rebase. A rebase that had to
 resolve something changes the diff, and the review is owed again.
 

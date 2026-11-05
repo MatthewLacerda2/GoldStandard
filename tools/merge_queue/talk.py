@@ -46,7 +46,7 @@ TRANSPORT_WORDS = (
 )
 # git and gh saying the credentials were refused. "unable to access" (a
 # transport word) also opens git's 401/403 message, so this is asked first; a
-# 403 that is a rate limit stays in transit.
+# 403 that is a rate limit is not a refusal ([`rate_limited`]).
 AUTH_WORDS = (
     "http 401",
     "http 403",
@@ -65,6 +65,8 @@ MACHINE_WORDS = ("no space left on device", "cannot allocate memory", "read-only
 
 # Seconds before each retry of a failure in transit: about three minutes in all.
 RETRY_DELAYS = (5, 10, 20, 40, 60, 60)
+# The least wait before retrying a rate limit: about six minutes in all.
+RATE_LIMIT_SECONDS = 60
 
 
 class Unreachable(Exception):
@@ -88,12 +90,20 @@ def auth(stderr: str) -> bool:
     return "rate limit" not in lowered and any(word in lowered for word in AUTH_WORDS)
 
 
+def rate_limited(stderr: str) -> bool:
+    """GitHub asking to be asked later (a 403 or 429 naming a rate limit): not
+    an answer about anything, so it is retried, with a longer wait."""
+    return "rate limit" in stderr.lower()
+
+
 def transport(stderr: str) -> bool:
-    """Whether a failed call failed in transit rather than being answered.
+    """Whether a failed call failed in transit, or was put off, rather than answered.
 
     Errs towards *answered*: an unrecognised message is not retried, and a
-    refused credential is never transit ([`auth`]).
+    refused credential is never transit ([`auth`]). A rate limit is ([`rate_limited`]).
     """
+    if rate_limited(stderr):
+        return True
     if auth(stderr):
         return False
     lowered = stderr.lower()
@@ -126,7 +136,7 @@ def retried(command: list[str], cwd: str | None = None) -> subprocess.CompletedP
                 f"unreachable after {attempt} tries of {' '.join(command[:4])}:"
                 f" {done.stderr.strip()}"
             )
-        time.sleep(delay)
+        time.sleep(max(delay, RATE_LIMIT_SECONDS) if rate_limited(done.stderr) else delay)
     raise AssertionError("unreachable")  # the loop always returns or raises
 
 
