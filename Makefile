@@ -96,3 +96,16 @@ labels:
 	gh label create dependencies   --force --color 0386F6 --description "A Dependabot bump (.github/dependabot.yml)."
 	-@for l in bug enhancement duplicate invalid question wontfix "good first issue" "help wanted" minor; do \
 		gh label delete "$$l" --yes 2>/dev/null; done
+
+# ---------------------------------------------------------------------------
+# Developer reports  (run by hand; never a gate, never in CI or a batch)
+# ---------------------------------------------------------------------------
+# Where this repository's Claude Code tokens went since SINCE (YYYY-MM-DD, UTC;
+# default 7 days ago): main session against subagents, by role and by model,
+# and the context per merged pull request. It reads this machine's local
+# transcripts only (no cloud session, no other machine, no plan limits), and
+# asks GitHub through `gh` for what merged; ARGS=--no-prs skips that. No agent
+# runs it during its work. `--help` says how it counts.
+.PHONY: claude-usage
+claude-usage:
+	$(TOOLS_PYTHON) -m tools.claude_usage $(if $(SINCE),--since $(SINCE)) $(ARGS)

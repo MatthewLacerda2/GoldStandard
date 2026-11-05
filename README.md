@@ -136,6 +136,16 @@ promise `CI ok` keeps, or it leaves pull requests pending forever: no `paths:`
 filter, `ready_for_review` in its `types:`, and a final job that reports on
 every run, skipping inside when there is nothing to check.
 
+## Where the Claude tokens go
+
+`make claude-usage SINCE=YYYY-MM-DD` (default: the last 7 days) reports where
+this repository's Claude Code tokens went: the main session against its
+subagents, each by role and by model, and the context each merged pull request
+took. It reads only this machine's local transcripts (no cloud session, no other
+machine, nothing about plan limits), so it is a signal for the developer, run by
+hand, never a gate. `python3.14 -m tools.claude_usage --help` says how it counts
+and how a call is tied to a pull request.
+
 ## Intentional non-goals (documented upgrade paths)
 
 The skeleton deliberately stops short in a few places so the upgrade is a known

@@ -1,0 +1,3 @@
+{"type":"user","timestamp":"2026-03-02T09:02:00Z","gitBranch":"main","message":{"role":"user","content":"Read /tmp/brief-8.md and follow it."}}
+{"type":"assistant","timestamp":"2026-03-02T09:02:01Z","gitBranch":"main","message":{"id":"b1","model":"model-b","usage":{"input_tokens":300,"output_tokens":3}}}
+{"type":"user","timestamp":"2026-03-02T09:02:02Z","gitBranch":"main","message":{"role":"user","content":[{"type":"tool_result","content":"You are resolving issue 8: the widget docs."}]}}
