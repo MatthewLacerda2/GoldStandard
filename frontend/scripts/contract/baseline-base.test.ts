@@ -6,6 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { GIT_SPAWN_TIMEOUT_MS } from "../merge-driver-fixture";
 import { baseBaseline, baseCommit, type BaselineGate } from "./baseline-base";
 
 // The throwaway repository is built without the machine's git config (a
@@ -51,13 +52,15 @@ beforeAll(() => {
   });
   git("rm", "-q", "scripts/x/baseline.txt");
   commit("baseline gone", {});
-}, 30_000);
+}, GIT_SPAWN_TIMEOUT_MS);
 afterAll(() => {
   rmSync(repo, { recursive: true, force: true });
   vi.restoreAllMocks();
 });
 
-describe("baseCommit", () => {
+// Every test spawns git, a dozen times or more in the longest, so each describe
+// takes the budget of the tests that build throwaway repositories.
+describe("baseCommit", { timeout: GIT_SPAWN_TIMEOUT_MS }, () => {
   it("is BASELINE_BASE when set", () => {
     const at = commits["the gate"];
     expect(baseCommit(gate(), { BASELINE_BASE: at })).toBe(at);
@@ -77,7 +80,7 @@ describe("baseCommit", () => {
   });
 });
 
-describe("baseBaseline", () => {
+describe("baseBaseline", { timeout: GIT_SPAWN_TIMEOUT_MS }, () => {
   it("is the baseline as the base has it", () => {
     expect(baseBaseline(gate(), commits["the gate"])).toBe("a\nb\n");
   });
