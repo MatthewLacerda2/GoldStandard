@@ -50,6 +50,8 @@ already merged (*Catching up on a merged PR*, below).
   **Never `"fork"`** — a fork inherits the coder's whole context, and with it the
   bias this skill exists to avoid. No `isolation: "worktree"`: it edits
   nothing.
+- **Its description names the PR** (`Independent review of PR #<n>`), so
+  `make claude-usage` can tie the review's tokens to it.
 - **Read-only.** It may read the PR, the repository and the issue, and run
   read-only commands (`gh pr view`, `gh pr diff`, `gh issue view`, `git show`).
   It makes no edits, commits, pushes, PR comments or issue comments.

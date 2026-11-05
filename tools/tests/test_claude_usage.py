@@ -10,12 +10,15 @@ whose first message only points at a brief, a reviewer, the reviewer's own
 from __future__ import annotations
 
 import io
+import subprocess
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
-from tools.claude_prs import PullRequest, Resolver, merged_since
-from tools.claude_transcripts import collect, project_folders, transcript_files
+from tools.claude_prs import GitHubUnavailable, PullRequest, Resolver, gh_page, merged_since
+from tools.claude_transcripts import collect, project_folders, read_transcript, transcript_files
 from tools.claude_usage import main, render
 
 PROJECTS = Path(__file__).resolve().parent / "fixtures" / "claude_usage" / "projects"
@@ -31,16 +34,29 @@ def by_model(model: str):
     return [c for c in calls() if c.model == model]
 
 
-def pulls() -> list[PullRequest]:
+def raw_pr(number: int, merged_at: str | None, ref: str = "", body: str = "", **kw) -> dict:
+    """A pull request as GitHub's REST API returns it, with only the fields read."""
+    base = {"full_name": "me/shop", "default_branch": "main"}
+    head_repo = {"full_name": kw.get("head_repo", "me/shop")}
+    return {
+        "number": number,
+        "merged_at": merged_at,
+        "updated_at": merged_at or "2026-03-05T00:00:00Z",
+        "body": body,
+        "head": {"ref": ref, "repo": head_repo},
+        "base": {"repo": base},
+    }
+
+
+def pulls(*extra: dict) -> list[PullRequest]:
     raw = [
-        {"number": 11, "merged_at": "2026-03-04T00:00:00Z", "head": {"ref": "feat/x"}},
-        {"number": 10, "merged_at": "2026-03-03T00:00:00Z", "body": "Fixes #8"},
-        {"number": 9, "merged_at": "2026-03-02T00:00:00Z", "body": "Closes #7\n\nMore."},
-        {"number": 6, "merged_at": None, "body": "Closes #8"},  # closed unmerged
-        {"number": 5, "merged_at": "2026-02-01T00:00:00Z", "head": {"ref": "feat/y"}},
+        raw_pr(11, "2026-03-04T00:00:00Z", ref="feat/x"),
+        raw_pr(10, "2026-03-03T00:00:00Z", ref="feat/docs", body="Fixes #8"),
+        raw_pr(9, "2026-03-02T00:00:00Z", body="Closes #7\n\nMore."),
+        raw_pr(6, None, body="Closes #8"),  # closed unmerged
+        raw_pr(5, "2026-02-01T00:00:00Z", ref="feat/y"),
+        *extra,
     ]
-    for pr in raw:
-        pr["updated_at"] = pr["merged_at"] or "2026-03-05T00:00:00Z"
     return merged_since(SINCE, fetch=lambda page: raw if page == 1 else [])
 
 
@@ -56,9 +72,18 @@ class ReadingTheTranscripts(unittest.TestCase):
         self.assertEqual(len(main_calls), 1)
         self.assertEqual((main_calls[0].context, main_calls[0].output), (1000, 40))
 
+    def test_a_line_cut_mid_character_is_skipped_not_fatal(self) -> None:
+        line = b'{"type":"assistant","timestamp":"2026-03-02T00:00:00Z","message":'
+        line += b'{"id":"z","model":"m","usage":{"input_tokens":5,"output_tokens":1}}}\n'
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "s.jsonl"
+            path.write_bytes(line + b'{"type":"user","message":"caf\xc3')
+            self.assertEqual(list(read_transcript(path, SINCE).calls), ["z"])
+
     def test_finds_each_subagents_role(self) -> None:
         roles = {c.role for c in by_model("model-b")}
         self.assertEqual(roles, {"coder"})  # one by its opening, one by its brief
+        # Its prompt says "coder", but its agent type says what it is.
         self.assertEqual({c.role for c in by_model("model-c")}, {"explore"})
         reviewers = [c for c in calls() if c.role == "reviewer"]
         self.assertEqual(sorted(c.context for c in reviewers), [400, 500])
@@ -76,20 +101,56 @@ class TyingCallsToPullRequests(unittest.TestCase):
     def test_by_number_by_closed_issue_then_by_branch(self) -> None:
         resolver = Resolver(pulls())
         owners = {
-            c.context: getattr(resolver.owner(c.refs, c.branch), "number", None) for c in calls()
+            c.context: getattr(resolver.owner(c.refs, c.branch, c.time), "number", None)
+            for c in calls()
         }
         expected = {1000: None, 2000: 9, 300: 10, 400: 9, 500: 9, 600: None, 700: 11}
         self.assertEqual(owners, expected)
+
+    def test_several_numbers_tie_only_when_they_agree(self) -> None:
+        resolver = Resolver(pulls())
+        self.assertEqual(resolver.owner((9, 7), "main", "2026-03-02").number, 9)
+        self.assertIsNone(resolver.owner((9, 10), "main", "2026-03-02"))  # disagree
+        self.assertIsNone(resolver.owner((60, 7), "main", "2026-03-02"))  # #60 still open
+
+    def test_a_branch_ties_only_to_its_one_merged_pr_before_the_merge(self) -> None:
+        resolver = Resolver(
+            pulls(
+                raw_pr(12, "2026-03-04T00:00:00Z", ref="main", head_repo="fork/shop"),
+                raw_pr(13, "2026-03-04T00:00:00Z", ref="feat/again"),
+                raw_pr(14, "2026-03-05T00:00:00Z", ref="feat/again"),
+            )
+        )
+        self.assertEqual(resolver.owner((), "feat/x", "2026-03-03T00:00:00Z").number, 11)
+        self.assertIsNone(resolver.owner((), "feat/x", "2026-03-05T00:00:00Z"))  # after merge
+        self.assertIsNone(resolver.owner((), "main", "2026-03-03T00:00:00Z"))  # a fork's main
+        self.assertIsNone(resolver.owner((), "feat/again", "2026-03-03T00:00:00Z"))  # reused
 
     def test_stops_paging_once_a_page_reaches_before_the_window(self) -> None:
         asked: list[int] = []
 
         def fetch(page: int) -> list[dict]:
             asked.append(page)
-            return [{"number": page, "merged_at": "2026-02-01", "updated_at": "2026-02-01"}] * 100
+            return [raw_pr(page, "2026-02-01T00:00:00Z")] * 100
 
         self.assertEqual(merged_since(SINCE, fetch=fetch), [])
         self.assertEqual(asked, [1])
+
+
+class AskingGitHub(unittest.TestCase):
+    def test_gh_missing(self) -> None:
+        missing = mock.patch("subprocess.run", side_effect=FileNotFoundError)
+        with missing, self.assertRaisesRegex(GitHubUnavailable, "gh is not installed"):
+            gh_page(1)
+
+    def test_gh_failing_says_why_and_asks_it_from_the_reported_checkout(self) -> None:
+        failed = subprocess.CompletedProcess([], 1, "", "gh: Bad credentials (HTTP 401)\n")
+        out = io.StringIO()
+        with mock.patch("subprocess.run", return_value=failed) as run, redirect_stdout(out):
+            main(["--since", SINCE, "--projects", str(PROJECTS), "--repo", str(REPO)])
+        self.assertEqual(run.call_args.kwargs["cwd"], REPO.resolve())
+        self.assertIn("unknown (gh failed: gh: Bad credentials (HTTP 401)", out.getvalue())
+        self.assertIn("gh auth status", out.getvalue())
 
 
 class TheReport(unittest.TestCase):
@@ -102,13 +163,12 @@ class TheReport(unittest.TestCase):
         self.assertIn("Average: 1.8k per merged PR (5.5k over 3).", report)
         self.assertIn("Not seen: cloud sessions, other machines", report)
 
-    def test_says_why_when_github_cannot_answer(self) -> None:
+    def test_no_prs_skips_github(self) -> None:
         out = io.StringIO()
-        with redirect_stdout(out):
+        with mock.patch("subprocess.run") as run, redirect_stdout(out):
             main(["--since", SINCE, "--projects", str(PROJECTS), "--repo", str(REPO), "--no-prs"])
-        self.assertIn(
-            "Context per merged pull request: unknown (skipped by --no-prs)", out.getvalue()
-        )
+        run.assert_not_called()
+        self.assertIn("unknown (skipped by --no-prs)", out.getvalue())
 
 
 if __name__ == "__main__":

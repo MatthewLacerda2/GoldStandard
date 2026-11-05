@@ -24,11 +24,12 @@ How it counts:
 - **Context per call** = ``input_tokens + cache_creation_input_tokens +
   cache_read_input_tokens``: everything the model read on that call. Output is
   counted apart.
-- **Role** comes from a subagent's opening: its first message and, when that
-  message only names a brief file (``….md``), the first tool result after it,
-  which is the brief it read. ``ROLES`` runs in order and the first match wins;
-  a subagent no rule matches takes its agent type (``Explore``, ``Plan``) when
-  it has one other than the general-purpose default. A main session has no role.
+- **Role** is a subagent's agent type (``Explore``, ``Plan``) when it has one
+  other than the general-purpose default: that type says what the agent is,
+  whatever its prompt mentions. Otherwise it comes from the opening: its first
+  message and, when that message only names a brief file (``….md``), the first
+  tool result after it, which is the brief it read. ``ROLES`` runs in order and
+  the first match wins. A main session has no role.
 - **The window** is by each call's own timestamp (UTC), from ``since`` on.
 """
 
@@ -40,6 +41,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import NamedTuple
 
 # (role, pattern) in order: the first that matches the opening wins. The
 # reviewer rules are anchored to the opening's first words because a coder's
@@ -69,6 +71,17 @@ class Call:
     output: int
     refs: tuple[int, ...]  # the issue / PR numbers its agent was started for
     branch: str  # the git branch of the directory it ran in
+    time: str  # when it was made, ISO 8601 UTC
+
+
+class Usage(NamedTuple):
+    """One call as a transcript records it, before it is tied to its agent."""
+
+    model: str
+    context: int
+    output: int
+    branch: str
+    time: str
 
 
 @dataclass
@@ -76,8 +89,8 @@ class Transcript:
     scope: str
     agent_id: str = ""
     opening: list[str] = field(default_factory=list)
-    # message.id -> [model, context, output, branch], in the order first seen.
-    calls: dict[str, list] = field(default_factory=dict)
+    # message.id -> its usage, in the order first seen.
+    calls: dict[str, Usage] = field(default_factory=dict)
 
 
 def project_folders(projects: Path, repo: Path) -> list[Path]:
@@ -98,10 +111,12 @@ def transcript_files(folders: Iterable[Path], since: str) -> list[Path]:
 
 
 def role_of(opening: str, agent_type: str = "") -> str:
+    if agent_type not in GENERIC_AGENT_TYPES:
+        return agent_type.lower()
     for role, pattern in ROLES:
         if pattern.search(opening):
             return role
-    return "other" if agent_type in GENERIC_AGENT_TYPES else agent_type.lower()
+    return "other"
 
 
 def _text(content: object) -> str:
@@ -120,7 +135,8 @@ def _text(content: object) -> str:
 
 
 def _lines(path: Path) -> Iterator[dict]:
-    with path.open(encoding="utf-8") as fh:
+    # `replace`: a session still writing can stop mid-character.
+    with path.open(encoding="utf-8", errors="replace") as fh:
         for line in fh:
             try:
                 entry = json.loads(line)
@@ -164,8 +180,10 @@ def read_transcript(path: Path, since: str) -> Transcript:
         )
         output = int(usage.get("output_tokens") or 0)
         key = str(message.get("id") or entry.get("uuid"))
-        seen = t.calls.get(key, [model, context, 0, ""])[2]
-        t.calls[key] = [str(model), context, max(seen, output), str(entry.get("gitBranch") or "")]
+        seen = t.calls[key].output if key in t.calls else 0
+        branch = str(entry.get("gitBranch") or "")
+        time = str(entry.get("timestamp"))
+        t.calls[key] = Usage(str(model), context, max(seen, output), branch, time)
     return t
 
 
@@ -206,9 +224,11 @@ def collect(files: Iterable[Path], since: str) -> list[Call]:
         if t.scope == "subagent":
             role = role_of("\n".join(t.opening), str(meta.get("agentType") or ""))
         refs = _refs(t.agent_id, metas)
-        for key, (model, context, output, branch) in t.calls.items():
+        for key, u in t.calls.items():
             if key in owned:
-                owned[key].output = max(owned[key].output, output)
+                owned[key].output = max(owned[key].output, u.output)
             else:
-                owned[key] = Call(t.scope, role, model, context, output, refs, branch)
+                owned[key] = Call(
+                    t.scope, role, u.model, u.context, u.output, refs, u.branch, u.time
+                )
     return list(owned.values())

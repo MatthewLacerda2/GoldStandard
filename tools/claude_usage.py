@@ -34,9 +34,10 @@ import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from functools import partial
 from pathlib import Path
 
-from tools.claude_prs import GitHubUnavailable, PullRequest, Resolver, merged_since
+from tools.claude_prs import GitHubUnavailable, PullRequest, Resolver, gh_page, merged_since
 from tools.claude_transcripts import Call, collect, project_folders, transcript_files
 
 PROJECTS = Path.home() / ".claude" / "projects"
@@ -126,7 +127,7 @@ def render_prs(calls: list[Call], prs: list[PullRequest] | str) -> list[str]:
     owned: dict[int, Row] = {pr.number: Row() for pr in prs}
     loose = Row()
     for call in calls:
-        pr = resolver.owner(call.refs, call.branch)
+        pr = resolver.owner(call.refs, call.branch, call.time)
         (owned[pr.number] if pr else loose).add(call)
     head = ("pull request", "turns", "context", "title")
     body = []
@@ -177,7 +178,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--no-prs", action="store_true", help="skip GitHub (no gh call)")
     args = parser.parse_args(argv)
-    folders = project_folders(args.projects, args.repo or repo_root())
+    repo = args.repo.resolve() if args.repo else repo_root()
+    folders = project_folders(args.projects, repo)
     calls = collect(transcript_files(folders, args.since), args.since)
     if not calls:
         print(f"No Claude Code call since {args.since} in {args.projects} for this repository.")
@@ -185,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
     prs: list[PullRequest] | str = "skipped by --no-prs"
     if not args.no_prs:
         try:
-            prs = merged_since(args.since)
+            prs = merged_since(args.since, fetch=partial(gh_page, cwd=repo))
         except GitHubUnavailable as exc:
             prs = str(exc)
     print(render(calls, args.since, prs))
