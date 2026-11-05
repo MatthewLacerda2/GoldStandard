@@ -69,10 +69,17 @@ class Sections(unittest.TestCase):
 
     def test_close_and_decorated_spellings_open_a_section(self) -> None:
         for heading in (
-            "## For a human", "## For the human", "## For humans", "## Left for the human",
-            "## Human checks", "## Human checklist", "## Needs a human",
-            "## **For a human**", "## 🧑‍💻 For a human",
-            "For a human\n---", "For a human\n===",
+            "## For a human",
+            "## For the human",
+            "## For humans",
+            "## Left for the human",
+            "## Human checks",
+            "## Human checklist",
+            "## Needs a human",
+            "## **For a human**",
+            "## 🧑‍💻 For a human",
+            "For a human\n---",
+            "For a human\n===",
         ):
             with self.subTest(heading=heading):
                 self.assertEqual(checks(heading), ["look"])

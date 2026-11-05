@@ -259,8 +259,7 @@ def both_stages(repo: str, api: Api = gh_api) -> list[dict]:
     page = 1
     while True:
         batch = api(
-            f"repos/{repo}/issues?labels=planning,human&state=open"
-            f"&per_page={PAGE}&page={page}"
+            f"repos/{repo}/issues?labels=planning,human&state=open&per_page={PAGE}&page={page}"
         )
         found += [issue for issue in batch if "pull_request" not in issue]
         if len(batch) < PAGE:
