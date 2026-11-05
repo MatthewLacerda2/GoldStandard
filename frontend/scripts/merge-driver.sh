@@ -1,6 +1,6 @@
 #!/bin/sh
-# The git merge drivers for the locale JSON, routeTree.gen.ts and the
-# house-rule registries. The logic is in merge-driver.ts; this shell is what
+# The git merge drivers for the locale JSON, the OpenAPI contract,
+# routeTree.gen.ts and the house-rule registries. The logic is in merge-driver.ts; this shell is what
 # git runs, for two reasons:
 #
 #   merge-driver.sh install
@@ -11,7 +11,7 @@
 #     worktree's own copy. Where that copy is missing (a sparse checkout, a
 #     branch that moved it), the registered command runs git's line merge.
 #
-#   merge-driver.sh <locale|route-tree|append> %O %A %B %L %P %S %X %Y
+#   merge-driver.sh <locale|openapi|route-tree|append> %O %A %B %L %P %S %X %Y
 #     What git calls. Without bun on PATH (a GUI client's trimmed PATH, say),
 #     or when bun fails without writing a merge (a crash, a missing module),
 #     %A would stay our side with no markers, and git would record a conflict
@@ -29,6 +29,7 @@ if [ "${1:-}" = install ]; then
 	script=frontend/scripts/merge-driver.sh
 	line_merge="git merge-file --marker-size=%L -L %X -L %S -L %Y %A %O %B"
 	for spec in "locale:locale JSON, merged key by key" \
+		"openapi:OpenAPI contract, merged key by key and written sorted" \
 		"route-tree:TanStack routeTree.gen.ts, regenerated" \
 		"append:append-only registries, both insertions kept"; do
 		kind=${spec%%:*}

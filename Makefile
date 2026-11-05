@@ -165,7 +165,7 @@ setup:
 	@echo "setup: hooks in .git/hooks no longer run, and a branch without .githooks/ runs none."
 	@echo "setup: to commit work in progress anyway, use 'git commit --no-verify'."
 	sh frontend/scripts/merge-driver.sh install
-	@echo "setup: merges and rebases now settle locale JSON, routeTree.gen.ts and the house-rule registries (.gitattributes)."
+	@echo "setup: merges and rebases now settle locale JSON, openapi.json, routeTree.gen.ts and the house-rule registries (.gitattributes)."
 
 # The layers the index changes, as one loop: the hook reads it through
 # `pre-commit-scope`, and a `make pre-commit` by hand reads it here. tools/ is

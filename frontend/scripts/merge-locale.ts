@@ -16,11 +16,14 @@
 // passes it through the repo's Prettier as well, which collapses a short
 // array onto one line. A string's escapes are JSON.stringify's (`\u00e9`
 // comes out as `é`): the same text, and Prettier accepts either.
+//
+// The merge itself (`mergeJson`) knows nothing of locales: the OpenAPI
+// contract's driver (merge-openapi.ts) runs it too, with a writer of its own.
 
 /** An absent key — a side that does not have it (never added, or deleted). */
 const ABSENT = Symbol("absent");
 
-type Json = string | number | boolean | null | Json[] | JsonObject;
+export type Json = string | number | boolean | null | Json[] | JsonObject;
 /** A Map, not a plain object: a plain object puts integer-like keys first. */
 type JsonObject = Map<string, Json>;
 type Side = Json | typeof ABSENT;
@@ -235,7 +238,7 @@ function conflictPaths(m: Merged, path: string[] = []): string[] {
   return [];
 }
 
-export type LocaleMerge =
+export type JsonMerge =
   | { clean: true; text: string }
   /**
    * The same key changed differently on both sides. `ours`, `base` and
@@ -250,12 +253,16 @@ export type LocaleMerge =
       theirs: string;
     };
 
-/** Merges three versions of a locale file. Throws a SyntaxError on a file that is not JSON. */
-export function mergeLocale(
+/**
+ * Merges three versions of a JSON file key by key, writing each result with
+ * `stringify`. Throws a SyntaxError on a side that is not JSON.
+ */
+export function mergeJson(
   base: string,
   ours: string,
   theirs: string,
-): LocaleMerge {
+  stringify: (value: Json) => string,
+): JsonMerge {
   // Both sides adding the same new file: git passes an empty base.
   const merged = mergeValue(
     parseOrdered(base.trim() === "" ? "{}" : base),
@@ -264,7 +271,7 @@ export function mergeLocale(
   );
   const textOf = (pick: "base" | "ours" | "theirs") => {
     const side = merged === ABSENT ? ABSENT : resolve(merged, pick);
-    return side === ABSENT ? "" : stringifyOrdered(side);
+    return side === ABSENT ? "" : stringify(side);
   };
   const conflicts = merged === ABSENT ? [] : conflictPaths(merged);
   if (conflicts.length === 0) return { clean: true, text: textOf("ours") };
@@ -276,3 +283,7 @@ export function mergeLocale(
     theirs: textOf("theirs"),
   };
 }
+
+/** Merges three versions of a locale file, in the order the header describes. */
+export const mergeLocale = (base: string, ours: string, theirs: string) =>
+  mergeJson(base, ours, theirs, stringifyOrdered);
