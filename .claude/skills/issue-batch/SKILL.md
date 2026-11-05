@@ -1,6 +1,6 @@
 ---
 name: issue-batch
-description: Run a set of issues from board to merged — how many branches at once, which ones can safely run together, worktrees, the path to merged (including the independent review it depends on), re-reading the board, and turning lessons into changes. Use when starting work on one or more issues, when deciding what to start next, or when told to "do the issues".
+description: Run a set of issues from board to merged — how many agents and branches at once, which ones can safely run together, worktrees, re-reading the board, and turning lessons into changes; each branch's path to merged is `ci-merge`. Use when starting work on one or more issues, when deciding what to start next, or when told to "do the issues".
 ---
 
 # Working a batch of issues
@@ -9,12 +9,22 @@ The user rarely has one issue. An idea becomes several, and more appear as codin
 starts. This is how a set of them gets worked without the batch costing more than
 the work.
 
+## How many agents at once
+
+- **At most five agents write code at once**, cloud and local together. More
+  buy conflicts and rebases, and the queue drains them no faster.
+- `independent-review` reviewers do not count, and neither do agents that only
+  read and think — research, review, planning: no worktree, no limit.
+- The orchestrator is one more, always.
+
+Inside the five, file collision is the finer limit.
+
 ## The queue is not the bottleneck here — collision is
 
-Measure before importing anyone's rule. In the template as it stands, `backend.yml`
-and `frontend.yml` each finish in **about 35 seconds**, cold and with no caching:
-a `docker compose up --wait postgres`, a `pip install`, a `bun install`, and
-`make backend` / `make frontend`. A rebase-and-re-verify costs under a minute.
+Measure before importing anyone's rule. In the template as it stands, CI's
+backend and frontend runs each finish in **about 35 seconds**, cold and with no
+caching: a `docker compose up --wait postgres`, a `pip install`, a `bun install`,
+and `make backend` / `make frontend`. A rebase-and-re-verify costs under a minute.
 Re-measure once your own suite is real — `gh run list` prints it — because the
 whole of this section is downstream of that number.
 
@@ -31,12 +41,10 @@ a session.
 
 ## Merges serialize per layer, not globally
 
-Both workflows always trigger, and a first step decides from the changed paths
-whether the gates run — `backend.yml` on `backend/`, `docker/`,
-`docker-compose.yml`, `.env.example`, the `Makefile` and itself; `frontend.yml`
-on `frontend/`, the `Makefile` and itself. Two branches
-in different layers do not share a gate and cannot break each other's, so they
-merge in either order, or at once, and a re-run buys nothing.
+CI runs a layer's gates only when the branch touches that layer (`ci-merge`,
+*CI as it runs today*, has the paths). Two branches in different layers do not
+share a gate and cannot break each other's, so they merge in either order, or at
+once, and a re-run buys nothing.
 
 **Within one layer they do serialize**, for a narrower version of the reason a
 compiled repo serializes everything:
@@ -105,8 +113,8 @@ never scarce, and manufactures collisions: four sub-issues each adding a locale 
 is four rebases and four reviews for one coherent change. Sub-issues are for work
 that is genuinely separable *in the code*, not for work that is merely listable.
 
-A small change (`minor`) need not be a branch. It may ride along in whichever
-pull request is already standing in that file.
+A small change need not be a branch. It may ride along in whichever pull request
+is already standing in that file.
 
 ## One worktree per branch
 
@@ -140,83 +148,28 @@ stale worktree keeps a stale test database alive behind it.
 - Worktree off the latest `main`, branch `feat/…` or `fix/…`, pushed under the
   same name.
 - The pull request says `Closes #N` for the issue it closes — with the number
-  checked.
-- **Open it as a draft on the first push.** Draft is not decoration on unfinished
-  work; it is how work survives a session that ends badly — the issue is the
-  durable context, and a hand-back comment may never get written. Know what draft
-  costs here: both workflows carry `if: ${{ !github.event.pull_request.draft }}`,
-  so **a draft pull request runs no CI at all**. Marking it ready is the moment
-  anything is checked, and the local gates are what you have until then.
-- **Ready means finished.** Never ready a pull request just to get a CI run: a
-  ready pull request claims the branch is done, and in a batch it merges the
-  moment CI is green. On a sibling repo a pull request was
-  readied to get CI on a temporary test loop and merged with the loop still in
-  it. The no-drift rule is what makes this cheap here — the local gates *are*
-  the CI targets, so the proof on a draft is `make check`, run locally.
+  checked — and is opened as a **draft** on the first push (`ci-merge`, *What a
+  ready pull request claims*).
 
 ## The path to merged
 
-There is no separate merge skill in this repo. This is the whole of it.
+Each branch takes the `ci-merge` path, the same as outside a batch. What the
+batch changes:
 
-1. **Green locally first.** `make backend` or `make frontend` for the layer you
-   touched, `make check` before opening. This is the no-drift rule paying out: CI
-   runs these exact targets, so a local green is a real prediction — unlike a repo
-   where the runner is a different machine. Two ways it can still lie: CI runs
-   `make backend PYTHON=python` on a clean 3.14 with `requirements.txt` installed
-   fresh, and `bun install --frozen-lockfile`. A `.venv` or a `node_modules` that
-   has drifted from its manifest is green on nothing.
-
-   **Not every red is the branch's.** Before fixing a red gate in code the branch
-   did not touch, run it on `origin/main`; if it fails there too, it is a bug to cite or
-   file, not this branch's to fix. And a failure the machine caused —
-   `No space left on device`, `Cannot allocate memory`, a killed process —
-   says nothing about the code: free the space and run it again, never "fix"
-   code that was never wrong. A gate this machine cannot run at all (no docker
-   for the test database, say) is **named in the pull request**, with the CI
-   workflow that answers for it — never claimed green.
-2. `git fetch origin && git rebase origin/main`, then push with
-   `--force-with-lease`.
-3. **Independent review, when a trigger hits.** Invoke the `independent-review`
-   skill: it names the triggers (database access, the API contract, auth, a
-   refactor, CI and the gates), dispatches the unbiased reviewer, and says how the
-   coder answers. It runs on the **draft**, before step 4: findings are part of
-   being finished, and ready means finished. The batch's session dispatches the
-   reviewer; the coder only answers it. A PR that hits no trigger skips this step.
-4. **Mark it ready.** That is what starts CI.
-5. **Wait for the runs that should exist — and work out which those are.** Read the
-   diff against the path filters first. A branch touching only root Markdown or
-   `.claude/**` matches neither workflow and gets **zero checks**, which on the
-   pull request page is indistinguishable from "checks have not started". Absent
-   and passing are different states; never write a wait loop that reads zero
-   completed checks as success. `gh pr checks <n>` alongside
-   `gh run list --branch <branch>` tells you whether a run exists at all.
-6. **Merge — starting the batch was the approval.** Nobody waits to read the
-   code (`CLAUDE.md`, *Pull Requests*): merge as soon as CI is green, or
-   immediately if CI does not run, and a triggered PR once its `Independent
-   review` comment exists too. **Nothing but you stops a red merge** — `main`
-   carries no branch protection and no ruleset — so if CI fails, stop and fix
-   forward or report. A PR the user said to leave alone waits for them.
-7. `gh pr merge`, then remove the worktree and delete the branch —
-   `deleteBranchOnMerge` is off, so both are yours to do.
-
-**A red ready pull request stays ready** and is fixed forward. Draft is for work
-that is genuinely unfinished, blocked, or handed over.
-
-**Expect conflicts where every feature appends** (the list above). Two authors both
-being right is the common case, and the resolution is usually to keep both sides,
-ordered deliberately. Mechanical resolutions — an import list, a locale key, a
-`requirements.txt` line — are fine to do directly. Hand one back when resolving it
-needs to know *why* the code is shaped as it is: a router whose auth dependency
-matters, two prose paragraphs that need ordering, a token whose name is a decision.
+- **Starting the batch was the approval**, so each pull request merges the
+  moment `ci-merge` clears it, without asking.
+- **The batch's session reviews and merges; the coder does neither.** It
+  dispatches `independent-review` when a trigger hits and sends the findings
+  back to the coder to answer.
 
 ## Re-read the board after every merge
 
 A merge changes the graph. Whatever the merged issue blocked is fair game the
 moment it lands — so the decision is one merge wide, not one batch wide.
 
-Re-reading is not a licence to start everything. The ceiling is the collision list
-above, and an unblocked issue left unstarted is not
-wasted capacity — it is a rebase not yet paid for. Priority (`infrastructure` →
+Re-reading is not a licence to start everything. The ceiling is five coders and the
+collision list above, and an unblocked issue left unstarted is not wasted
+capacity — it is a rebase not yet paid for. Priority (`infrastructure` →
 `architecture` → `fix` → `foundation` → `feat`, `documentation` any time)
 orders what gets **merged**, not what gets started.
 
@@ -232,8 +185,8 @@ to be read cold (`CLAUDE.md`, *Issues*). Beyond that:
 
 - Name the **base commit** and what has landed recently that it must respect.
 - Name the **siblings** and which files they are touching.
-- Tell it which gate to run: the layer target while working, `make check` before
-  the pull request goes ready.
+- Tell it which gate to run — the layer target while working, `make check` before
+  the pull request goes ready — and point it at `ci-merge` for the rest.
 - Tell it **not** to merge — merging belongs to the session running the batch.
 - Tell it **not** to review its own pull request. When a trigger hits, the
   batch's session runs `independent-review` and sends the findings back to the
@@ -243,14 +196,6 @@ to be read cold (`CLAUDE.md`, *Issues*). Beyond that:
 - **Scratch filenames must carry the issue number.** The scratchpad is shared
   between sibling agents, and a collision swaps one pull request's description for
   another's.
-
-## Model, as a hint
-
-Judgement work — design, implementation, triage — wants the strongest model. A
-rebase, a locale-file conflict, a regenerated route tree does not. Most sessions on
-a branch are the second kind. The line is not crisp, so err upwards: a
-"mechanical" rebase that turns out to need two authors' reasoning reconciled was
-never mechanical.
 
 ## When to hand back to the user
 
@@ -277,8 +222,7 @@ a person can give: the page in a real browser, how it looks, a flow clicked
 through. Agents do not start the app (`CLAUDE.md`, *Server-start guardrails*), so
 put the check in the pull request as a checklist for the user to run later, and
 carry on. If it turns out broken, that is a bug to file and fix, not a reason the
-batch waited. (On a sibling repo, three pull requests held for a smoke test and an
-ear check stalled the queue for hours, and every one was fine.)
+batch waited.
 
 ## Learn from the batch: every lesson ends as a change
 

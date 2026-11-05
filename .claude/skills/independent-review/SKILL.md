@@ -47,9 +47,8 @@ already merged (*Catching up on a merged PR*, below).
 
 - **A fresh agent**: the `Agent` tool with `subagent_type: "general-purpose"`.
   **Never `"fork"`** — a fork inherits the coder's whole context, and with it the
-  bias this skill exists to avoid. No `isolation: "worktree"` (it edits nothing)
-  and no model override (it runs on the current model, the one `code-review` is
-  tuned for).
+  bias this skill exists to avoid. No `isolation: "worktree"`: it edits
+  nothing.
 - **Read-only.** It may read the PR, the repository and the issue, and run
   read-only commands (`gh pr view`, `gh pr diff`, `gh issue view`, `git show`).
   It makes no edits, commits, pushes, PR comments or issue comments.
@@ -134,8 +133,8 @@ checked against the code first. Then:
 4. When the fixes rework a query, a contract or the logic substantially, one more
    reviewer reads the new diff. Otherwise one round is the review.
 
-Then the PR merges per `CLAUDE.md`, *Pull Requests*. The review runs alongside
-the gates and CI; it never replaces them.
+Then the PR carries on along `ci-merge` to merged. The review runs alongside the
+gates and CI; it never replaces them.
 
 ## Catching up on a merged PR
 
