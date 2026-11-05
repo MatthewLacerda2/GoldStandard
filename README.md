@@ -70,11 +70,11 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
   opens with a `Contents` heading; and neither a `CLAUDE.md` nor a skill cites
   an issue, a pull request or a date (`tools/docs_lint/`, `make docs-lint`).
 - **What a doc points at exists (docs lint, `named-path`):** a repository path
-  or a `` `make <target>` `` must exist where it is named: in the Markdown
-  of the `docs` and `.claude` folders, in every `CLAUDE.md` and `README.md`, and in
-  the comments (never the strings) of `.py`, `.ts`/`.tsx`, `.sh`, the `.yml`
-  under `.github/`, the git hooks and the `Makefile`. A move that leaves a
-  pointer behind fails the gate instead of misleading the next reader.
+  or a `` `make <target>` `` must exist where it is named: in the Markdown of
+  the `docs` and `.claude` folders, in every `CLAUDE.md` and `README.md`, and
+  in the comments (never the strings) of `.py`, `.ts`/`.tsx`, `.sh`, the
+  `.yml` under `.github/`, the git hooks and the `Makefile`. A move that leaves
+  a pointer behind fails the gate instead of misleading the next reader.
 - **A docs lint exception is inline, with its reason:**
   `<!-- lint: allow(<rule>) <why> -->` in Markdown, and
   `# lint: allow(<rule>) <why>` or `// lint: allow(<rule>) <why>` in a code
