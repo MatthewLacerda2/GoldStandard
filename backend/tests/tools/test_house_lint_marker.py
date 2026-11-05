@@ -31,14 +31,14 @@ def test_markers_in_strings_and_docstrings_pass():
     assert _markers(source) == []
 
 
-def test_an_allow_on_the_same_line_passes():
+def test_an_allow_on_the_line_or_directly_above_passes():
     assert _markers("# TODO is the format  lint: allow(marker) it names the word\n") == []
+    assert _markers("# lint: allow(marker) `TODO` is quoted below\n# - TODO: ...\n") == []
 
 
-def test_an_allow_in_the_comment_run_directly_above_passes():
-    source = "# lint: allow(marker) the next line quotes the format\n# - TODO: ...\n\n# XXX\n"
-    [violation] = _markers(source)
-    assert violation.startswith(f"{PATH}:4: 'XXX'")
+def test_an_allow_excuses_only_the_line_below_it():
+    source = "# lint: allow(marker) a reason\n# TODO\n# XXX\nx = 1  # FIXME\n"
+    assert [v.split(": '")[0] for v in _markers(source)] == [f"{PATH}:3", f"{PATH}:4"]
 
 
 def test_an_allow_needs_a_reason():
@@ -46,6 +46,7 @@ def test_an_allow_needs_a_reason():
     assert len(_markers("# TODO  lint: allow(marker) -- \n")) == 1
 
 
-def test_an_allow_for_another_rule_or_across_code_does_not_excuse():
+def test_an_allow_for_another_rule_or_in_a_string_does_not_excuse():
     assert len(_markers("# FIXME  lint: allow(other) a reason\n")) == 1
-    assert len(_markers("# lint: allow(marker) a reason\nx = 1\n# FIXME\n")) == 1
+    assert len(_markers('x = "lint: allow(marker) a reason"  # FIXME\n')) == 1
+    assert len(_markers('NOTE = "lint: allow(marker) a reason"\n# FIXME\n')) == 1

@@ -36,8 +36,8 @@ never pushes it over. Any other string still counts.
 A comment carrying `TODO`, `FIXME`, `XXX` or `HACK` as a whole upper-case word
 fails: do the work now, or file an issue and delete the comment. Strings are
 data and never trip it. The rare comment that must carry the word says why,
-inline: `# lint: allow(marker) <why>` on the line or in the comment lines
-directly above it.
+inline: `# lint: allow(marker) <why>` in the comment on that line or on the
+line directly above it.
 
 ## Worked example
 

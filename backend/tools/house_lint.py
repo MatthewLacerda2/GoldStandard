@@ -23,8 +23,8 @@ documenting a file never pushes it over; any other string still counts):
      assigned to: do it now, or file an issue and delete the comment. Only
      comments are read — a string holding the word is data. The rare comment
      that must carry the word is excused inline, with a reason:
-     ``lint: allow(marker) <why>`` on the line or in the comment lines directly
-     above it.
+     ``lint: allow(marker) <why>`` in the comment on the line or in the one
+     directly above it. Only comment text is read for the allow too.
 
 Rule 4 is structural only — that a body is a declared model, not that its
 fields carry the right constraints. A template cannot know what its users will
@@ -62,6 +62,9 @@ _ROUTER_OBJECT = "router"
 
 MARKERS = ("TODO", "FIXME", "XXX", "HACK")
 _MARKER_WORD = re.compile(rf"(?<![A-Za-z0-9_])(?:{'|'.join(MARKERS)})(?![A-Za-z0-9_])")
+# The reason after an allow starts at its first character that is not a
+# separator, so a reason may open with a backtick, quote or bracket.
+_MARKER_ALLOW = re.compile(r"lint: allow\(marker\)[\s:—-]*[^\s:—-]")
 MARKER_ADVICE = "do it now, or file an issue and delete the comment"
 
 # FastAPI's parameter markers. A parameter carrying one is injected by the
@@ -346,39 +349,33 @@ def check_router_io(path: Path, tree: ast.Module) -> list[str]:
     return violations
 
 
-def _grants(line: str, rule: str) -> bool:
-    """True if ``line`` carries ``lint: allow(<rule>)`` followed by a reason."""
-    return re.search(rf"lint: allow\({re.escape(rule)}\)[\s:—-]*\w", line) is not None
-
-
-def _allowed(lines: list[str], line: int, rule: str) -> bool:
-    """True if 1-based ``line``, or the run of comment lines directly above it,
-    grants an allow for ``rule``."""
-    if _grants(lines[line - 1], rule):
-        return True
-    above = lines[: line - 1]
-    while above and above[-1].lstrip().startswith("#"):
-        if _grants(above.pop(), rule):
-            return True
-    return False
+def _allowed(comments: dict[int, str], line: int) -> bool:
+    """True if the comment on ``line``, or on the line directly above, allows a
+    marker: ``lint: allow(marker)`` followed by a reason."""
+    return any(_MARKER_ALLOW.search(comments.get(at, "")) for at in (line, line - 1))
 
 
 def check_markers(path: Path, source: str) -> list[str]:
     """Rule 5: no comment carries a marker, unless an allow excuses it."""
-    lines = source.splitlines()
+    comments = {
+        tok.start[0]: tok.string
+        for tok in tokenize.generate_tokens(io.StringIO(source).readline)
+        if tok.type == tokenize.COMMENT
+    }
     violations: list[str] = []
-    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
-        match = _MARKER_WORD.search(tok.string) if tok.type == tokenize.COMMENT else None
-        if match and not _allowed(lines, tok.start[0], "marker"):
-            violations.append(f"{path}:{tok.start[0]}: '{match[0]}' comment: {MARKER_ADVICE}")
+    for line, comment in comments.items():
+        match = _MARKER_WORD.search(comment)
+        if match and not _allowed(comments, line):
+            violations.append(f"{path}:{line}: '{match[0]}' comment: {MARKER_ADVICE}")
     return violations
 
 
 def check_source(path: Path, source: str) -> list[str]:
     """Run every rule against a single file's source text.
 
-    The file is parsed and tokenized once here; a syntax error is the only
-    violation reported for a file that does not parse.
+    The file is parsed once here; a syntax error is the only violation reported
+    for a file that does not parse. It is tokenized twice, once for the lines
+    of code and once for the comments the ``marker`` rule reads.
     """
     try:
         tree = ast.parse(source, filename=str(path))

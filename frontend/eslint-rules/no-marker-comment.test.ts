@@ -2,6 +2,7 @@ import { createTester } from "./tester";
 import { MARKERS, noMarkerComment } from "./no-marker-comment";
 
 const tester = createTester();
+const marker = { messageId: "marker" as const };
 
 tester.run("no-marker-comment", noMarkerComment, {
   valid: [
@@ -10,42 +11,45 @@ tester.run("no-marker-comment", noMarkerComment, {
     // Strings are data, never comments.
     { code: `const words = ["TODO", "FIXME"]; const s = \`HACK \${1}\`;` },
     { code: `const x = <p title="XXX">TODO</p>;` },
-    // An allow with a reason, on the line or in the comments right above.
+    // An allow with a reason, on the line or directly above it.
     { code: `// TODO is the format  lint: allow(marker) it names the word` },
-    {
-      code: [
-        "// lint: allow(marker) the next line quotes the format",
-        "// - FIXME: ...",
-        "const x = 1;",
-      ].join("\n"),
-    },
-    { code: "/**\n * lint: allow(marker) quoted below\n * TODO: ...\n */" },
+    { code: "// lint: allow(marker) `FIXME` is quoted below\n// - FIXME: ..." },
+    // A reason may open with any non-separator, a non-ASCII letter included.
+    { code: "// TODO  lint: allow(marker) été" },
+    { code: "/**\n * lint: allow(marker) (quoted below)\n * TODO: ...\n */" },
   ],
   invalid: [
-    ...MARKERS.map((marker) => ({
-      code: `const x = 1; // ${marker}: tidy this`,
-      errors: [{ messageId: "marker" as const, data: { marker } }],
+    ...MARKERS.map((word) => ({
+      code: `const x = 1; // ${word}: tidy this`,
+      errors: [{ ...marker, data: { marker: word } }],
     })),
     {
       code: "/**\n * Fine.\n * HACK: around the bug\n */",
-      errors: [{ messageId: "marker" as const, line: 3 }],
+      errors: [{ ...marker, line: 3 }],
     },
-    {
-      code: `const x = <div>{/* TODO */}</div>;`,
-      errors: [{ messageId: "marker" as const }],
-    },
+    { code: `const x = <div>{/* TODO */}</div>;`, errors: [marker] },
     {
       // An allow needs a reason, and names this rule.
-      code: "// TODO  lint: allow(marker)\n// XXX  lint: allow(other) why",
+      code: "// TODO  lint: allow(marker) -- \n\n// XXX  lint: allow(other) why",
+      errors: [marker, marker],
+    },
+    {
+      // An allow excuses its own line and the one below, nothing further.
+      code: "// lint: allow(marker) a reason\n// TODO\n// XXX\nconst x = 1; // FIXME",
       errors: [
-        { messageId: "marker" as const },
-        { messageId: "marker" as const },
+        { ...marker, line: 3 },
+        { ...marker, line: 4 },
       ],
     },
     {
-      // A line of code ends the run an allow covers.
-      code: "// lint: allow(marker) a reason\nconst x = 1;\n// FIXME",
-      errors: [{ messageId: "marker" as const, line: 3 }],
+      // An allow inside a string is not in a comment.
+      code: `const s = "lint: allow(marker) a reason"; // FIXME`,
+      errors: [marker],
+    },
+    {
+      // A separator alone is no reason.
+      code: "// TODO  lint: allow(marker) —",
+      errors: [marker],
     },
   ],
 });

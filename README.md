@@ -77,12 +77,15 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
   with path/query scalars and injected dependencies exempt. That is a
   structural check only: what the fields inside a model must contain is yours
   to decide.
-- **No promises in comments, anywhere:** a comment carrying `TODO`, `FIXME`,
-  `XXX` or `HACK` fails — do the work now, or file an issue and delete the
-  comment. `house_lint.py` reads Python, `local/no-marker-comment` reads
-  TypeScript, and `tools/markers.py` reads the shell scripts, hooks, workflows,
-  `Makefile`, Dockerfiles and compose/env files. The rare comment that must
-  carry the word says why: `lint: allow(marker) <why>`.
+- **No promises in comments:** a comment carrying `TODO`, `FIXME`, `XXX` or
+  `HACK` fails — do the work now, or file an issue and delete the comment.
+  `house_lint.py` reads the backend's Python, `local/no-marker-comment` the
+  frontend's TypeScript, and `tools/markers.py` every other tracked file that
+  takes comments (scripts, hooks, workflows, the `Makefile`, Dockerfiles,
+  config files, CSS, HTML, the root tools' Python). Only Markdown, JSON and
+  generated files go unread, and a test fails on a file kind none of them
+  names. The rare comment that must carry the word says why:
+  `lint: allow(marker) <why>`.
 - **A tested local ESLint plugin (frontend):** the design-system rules above are
   real rules with their own colocated test suites, run by Vitest alongside the
   app tests. `max-lines: 550` per file.

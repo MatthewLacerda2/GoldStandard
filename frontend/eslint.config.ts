@@ -27,12 +27,7 @@ const reactCompilerRules = Object.fromEntries(
 
 export default tseslint.config(
   {
-    ignores: [
-      "dist/**",
-      "node_modules/**",
-      "src/routeTree.gen.ts",
-      "vite.config.ts",
-    ],
+    ignores: ["dist/**", "node_modules/**", "src/routeTree.gen.ts"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
