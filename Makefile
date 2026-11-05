@@ -262,13 +262,14 @@ tools-fix: tools-ruff
 # PR=N reads what its description owes and takes the base this branch left;
 # BASE=<sha> names the base, and alone runs the changed tests on it whatever
 # they fix. It judges the head commit, so commit first. Backend tests run with
-# $(PYTHON) against the database `make back-test` reaches (DATABASE_URL, or
-# backend/.env, which is copied over); frontend tests install the base's
-# packages. CI runs the two steps apart, setting up only what `plan` asks for
+# $(PYTHON) as the backend gates take it (relative to backend/), or, left
+# unset, backend/'s venv, against the database `make back-test` reaches
+# (DATABASE_URL, or backend/.env, which is copied over); frontend tests
+# install the base's packages. CI runs the two steps apart, setting up only what `plan` asks for
 # in between: `regression-plan PR=N BASE=<sha>`, then `regression-run BASE=<sha>`.
 .PHONY: regression regression-plan regression-run
 REGRESSION := $(TOOLS_PYTHON) tools/regression.py
-REGRESSION_TOOLS := --python $(PYTHON) --bun $(BUN)
+REGRESSION_TOOLS := $(if $(filter-out file,$(origin PYTHON)),--python $(PYTHON)) --bun $(BUN)
 regression:
 	$(REGRESSION) check $(if $(PR),--pr $(PR)) $(if $(BASE),--base $(BASE)) $(REGRESSION_TOOLS)
 
