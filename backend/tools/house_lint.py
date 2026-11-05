@@ -42,13 +42,19 @@ Missing annotations are ruff's job (``ANN``); rule 4 only judges the
 annotations that are there.
 
 The module is importable (rules return violation lists) and runnable as
-``python tools/house_lint.py`` to scan the backend tree.
+``python tools/house_lint.py`` to scan the backend tree with every rule. The
+length rules (1-3) are the house's, not the backend's: ``--lengths ROOT`` scans
+another tree with only those, which is how ``make tools`` holds the root
+``tools/`` folder to the same limits, counted the same way. A ``test_*`` method
+inside a class counts like a module-level ``test_*`` function.
 """
 
 from __future__ import annotations
 
+import argparse
 import ast
 import io
+import os
 import re
 import sys
 import tokenize
@@ -378,8 +384,9 @@ def check_markers(path: Path, source: str) -> list[str]:
     return violations
 
 
-def check_source(path: Path, source: str) -> list[str]:
-    """Run every rule against a single file's source text.
+def check_source(path: Path, source: str, *, lengths_only: bool = False) -> list[str]:
+    """Run every rule against a single file's source text, or only the length
+    rules (1-3) with ``lengths_only``.
 
     The file is parsed once here; a syntax error is the only violation reported
     for a file that does not parse. It is tokenized twice, once for the lines
@@ -390,12 +397,10 @@ def check_source(path: Path, source: str) -> list[str]:
     except SyntaxError as exc:
         return [f"{path}: syntax error: {exc}"]
     code = code_lines(source, tree)
-    return (
-        check_file_length(path, source, code)
-        + check_function_lengths(path, tree, code)
-        + check_router_io(path, tree)
-        + check_markers(path, source)
-    )
+    lengths = check_file_length(path, source, code) + check_function_lengths(path, tree, code)
+    if lengths_only:
+        return lengths
+    return lengths + check_router_io(path, tree) + check_markers(path, source)
 
 
 def iter_python_files(root: Path) -> list[Path]:
@@ -405,18 +410,26 @@ def iter_python_files(root: Path) -> list[Path]:
     return sorted(p for p in root.rglob("*.py") if not any(part in skip for part in p.parts))
 
 
-def scan(root: Path) -> list[str]:
+def scan(root: Path, *, lengths_only: bool = False) -> list[str]:
     """Scan the tree under ``root`` and return all violations."""
     violations: list[str] = []
     for path in iter_python_files(root):
-        violations.extend(check_source(path, path.read_text(encoding="utf-8")))
+        source = path.read_text(encoding="utf-8")
+        violations.extend(check_source(path, source, lengths_only=lengths_only))
     return violations
 
 
-def main() -> int:
-    """Entry point: scan the backend tree, print violations, set exit code."""
-    root = Path(__file__).resolve().parent.parent
-    violations = scan(root)
+def main(argv: list[str] | None = None) -> int:
+    """Entry point: scan a tree, print violations, set exit code."""
+    parser = argparse.ArgumentParser(description="The house lint; by default the backend tree.")
+    parser.add_argument(
+        "--lengths", metavar="ROOT", type=Path, help="scan ROOT with the length rules only"
+    )
+    args = parser.parse_args(argv)
+    # Relative to where it runs, so a folder named `tests` above the tree
+    # cannot exempt everything in it from the file-length rule.
+    root = args.lengths or Path(os.path.relpath(Path(__file__).resolve().parent.parent))
+    violations = scan(root, lengths_only=args.lengths is not None)
     if violations:
         for v in violations:
             print(v)
