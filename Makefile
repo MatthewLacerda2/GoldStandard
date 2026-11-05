@@ -136,7 +136,9 @@ pre-commit-scope:
 # tests or build. A layer the commit does not touch is skipped and says so; a
 # touched one whose tools are not installed fails rather than passing unchecked.
 # A fast check that reads the whole repository joins the prerequisites here.
-pre-commit: pre-commit-back pre-commit-front
+# docs-lint is one: it reads the docs on disk, which pre-commit-scope does not
+# compare with the index.
+pre-commit: docs-lint pre-commit-back pre-commit-front
 	@echo "pre-commit: ok"
 
 pre-commit-back:

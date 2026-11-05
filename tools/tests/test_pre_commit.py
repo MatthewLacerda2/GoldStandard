@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -31,12 +32,9 @@ exit 0
 
 def hermetic_env() -> dict[str, str]:
     """No git, make or user config leaks in: a hook may be running this test."""
-    env = {
-        k: v
-        for k, v in os.environ.items()
-        if not k.startswith("GIT_") and k not in DROPPED
-    }
-    return env | {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_") and k not in DROPPED}
+    hermetic = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    return env | hermetic | {"TOOLS_PYTHON": sys.executable}
 
 
 class Scratch(unittest.TestCase):
@@ -56,7 +54,7 @@ class Scratch(unittest.TestCase):
             ("core.hooksPath", ".githooks"),
         ]:
             self.git("config", key, value)
-        for name in ("Makefile", ".gitignore", ".githooks"):
+        for name in ("Makefile", ".gitignore", ".githooks", "tools/docs_lint"):
             copy = shutil.copytree if (ROOT / name).is_dir() else shutil.copy
             copy(ROOT / name, self.repo / name)
         for layer in ("backend", "frontend"):
