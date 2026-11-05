@@ -40,4 +40,6 @@ for new resources rather than inventing a new one.
 ## Gate before pushing
 
 `make backend` = `back-lint` (ruff + ruff-format + `house_lint.py`) ·
-`back-build` (imports `main`) · `back-test` (pytest). Green before you push.
+`back-build` (imports `main`, and fails when `frontend/openapi.json` no longer
+matches what the endpoints answer: run `make openapi` and commit it) ·
+`back-test` (pytest). Green before you push.

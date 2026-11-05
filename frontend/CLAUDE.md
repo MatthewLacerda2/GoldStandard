@@ -9,7 +9,10 @@ and run identically in CI.
 
 `routes/` → `lib/api/<domain>.ts` → `lib/api/client.ts`. `client.ts` is the
 single place auth/token handling and the API base URL live (streaming is the
-only allowed exception). `lib/schemas/` mirrors the backend Pydantic models.
+only allowed exception). `lib/schemas/` mirrors the backend Pydantic models
+by hand; `make front-contract` holds it, by field name, to `openapi.json`, the
+backend's answers as `make openapi` writes them. Its failure says how to fix
+each finding.
 
 ## Design system (all ESLint errors — see `eslint.config.ts`)
 
@@ -44,4 +47,5 @@ container — `{t("items.heading")}` and `{item.name}` alike — are untouched.
 ## Gate before pushing
 
 `make frontend` = `front-lint` (`bun run check`: tsc + eslint + prettier) ·
-`front-build` (vite) · `front-test` (vitest). Green before you push.
+`front-build` (vite) · `front-test` (vitest) · `front-contract`
+(`scripts/check-contract.ts`). Green before you push.

@@ -128,8 +128,8 @@ gets **worked**.
 **Blocked by / Blocks** and **sub-issues**; there are no rigid batches. Split by
 responsibility, never by parallelism — sub-issues that all land in the same file
 are one branch. Never split an API change into a backend half and a frontend
-half: the frontend schemas are hand-mirrored and no gate holds the halves
-together. A `planning` issue that would change how another is built blocks it.
+half: a gate holds the response fields' names together, but their types and
+the request bodies are still mirrored by hand. A `planning` issue that would change how another is built blocks it.
 
 **Assignment** — no assignee means free for grabs; an assignee means it's
 taken. When we start *actually working* an issue (not just planning), assign
@@ -226,7 +226,7 @@ check that only runs in CI, or only locally.
 make check      # everything
 make tools      # the repository's own tools (tools/), stdlib-only
 make backend    # back-lint + back-build + back-test
-make frontend   # front-lint + front-build + front-test
+make frontend   # front-lint + front-build + front-test + front-contract
 ```
 
 **Gates must be green before you push.** Scope your run to the layer you touched
@@ -261,4 +261,7 @@ needs a running app, ask them to start it.
 
 - **Migrations:** `init_db()` uses `create_all` (additive only). Add Alembic
   when schema changes need to be destructive/ordered.
-- **Typed SDK:** generate `lib/schemas/` from the backend OpenAPI spec.
+- **Typed SDK:** generate `lib/schemas/` from the backend OpenAPI spec. Until
+  then they are written by hand, and `make front-contract` holds them to
+  `frontend/openapi.json` (written by `make openapi`; `make back-build` fails
+  when it is stale).
