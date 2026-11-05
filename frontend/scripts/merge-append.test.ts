@@ -3,6 +3,11 @@
 // takes as "both", which it leaves to a person, and what it checks before it
 // takes one. merge-driver.test.ts drives it through git end to end.
 
+// `refusal` loads the TypeScript compiler on its first call, so the driver
+// pays for it only when a registry conflicts. Loaded here instead, with the
+// file, it is not charged to whichever test calls first: on a loaded machine
+// that load alone outran the 5 s a test gets.
+import "typescript";
 import { describe, expect, it } from "vitest";
 import { refusal, resolveInsertions } from "./merge-append";
 
