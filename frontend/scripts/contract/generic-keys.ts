@@ -3,6 +3,7 @@
 // (`<T, K extends keyof T>(o: T, k: K)` or `(o: T, k: keyof T)`). Inside the
 // helper `o[k]` names nothing; at the call the literal names the field.
 import ts from "typescript";
+import { elementOf } from "./types";
 
 /** The properties a call reads through a generic key parameter. */
 export function genericKeyReads(
@@ -73,10 +74,7 @@ function literalsOf(type: ts.Type): string[] {
 function objectsOf(checker: ts.TypeChecker, type: ts.Type): ts.Type[] {
   const members = type.isUnion() ? type.types : [type];
   return members.flatMap((m) => {
-    const element =
-      checker.isArrayType(m) || checker.isTupleType(m)
-        ? checker.getIndexTypeOfType(m, ts.IndexKind.Number)
-        : undefined;
+    const element = elementOf(checker, m);
     return element
       ? objectsOf(checker, element)
       : m.flags & ts.TypeFlags.Object

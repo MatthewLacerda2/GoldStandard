@@ -27,10 +27,11 @@ import ts from "typescript";
 import { relative } from "node:path";
 import { genericKeyReads } from "./generic-keys";
 import { isCarrier, isIntrinsicSpread, isOpenSink, isSink } from "./sinks";
+import { elementOf as elementOfType, rootsOf, typeId } from "./types";
 
 /** A field the frontend declares: the declaration it was written in. */
 export interface Field {
-  /** `Type.field`, nested literals as `Type.outer.field`. */
+  /** `lib/schemas/items.ts#Item.name`, nested literals as `…#Type.outer.field`. */
   key: string;
   file: string;
   line: number;
@@ -81,10 +82,7 @@ export function analyze(
   const linked = new Map<string, number>();
   const wholeUses = new Map<ts.Symbol, string>();
 
-  const roots = (symbol: ts.Symbol): readonly ts.Symbol[] => {
-    const all = checker.getRootSymbols(symbol);
-    return all.length > 0 ? all : [symbol];
-  };
+  const roots = (symbol: ts.Symbol) => rootsOf(checker, symbol);
   const markRead = (symbol: ts.Symbol | undefined) => {
     if (!symbol || !(symbol.flags & ts.SymbolFlags.Property)) return;
     for (const root of roots(symbol)) read.add(root);
@@ -100,7 +98,6 @@ export function analyze(
     }
   };
 
-  const typeId = (type: ts.Type) => (type as unknown as { id: number }).id;
   // A union's members, each without `null`/`undefined`; `NoInfer<T>` as `T`
   // (TanStack Query types a result's `data` so).
   const parts = (type: ts.Type): ts.Type[] => {
@@ -122,12 +119,7 @@ export function analyze(
   const elements = new Map<ts.Type, ts.Type | undefined>();
   const elementOf = (type: ts.Type): ts.Type | undefined => {
     if (!elements.has(type)) {
-      elements.set(
-        type,
-        checker.isArrayType(type) || checker.isTupleType(type)
-          ? checker.getIndexTypeOfType(type, ts.IndexKind.Number)
-          : undefined,
-      );
+      elements.set(type, elementOfType(checker, type));
     }
     return elements.get(type);
   };
@@ -459,11 +451,11 @@ function describe(symbol: ts.Symbol, options: AnalyzeOptions): Field | null {
   if (!decl || !ts.isPropertySignature(decl)) return null;
   const sf = decl.getSourceFile();
   if (!options.isProjectFile(sf.fileName)) return null;
-  // `Type.outer.field`; a literal written inline, outside any named type
-  // (`request<{ items: Row[] }>`), is named by the file and the declarations
-  // around it: `lib/api/voyage/voyages.ts#listVoyageSearchIndex.items`.
+  // `file#Type.outer.field`, the file always in front so a type of the same
+  // name elsewhere never renames this one's findings. A literal written
+  // inline, outside any named type (`request<{ items: Row[] }>`), is named by
+  // the declarations around it: `lib/api/items.ts#listItems.items`.
   const path: string[] = [symbol.getName()];
-  let named = false;
   for (
     let node: ts.Node = decl.parent;
     !ts.isSourceFile(node);
@@ -471,7 +463,6 @@ function describe(symbol: ts.Symbol, options: AnalyzeOptions): Field | null {
   ) {
     if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) {
       path.unshift(node.name.text);
-      named = true;
       break;
     }
     const name = (node as ts.NamedDeclaration).name;
@@ -486,9 +477,7 @@ function describe(symbol: ts.Symbol, options: AnalyzeOptions): Field | null {
       path.unshift(name.text);
     }
   }
-  if (!named) {
-    path[0] = `${relative(options.root, sf.fileName).replace(/^src\//, "")}#${path[0]}`;
-  }
+  const file = relative(options.root, sf.fileName).replace(/^src\//, "");
   const line = sf.getLineAndCharacterOfPosition(decl.getStart(sf)).line + 1;
-  return { key: path.join("."), file: sf.fileName, line };
+  return { key: `${file}#${path.join(".")}`, file: sf.fileName, line };
 }

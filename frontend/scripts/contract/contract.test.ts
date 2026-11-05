@@ -49,7 +49,7 @@ describe("a field added to a response model", () => {
       files("a: string; b: string; c: string"),
       contract("a", "b", "c"),
     );
-    expect(declared).toEqual(["unread Row.c"]);
+    expect(declared).toEqual(["unread lib/schemas/rows.ts#Row.c"]);
     const read = READ_A_B.replace("r.a + r.b", "r.a + r.b + r.c");
     expect(
       findingsOf(
@@ -57,12 +57,17 @@ describe("a field added to a response model", () => {
         contract("a", "b", "c"),
       ),
     ).toEqual([]);
-    const findings = [{ kind: "unread" as const, key: "Row.c" }];
+    const findings = [
+      { kind: "unread" as const, key: "lib/schemas/rows.ts#Row.c" },
+    ];
     expect(
       judge(
         findings,
         { lines: [], renamed: new Map() },
-        { "unread Row.c": "read by the CSV export, row by row" },
+        {
+          "unread lib/schemas/rows.ts#Row.c":
+            "read by the CSV export, row by row",
+        },
       ).fresh,
     ).toEqual([]);
   });
@@ -74,7 +79,7 @@ describe("a field the frontend declares", () => {
       files("a: string; b: string; volume: number"),
       contract("a", "b"),
     );
-    expect(lines).toContain("phantom Row.volume");
+    expect(lines).toContain("phantom lib/schemas/rows.ts#Row.volume");
   });
 
   it("is never a phantom of a model that takes any field (a passthrough)", () => {
@@ -83,7 +88,7 @@ describe("a field the frontend declares", () => {
     });
     expect(
       findingsOf(files("a: string; b: string; extra: number"), open),
-    ).toEqual(["unread Row.extra"]);
+    ).toEqual(["unread lib/schemas/rows.ts#Row.extra"]);
   });
 });
 
@@ -362,5 +367,84 @@ describe("the client", () => {
       "unpaired lib/api/rows.ts#drop: no backend operation for DELETE /api/v2/rows/{…}",
       "unpaired lib/api/rows.ts#load: no backend operation for GET /api/v2/rows",
     ]);
+  });
+});
+
+describe("what a value is", () => {
+  const spec: OpenApi = {
+    paths: {
+      "/rows": { get: okWith({ type: "array", items: ref("RowOut") }) },
+      "/rows/one": { get: okWith(ref("RowOut")) },
+    },
+    components: {
+      schemas: {
+        RowOut: {
+          type: "object",
+          properties: {
+            a: { type: "string" },
+            b: { anyOf: [{ type: "string" }, { type: "null" }] },
+            pos: ref("Pos"),
+          },
+        },
+        Pos: object("lat"),
+      },
+    },
+  };
+  const read = (
+    call: string,
+    row = "a: string; b: string | null; pos: { lat: string }",
+  ) =>
+    collectOf(
+      {
+        "src/lib/schemas/rows.ts": schemas(row),
+        "src/lib/api/rows.ts": `
+          import { request } from "./client";
+          import type { Row } from "../schemas/rows";
+          export const load = () => ${call};`,
+        "src/use.ts": `
+          import { load } from "./lib/api/rows";
+          export const show = async () => { const r: unknown = await load(); return r; };`,
+      },
+      spec,
+    ).filter((f) => f.kind === "mismatched");
+  const lines = (findings: { key: string; detail?: string }[]) =>
+    findings.map((f) => `${f.key}: ${f.detail}`);
+
+  it("is red when a list is read as one object, or one object as a list", () => {
+    expect(lines(read(`request<Row>("/rows")`))).toEqual([
+      "GET /rows: read as an object, sent as a list",
+    ]);
+    expect(lines(read(`request<Row[]>("/rows/one")`))).toEqual([
+      "GET /rows/one: read as a list, sent as an object",
+    ]);
+  });
+
+  it("is red when an object is read as a scalar", () => {
+    expect(lines(read(`request<string>("/rows/one")`))).toEqual([
+      "GET /rows/one: read as a scalar, sent as an object",
+    ]);
+  });
+
+  it("follows each field into its own value", () => {
+    expect(
+      lines(
+        read(`request<Row[]>("/rows")`, "a: string; b: string; pos: string"),
+      ),
+    ).toEqual(["RowOut.pos: read as a scalar, sent as an object"]);
+  });
+
+  it("agrees through a null, a branded scalar and a list read as a list", () => {
+    const row = `a: string & { readonly brand: "A" }; b: string | null; pos: { lat: string }`;
+    expect(read(`request<Row[]>("/rows")`, row)).toEqual([]);
+    expect(read(`request<Row>("/rows/one")`, row)).toEqual([]);
+  });
+});
+
+describe("a gate that finds no request", () => {
+  it("fails rather than pass having checked nothing", () => {
+    const noRequest = { "src/use.ts": `export const nothing = 1;` };
+    expect(() => collectOf(noRequest, contract("a"))).toThrow(
+      "no call of request from src/lib/api/client.ts was found",
+    );
   });
 });

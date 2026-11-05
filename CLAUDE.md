@@ -128,8 +128,10 @@ gets **worked**.
 **Blocked by / Blocks** and **sub-issues**; there are no rigid batches. Split by
 responsibility, never by parallelism — sub-issues that all land in the same file
 are one branch. Never split an API change into a backend half and a frontend
-half: a gate holds the response fields' names together, but their types and
-the request bodies are still mirrored by hand. A `planning` issue that would change how another is built blocks it.
+half: `make front-contract` holds the answer each request reads to its
+endpoint by field name and kind (list, object, scalar), but a scalar's type,
+nullability and request bodies are still mirrored by hand. A `planning` issue
+that would change how another is built blocks it.
 
 **Assignment** — no assignee means free for grabs; an assignee means it's
 taken. When we start *actually working* an issue (not just planning), assign

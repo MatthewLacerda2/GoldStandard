@@ -23,9 +23,9 @@ export function isExcludedReader(fileName: string): boolean {
 /** Findings that are not findings: a field read by a name no code spells (a
  *  column's string accessor, `Object.entries`, an export of the whole row),
  *  or one a standard makes the backend send. Keyed as the gate prints it
- *  (`unread Type.field`), each with its reason. An entry nothing matches any
+ *  (`unread lib/schemas/items.ts#Item.name`), each with its reason. An entry nothing matches any
  *  more is reported, so the list stays true. */
 export const ALLOWED: Readonly<Record<string, string>> = {
-  "unread TokenResponse.token_type":
+  "unread lib/schemas/auth.ts#TokenResponse.token_type":
     "OAuth 2.0 (RFC 6749, section 5.1) makes a token response carry it; the client only speaks bearer",
 };

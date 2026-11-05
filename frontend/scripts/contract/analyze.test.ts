@@ -56,7 +56,7 @@ describe("a read", () => {
       },
       spec,
     );
-    expect(unread(lines)).toEqual(["unread Place.km"]);
+    expect(unread(lines)).toEqual(["unread lib/schemas/records.ts#Place.km"]);
   });
 
   it("is a destructuring, of a variable or of a parameter", () => {
@@ -72,7 +72,9 @@ describe("a read", () => {
       },
       spec,
     );
-    expect(unread(lines)).toEqual(["unread Place.color"]);
+    expect(unread(lines)).toEqual([
+      "unread lib/schemas/records.ts#Place.color",
+    ]);
   });
 
   it("is a destructuring assignment", () => {
@@ -91,7 +93,10 @@ describe("a read", () => {
       },
       spec,
     );
-    expect(unread(lines)).toEqual(["unread Place.color", "unread Place.name"]);
+    expect(unread(lines)).toEqual([
+      "unread lib/schemas/records.ts#Place.color",
+      "unread lib/schemas/records.ts#Place.name",
+    ]);
   });
 
   // The case "find references" misses: each `PlaceHit` handed to
@@ -112,7 +117,7 @@ describe("a read", () => {
     });
     const call = `export const index = async () => (await load()).map((g) => entryFrom("place", g, null));`;
     expect(unread(findingsOf(files(ENTRY_FROM + call), hits))).toEqual([
-      "unread Place.km",
+      "unread lib/schemas/records.ts#Place.km",
     ]);
     const readsKm = ENTRY_FROM.replace(
       "label: row.name",
@@ -133,7 +138,7 @@ describe("a read", () => {
       },
       hits,
     );
-    expect(unread(lines)).toEqual(["unread Place.km"]);
+    expect(unread(lines)).toEqual(["unread lib/schemas/records.ts#Place.km"]);
   });
 
   it("names a literal written inline by where it is written", () => {
@@ -175,7 +180,9 @@ describe("a read", () => {
       },
       spec,
     );
-    expect(unread(lines)).toEqual(["unread Place.color"]);
+    expect(unread(lines)).toEqual([
+      "unread lib/schemas/records.ts#Place.color",
+    ]);
   });
 
   it("inside a generic helper reads what its constraint names of the rows handed in", () => {
@@ -203,7 +210,7 @@ describe("a read", () => {
       unread(
         findingsOf(files("located(ofColor(await load(), null)).length"), spec),
       ),
-    ).toEqual(["unread Place.name"]);
+    ).toEqual(["unread lib/schemas/records.ts#Place.name"]);
     // A key typed by its constraint (`K extends keyof Place`) names
     // only what a call passes, and nothing when the helper is never called.
     const unusedGet = `
@@ -214,17 +221,17 @@ describe("a read", () => {
       "src/get.ts": unusedGet,
     };
     expect(unread(findingsOf(withGet, spec))).toEqual([
-      "unread Place.color",
-      "unread Place.id",
-      "unread Place.km",
-      "unread Place.name",
+      "unread lib/schemas/records.ts#Place.color",
+      "unread lib/schemas/records.ts#Place.id",
+      "unread lib/schemas/records.ts#Place.km",
+      "unread lib/schemas/records.ts#Place.name",
     ]);
     // A helper whose constraint names a field it never reads reads nothing.
     expect(unread(findingsOf(files("first(await load())"), spec))).toEqual([
-      "unread Place.color",
-      "unread Place.id",
-      "unread Place.km",
-      "unread Place.name",
+      "unread lib/schemas/records.ts#Place.color",
+      "unread lib/schemas/records.ts#Place.id",
+      "unread lib/schemas/records.ts#Place.km",
+      "unread lib/schemas/records.ts#Place.name",
     ]);
   });
 
@@ -243,7 +250,10 @@ describe("a read", () => {
       },
       spec,
     );
-    expect(unread(lines)).toEqual(["unread Place.color", "unread Place.km"]);
+    expect(unread(lines)).toEqual([
+      "unread lib/schemas/records.ts#Place.color",
+      "unread lib/schemas/records.ts#Place.km",
+    ]);
   });
 
   it("of a component's prop reads what a spread of props hands it", () => {
@@ -257,15 +267,15 @@ describe("a read", () => {
         export const view = async () => (await load()).map((z) => ${spread});`,
     });
     expect(unread(findingsOf(view("<Label {...z} />"), spec))).toEqual([
-      "unread Place.color",
-      "unread Place.id",
-      "unread Place.km",
+      "unread lib/schemas/records.ts#Place.color",
+      "unread lib/schemas/records.ts#Place.id",
+      "unread lib/schemas/records.ts#Place.km",
     ]);
     // A DOM element takes every field as an attribute: no read, but the hint.
     const dom = collectOf(view(`<div {...z}><Label {...z} /></div>`), spec);
-    expect(dom.find((f) => f.key === "Place.color")?.detail).toBe(
-      "handed over whole at src/view.tsx:4",
-    );
+    expect(
+      dom.find((f) => f.key === "lib/schemas/records.ts#Place.color")?.detail,
+    ).toBe("handed over whole at src/view.tsx:4");
   });
 
   it("does not depend on how deep a type was first met", () => {
@@ -291,9 +301,9 @@ describe("a read", () => {
       ),
     );
     expect(unread(lines)).toEqual([
-      "unread Place.color",
-      "unread Place.id",
-      "unread Place.km",
+      "unread lib/schemas/records.ts#Place.color",
+      "unread lib/schemas/records.ts#Place.id",
+      "unread lib/schemas/records.ts#Place.km",
     ]);
   });
 
@@ -309,7 +319,7 @@ describe("a read", () => {
       },
       spec,
     );
-    expect(unread(lines)).toEqual(["unread Place.km"]);
+    expect(unread(lines)).toEqual(["unread lib/schemas/records.ts#Place.km"]);
   });
 });
 
@@ -332,6 +342,9 @@ describe("not a read", () => {
       },
       spec,
     );
-    expect(unread(lines)).toEqual(["unread Place.color", "unread Place.km"]);
+    expect(unread(lines)).toEqual([
+      "unread lib/schemas/records.ts#Place.color",
+      "unread lib/schemas/records.ts#Place.km",
+    ]);
   });
 });

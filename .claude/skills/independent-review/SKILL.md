@@ -29,8 +29,9 @@ Before the merge, when the PR hits any **trigger**:
   `backend/repositories/`, or a model in `backend/models/`.
 - **The API contract** — it changes a request or response shape: a Pydantic
   schema in `backend/schemas/` or its hand-made mirror in
-  `frontend/src/lib/schemas/`. `make front-contract` checks the response
-  fields' names; their types and the request bodies have only this review.
+  `frontend/src/lib/schemas/`. `make front-contract` checks each request's
+  answer by field name and kind; a scalar's type, nullability and request
+  bodies have only this review.
 - **Auth** — `backend/api/deps.py`, `backend/utils/security.py`, which side of
   `get_current_user` a router sits on in `backend/api/endpoints.py`, or how
   `frontend/src/lib/api/client.ts` carries the token.

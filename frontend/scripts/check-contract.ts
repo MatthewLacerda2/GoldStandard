@@ -2,24 +2,30 @@
 // (`src/lib/schemas/`) to what the backend sends. Run by `make front-contract`,
 // so by `make frontend` and CI.
 //
-// It compares the types each request reads its answer as with the backend's
-// contract (`frontend/openapi.json`, written by `make openapi`; `make
-// back-build` fails when it is stale) and reports four kinds of finding:
+// It finds every request the app makes through the API client (`CLIENT` in
+// `contract/config.ts`), pairs the type it reads the answer as with the
+// endpoint's answer in the backend's contract (`frontend/openapi.json`,
+// written by `make openapi`; `make back-build` fails when it is stale), and
+// reports five kinds of finding:
 //
 //   unread      a field a response type declares that no code reads (the
 //               schema modules, tests and mocks are not readers);
-//   undeclared  a field a backend response model sends that no frontend type
+//   undeclared  a field a paired backend answer sends that no frontend type
 //               declares — so nothing reads it either;
 //   phantom     a field a frontend type declares that its endpoint never sends;
-//   unpaired    a request whose answer cannot be matched to a backend schema:
-//               the path is built out of sight. Give the type it reads the
+//   mismatched  a value read as another kind than it is sent: a list read as
+//               one object, an object read as a list or a string, and so on;
+//   unpaired    a request whose answer cannot be matched to an endpoint: the
+//               path is built out of sight. Give the type it reads the
 //               answer as a `/** @backend SchemaName */` tag.
 //
-// It compares field names, nesting included (a list's items, a record's
-// values, a nested model's fields); it does not compare a field's type. How a
-// read is told from a declaration or a write, and how a read through a
-// parameter of another type counts, is in `contract/analyze.ts`; how a
-// request is matched to its operation, in `contract/requests.ts`.
+// So it compares field names and what kind each value is (list, object,
+// scalar), nesting included; it does not compare a scalar's type (string or
+// number), nullability, or request bodies, and an endpoint no request calls
+// is not looked at. How a read is told from a declaration or a write, and how
+// a read through a parameter of another type counts, is in
+// `contract/analyze.ts`; how a request is matched to its operation, in
+// `contract/requests.ts`.
 //
 // Today's findings are held against the baseline (`contract/baseline.txt`,
 // only shrinks: a line no longer found is reported, a line the base branch
@@ -107,7 +113,8 @@ if (problems > 0) {
   console.error(
     "\nThe frontend's types and the backend's answers must agree, and a field nobody reads is" +
       " not sent: declare and read it, or remove it from the backend's response model (then" +
-      " `make openapi`) and from the frontend's type. A field read in a way the analysis cannot" +
+      " `make openapi`) and from the frontend's type. A value read as another kind than it is sent" +
+      " (a list read as one object) is fixed in the frontend's type or the request. A field read in a way the analysis cannot" +
       " see (a string accessor, Object.entries, a whole-row export) goes in ALLOWED" +
       " (scripts/contract/config.ts) with the reason. A request it cannot pair takes a" +
       " `/** @backend SchemaName */` tag on the type it reads the answer as.",
@@ -127,7 +134,6 @@ function baseLines(): string[] | undefined {
     baseline: relative(REPO, BASELINE),
     script: relative(REPO, import.meta.filename),
   };
-  const commit = baseCommit(gate);
-  const text = commit && baseBaseline(gate, commit);
+  const text = baseBaseline(gate, baseCommit(gate));
   return text === undefined ? undefined : parseBaseline(text).lines;
 }

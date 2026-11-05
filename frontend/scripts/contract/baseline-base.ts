@@ -6,8 +6,8 @@
 // grows. Only the change that brings the gate has a base without it, so only
 // then may the base lack the baseline; a script or a baseline this change
 // moved is looked for at its old path. Any other failure to read the base
-// fails the run in CI (`CI` set) and is said, the growth then unchecked, on a
-// local run.
+// fails the run, locally as in CI: a check that only CI makes would let the
+// same commit be green here and red there.
 import { execFileSync } from "node:child_process";
 
 /** The gate's baseline, as its base is asked about it. */
@@ -34,31 +34,20 @@ const gitIn =
       stdio: ["ignore", "pipe", "pipe"],
     });
 
-// Said, or thrown when CI runs: CI must never leave the growth unchecked.
-function unchecked(gate: BaselineGate, why: string, env: Env): undefined {
-  if (env.CI) throw new Error(`${gate.name}: ${why}`);
-  console.log(`${gate.name}: ${why} The baseline's growth is not checked.`);
-  return undefined;
-}
-
-/** The commit the change is judged against, or undefined when there is none. */
-export function baseCommit(
-  gate: BaselineGate,
-  env: Env = process.env,
-): string | undefined {
+/** The commit the change is judged against. */
+export function baseCommit(gate: BaselineGate, env: Env = process.env): string {
   const explicit = env.BASELINE_BASE;
   const git = gitIn(gate.repo);
   try {
     return explicit
       ? git("rev-parse", "--verify", `${explicit}^{commit}`).trim()
       : git("merge-base", "HEAD", "origin/main").trim();
-  } catch {
-    return unchecked(
-      gate,
+  } catch (error) {
+    throw new Error(
       explicit
-        ? `BASELINE_BASE=${explicit} is not a commit.`
-        : "no origin/main to compare the baseline with.",
-      env,
+        ? `${gate.name}: BASELINE_BASE=${explicit} is not a commit.`
+        : `${gate.name}: no origin/main to compare the baseline with: run \`git fetch origin\`, or set BASELINE_BASE to the commit to compare with.`,
+      { cause: error },
     );
   }
 }
@@ -67,7 +56,6 @@ export function baseCommit(
 export function baseBaseline(
   gate: BaselineGate,
   commit: string,
-  env: Env = process.env,
 ): string | undefined {
   const git = gitIn(gate.repo);
   const has = (file: string) => {
@@ -97,9 +85,7 @@ export function baseBaseline(
     );
     return undefined;
   }
-  return unchecked(
-    gate,
-    `the base (${commit.slice(0, 12)}) has the gate but no ${gate.baseline}: was the baseline moved?`,
-    env,
+  throw new Error(
+    `${gate.name}: the base (${commit.slice(0, 12)}) has the gate but no ${gate.baseline}: was the baseline moved?`,
   );
 }

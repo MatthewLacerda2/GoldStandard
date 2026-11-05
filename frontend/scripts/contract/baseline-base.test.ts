@@ -1,6 +1,6 @@
 // @vitest-environment node
-// Which base the baseline is compared with, and when a base that cannot be
-// read fails the run (CI) rather than leaving the growth unchecked.
+// Which base the baseline is compared with, and that a base which cannot be
+// read fails the run rather than leaving the growth unchecked.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -63,18 +63,14 @@ describe("baseCommit", () => {
     expect(baseCommit(gate(), { BASELINE_BASE: at })).toBe(at);
   });
 
-  it("fails the run in CI on a BASELINE_BASE that is no commit, and says so locally", () => {
-    expect(() =>
-      baseCommit(gate(), { BASELINE_BASE: "no-such-ref", CI: "true" }),
-    ).toThrow("check-x: BASELINE_BASE=no-such-ref is not a commit");
-    expect(
-      baseCommit(gate(), { BASELINE_BASE: "no-such-ref" }),
-    ).toBeUndefined();
+  it("fails the run on a BASELINE_BASE that is no commit", () => {
+    expect(() => baseCommit(gate(), { BASELINE_BASE: "no-such-ref" })).toThrow(
+      "check-x: BASELINE_BASE=no-such-ref is not a commit",
+    );
   });
 
-  it("is the merge base with origin/main otherwise, and nothing without one", () => {
-    expect(baseCommit(gate(), {})).toBeUndefined();
-    expect(() => baseCommit(gate(), { CI: "true" })).toThrow("no origin/main");
+  it("is the merge base with origin/main otherwise, and fails without one", () => {
+    expect(() => baseCommit(gate(), {})).toThrow("run `git fetch origin`");
     git("update-ref", "refs/remotes/origin/main", commits["the gate"]);
     expect(baseCommit(gate(), {})).toBe(commits["the gate"]);
     git("update-ref", "-d", "refs/remotes/origin/main");
@@ -83,20 +79,17 @@ describe("baseCommit", () => {
 
 describe("baseBaseline", () => {
   it("is the baseline as the base has it", () => {
-    expect(baseBaseline(gate(), commits["the gate"], {})).toBe("a\nb\n");
+    expect(baseBaseline(gate(), commits["the gate"])).toBe("a\nb\n");
   });
 
-  it("is nothing on a base that predates the gate, even in CI", () => {
-    const base = commits["before the gate"];
-    expect(baseBaseline(gate(), base, { CI: "true" })).toBeUndefined();
+  it("is nothing on a base that predates the gate", () => {
+    expect(baseBaseline(gate(), commits["before the gate"])).toBeUndefined();
   });
 
-  it("fails the run in CI when the base has the gate but not its baseline", () => {
-    const base = commits["baseline gone"];
-    expect(() => baseBaseline(gate(), base, { CI: "true" })).toThrow(
+  it("fails the run when the base has the gate but not its baseline", () => {
+    expect(() => baseBaseline(gate(), commits["baseline gone"])).toThrow(
       "was the baseline moved?",
     );
-    expect(baseBaseline(gate(), base, {})).toBeUndefined();
   });
 
   it("follows a gate this change moved back to where the base had it", () => {
@@ -105,16 +98,15 @@ describe("baseBaseline", () => {
     commit("script moved", {});
     const moved = { ...gate(), script: "scripts/check-y.ts" };
     // The baseline stayed: still compared, the gate's move aside.
-    expect(baseBaseline(moved, commits["the gate"], {})).toBe("a\nb\n");
+    expect(baseBaseline(moved, commits["the gate"])).toBe("a\nb\n");
     git("mv", "scripts/x", "scripts/y");
     commit("baseline moved", {});
     const both = { ...moved, baseline: "scripts/y/baseline.txt" };
-    expect(baseBaseline(both, commits["the gate"], {})).toBe("a\nb\n");
+    expect(baseBaseline(both, commits["the gate"])).toBe("a\nb\n");
     // A moved gate whose baseline went is still a gate the base had: refused.
     git("rm", "-q", "scripts/y/baseline.txt");
     commit("moved and gone", {});
-    const ci = { CI: "true" };
-    expect(() => baseBaseline(both, commits["the gate"], ci)).toThrow(
+    expect(() => baseBaseline(both, commits["the gate"])).toThrow(
       "was the baseline moved?",
     );
   });

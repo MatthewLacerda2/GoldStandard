@@ -10,9 +10,9 @@ and run identically in CI.
 `routes/` → `lib/api/<domain>.ts` → `lib/api/client.ts`. `client.ts` is the
 single place auth/token handling and the API base URL live (streaming is the
 only allowed exception). `lib/schemas/` mirrors the backend Pydantic models
-by hand; `make front-contract` holds it, by field name, to `openapi.json`, the
-backend's answers as `make openapi` writes them. Its failure says how to fix
-each finding.
+by hand; `make front-contract` holds it, by field name and kind, to
+`openapi.json`, the backend's answers as `make openapi` writes them. Its
+failure says how to fix each finding.
 
 ## Design system (all ESLint errors — see `eslint.config.ts`)
 

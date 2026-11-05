@@ -11,17 +11,19 @@ import {
   type OpenApi,
   type Schema,
 } from "./openapi";
-import { createPairing, discard, pair, rootsOf } from "./pair";
+import { createPairing, discard, pair } from "./pair";
 import { findRequests, type Client, type Request } from "./requests";
+import { elementOf, rootsOf } from "./types";
 
-export type FindingKind = "unread" | "undeclared" | "phantom" | "unpaired";
+export type FindingKind =
+  "unread" | "undeclared" | "phantom" | "mismatched" | "unpaired";
 
 export interface Finding {
   kind: FindingKind;
-  /** `Type.field` (`unread`, `phantom`: the frontend type; `undeclared`: the
-   *  backend schema), or the call site (`unpaired`). Two types of the same
-   *  name in different files are told apart by the file:
-   *  `lib/api/a.ts#Row.field`. */
+  /** `unread`, `phantom`: the frontend field, `lib/schemas/items.ts#Item.name`;
+   *  `undeclared`: the backend schema's, `ItemRead.name`; `mismatched`: the
+   *  backend's value (`ItemRead.tags`, or the operation `GET /api/v1/items`);
+   *  `unpaired`: the call site, `lib/api/items.ts#listItems`. */
   key: string;
   /** `file:line` of the declaration, when there is one. */
   where?: string;
@@ -56,9 +58,7 @@ const UNTYPED =
  *  as an array's items. Any of them would otherwise quiet the gate. */
 function readsNothing(checker: ts.TypeChecker, type: ts.Type): boolean {
   if (type.flags & (UNTYPED | ts.TypeFlags.NonPrimitive)) return true;
-  const element = checker.isArrayType(type)
-    ? checker.getIndexTypeOfType(type, ts.IndexKind.Number)
-    : undefined;
+  const element = elementOf(checker, type);
   if (element) return readsNothing(checker, element);
   if (
     !(type.flags & ts.TypeFlags.Object) ||
@@ -91,6 +91,14 @@ export function collect(
   const requests = findRequests(program, client, isReaderFile, (node) =>
     siteOf(node, rel),
   );
+  // A client the config no longer describes finds no request, and a gate
+  // that checked nothing must not pass.
+  if (requests.length === 0) {
+    throw new Error(
+      `contract: no call of ${client.fetchers.join(" or ")} from ${options.client.file}` +
+        " was found; does CLIENT in scripts/contract/config.ts still describe the API client?",
+    );
+  }
   let paired = 0;
   for (const request of requests) {
     // Every operation the call can land on: each path it can spell with each
@@ -158,10 +166,7 @@ export function collect(
     seen.add(type);
     if (type.isUnion() || type.isIntersection())
       return type.types.forEach(walk);
-    const element =
-      checker.isArrayType(type) || checker.isTupleType(type)
-        ? checker.getIndexTypeOfType(type, ts.IndexKind.Number)
-        : undefined;
+    const element = elementOf(checker, type);
     if (element) return walk(element);
     if (!(type.flags & ts.TypeFlags.Object)) return;
     const values = type.getStringIndexType();
@@ -172,10 +177,9 @@ export function collect(
         const field = analysis.fieldOf(root);
         if (!field) continue;
         tracked = true;
-        const id = `${field.file}#${field.key}`;
-        const prev = declared.get(id);
+        const prev = declared.get(field.key);
         const whole = prev?.whole ?? analysis.wholeUseOf(root);
-        declared.set(id, {
+        declared.set(field.key, {
           field,
           read: (prev?.read ?? false) || analysis.isRead(root),
           whole,
@@ -191,20 +195,13 @@ export function collect(
     const field = analysis.fieldOf(symbol);
     return field ? [{ field, schemas }] : [];
   });
-  const keyOf = qualifier(
-    [
-      ...[...declared.values()].map((d) => d.field),
-      ...phantoms.map((p) => p.field),
-    ],
-    rel,
-  );
   const where = (field: Field) => `${rel(field.file)}:${field.line}`;
   for (const { field, read, whole } of declared.values()) {
     if (read) continue;
     const detail = whole ? `handed over whole at ${rel(whole)}` : undefined;
     findings.push({
       kind: "unread",
-      key: keyOf(field),
+      key: field.key,
       where: where(field),
       detail,
     });
@@ -212,10 +209,13 @@ export function collect(
   for (const [key, isDeclared] of pairing.sent) {
     if (!isDeclared) findings.push({ kind: "undeclared", key });
   }
+  for (const [key, detail] of pairing.mismatched) {
+    findings.push({ kind: "mismatched", key, detail });
+  }
   for (const { field, schemas } of phantoms) {
     findings.push({
       kind: "phantom",
-      key: keyOf(field),
+      key: field.key,
       where: where(field),
       detail: `not in ${[...schemas].sort().join(", ")}`,
     });
@@ -246,31 +246,12 @@ function unpairedBecause(
   return `no backend operation for ${request.methods.join("/").toUpperCase()} ${spelled}`;
 }
 
-// How a field is named: `Type.field`, or with its file in front when another
-// type of the same name declares the same field elsewhere.
-function qualifier(
-  fields: Field[],
-  rel: (fileName: string) => string,
-): (field: Field) => string {
-  const files = new Map<string, Set<string>>();
-  for (const { key, file } of fields) {
-    if (!files.has(key)) files.set(key, new Set());
-    files.get(key)!.add(file);
-  }
-  return ({ key, file }) =>
-    files.get(key)!.size > 1
-      ? `${rel(file).replace(/^src\//, "")}#${key}`
-      : key;
-}
-
 /** `@backend Name` on the type (or on its elements' type): the schema it mirrors. */
 function markedSchema(
   checker: ts.TypeChecker,
   type: ts.Type,
 ): { name: string; schema: Schema } | undefined {
-  const element = checker.isArrayType(type)
-    ? checker.getIndexTypeOfType(type, ts.IndexKind.Number)
-    : undefined;
+  const element = elementOf(checker, type);
   const target = element ?? type;
   const symbol = target.aliasSymbol ?? target.getSymbol();
   for (const decl of symbol?.declarations ?? []) {

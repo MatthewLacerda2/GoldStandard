@@ -59,8 +59,9 @@ re-verified. Across layers, do not bother.
 
 The exception cuts the other way, and it is the dangerous one. **The contract
 *between* the layers is checked only in part.** `make front-contract` holds the
-answer each frontend request reads to the endpoint it hits, by field name; a
-field's type and a request body are still a human promise. Two branches that
+answer each frontend request reads to the endpoint it hits, by field name and
+kind (list, object, scalar); a scalar's type, nullability and request bodies
+are still a human promise. Two branches that
 split one API change between them can both be green and the app broken. Keep an
 API change on one branch.
 

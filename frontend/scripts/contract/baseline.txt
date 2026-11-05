@@ -9,6 +9,6 @@
 # on each, `unread New.field  # was unread Old.field` — same kind, same field —
 # and the old line it replaces does not count as growth. A different field is
 # never a rename. `--write-baseline` keeps those notes.
-unread Item.created_at
-unread Item.owner_id
-unread Item.updated_at
+unread lib/schemas/items.ts#Item.created_at
+unread lib/schemas/items.ts#Item.owner_id
+unread lib/schemas/items.ts#Item.updated_at

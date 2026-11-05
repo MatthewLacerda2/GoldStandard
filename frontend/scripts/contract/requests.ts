@@ -3,6 +3,7 @@
 // spells them, its methods, and the type it reads the answer as.
 import ts from "typescript";
 import { DYNAMIC, HTTP_METHODS } from "./openapi";
+import { constInitializer, declarationOf } from "./types";
 
 export interface Request {
   /** `lib/api/items.ts#createItem` — the call site, line-free. */
@@ -174,15 +175,8 @@ function evaluate(
   const literals = stringLiterals(checker.getTypeAtLocation(expr));
   if (literals) return literals;
   if (ts.isIdentifier(expr) || ts.isPropertyAccessExpression(expr)) {
-    const decl = declarationOf(checker, expr);
-    if (
-      decl &&
-      ts.isVariableDeclaration(decl) &&
-      decl.initializer &&
-      ts.getCombinedNodeFlags(decl) & ts.NodeFlags.Const
-    ) {
-      return evaluate(checker, decl.initializer, depth + 1);
-    }
+    const initializer = constInitializer(checker, expr);
+    if (initializer) return evaluate(checker, initializer, depth + 1);
   }
   return dynamic;
 }
@@ -194,16 +188,6 @@ function stringLiterals(type: ts.Type): string[] | undefined {
   return values.length > 0 && values.length === members.length
     ? values
     : undefined;
-}
-
-function declarationOf(
-  checker: ts.TypeChecker,
-  expr: ts.Expression,
-): ts.Declaration | undefined {
-  let symbol = checker.getSymbolAtLocation(expr);
-  if (symbol && symbol.flags & ts.SymbolFlags.Alias)
-    symbol = checker.getAliasedSymbol(symbol);
-  return symbol?.valueDeclaration ?? symbol?.declarations?.[0];
 }
 
 /** Each parameter of a helper a call evaluates, with what the call passes. */
@@ -290,15 +274,8 @@ function methodsOf(
     return methods;
   }
   if (ts.isIdentifier(init)) {
-    const decl = declarationOf(checker, init);
-    if (
-      decl &&
-      ts.isVariableDeclaration(decl) &&
-      decl.initializer &&
-      ts.getCombinedNodeFlags(decl) & ts.NodeFlags.Const
-    ) {
-      return methodsOf(checker, decl.initializer, depth + 1);
-    }
+    const initializer = constInitializer(checker, init);
+    if (initializer) return methodsOf(checker, initializer, depth + 1);
   }
   if (ts.isCallExpression(init)) {
     for (const arg of init.arguments) {

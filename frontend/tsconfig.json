@@ -25,11 +25,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": [
-    "src",
-    "eslint-rules",
-    "scripts",
-    "eslint.config.ts",
-    "vite.config.ts"
-  ]
+  "include": ["src", "eslint-rules", "eslint.config.ts", "vite.config.ts"]
 }

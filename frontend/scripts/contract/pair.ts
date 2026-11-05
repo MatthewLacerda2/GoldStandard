@@ -1,9 +1,11 @@
 // Walks a TypeScript type and the backend schema it mirrors side by side —
 // arrays to their items, records to their values, each field to its own —
 // and notes, per field of each backend schema, whether the frontend declares
-// it, and per declared field, whether the backend sends it.
+// it, per declared field, whether the backend sends it, and where the two
+// disagree on what a value is: a list, an object, or a scalar.
 import ts from "typescript";
 import { isOpaque, refName, type OpenApi, type Schema } from "./openapi";
+import { elementOf, rootsOf, typeId } from "./types";
 
 export interface Pairing {
   /** `Schema.field` -> whether some frontend type declares it. */
@@ -12,6 +14,10 @@ export interface Pairing {
   phantom: Map<ts.Symbol, Set<string>>;
   /** Every backend schema some frontend type was paired with. */
   schemas: Set<string>;
+  /** Where a frontend type reads a value as another kind than the backend
+   *  sends (the field, `ItemRead.tags`, or the operation, `GET /api/v1/items`)
+   *  -> how they differ. */
+  mismatched: Map<string, string>;
 }
 
 interface Member {
@@ -20,7 +26,12 @@ interface Member {
 }
 
 export function createPairing(): Pairing {
-  return { sent: new Map(), phantom: new Map(), schemas: new Set() };
+  return {
+    sent: new Map(),
+    phantom: new Map(),
+    schemas: new Set(),
+    mismatched: new Map(),
+  };
 }
 
 export function pair(
@@ -35,7 +46,6 @@ export function pair(
   const seen = new Set<string>();
   const components = spec.components?.schemas ?? {};
 
-  const typeId = (t: ts.Type) => (t as unknown as { id: number }).id;
   const parts = (t: ts.Type): ts.Type[] =>
     t.isUnion()
       ? t.types.flatMap(parts)
@@ -44,24 +54,26 @@ export function pair(
         : [t];
   const isObject = (t: ts.Type) =>
     !!(t.flags & ts.TypeFlags.Object) || t.isIntersection();
-  const elementOf = (t: ts.Type) =>
-    checker.isArrayType(t) || checker.isTupleType(t)
-      ? checker.getIndexTypeOfType(t, ts.IndexKind.Number)
-      : undefined;
 
   const resolve = (s: Schema) => resolveSchema(components, s);
 
   const walk = (t: ts.Type, s: Schema, at: string) => {
     const members = resolve(s);
-    if (members.length === 0 || members.some((m) => isOpaque(m.schema))) return;
+    if (members.length === 0) return;
     const owners = members.map((m) => m.name ?? at);
     const key = `${typeId(t)}>${owners.join("|")}`;
     if (seen.has(key)) return;
     seen.add(key);
+    const owner = [...new Set(owners)].join(" | ");
+    const differ = kindsDiffer(checker, parts(t), members);
+    if (differ) {
+      into.mismatched.set(at, differ);
+      return;
+    }
+    if (members.some((m) => isOpaque(m.schema))) return;
     for (const m of members) if (m.name) into.schemas.add(m.name);
     const tsParts = parts(t).filter(isObject);
     if (tsParts.length === 0) return;
-    const owner = [...new Set(owners)].join(" | ");
 
     // Arrays and records: their items, as one schema however many members
     // (`list[A] | list[B]` is a list of `A | B`).
@@ -70,8 +82,8 @@ export function pair(
     );
     if (items.length > 0) {
       for (const part of tsParts) {
-        const element = elementOf(part);
-        if (element) walk(element, { anyOf: items }, `${owner}[]`);
+        const each = elementOf(checker, part);
+        if (each) walk(each, { anyOf: items }, `${owner}[]`);
       }
       return;
     }
@@ -90,7 +102,7 @@ export function pair(
     // Each member is compared with the frontend's types that look most like
     // it: `Token | Challenge` on both sides pairs member with member, and
     // `FileRow | FolderRow` read from the folders' endpoint is a `FolderRow`.
-    const candidates = tsParts.filter((part) => !elementOf(part));
+    const candidates = tsParts.filter((part) => !elementOf(checker, part));
     const declaredSomewhere = new Map<string, ts.Symbol[]>();
     for (const m of objects) {
       const fields = m.schema.properties!;
@@ -191,10 +203,61 @@ function resolveSchema(
   return [{ name, schema: s }];
 }
 
-export function rootsOf(
+type Kind = "list" | "object" | "scalar";
+const KIND_NAMES: Record<Kind, string> = {
+  list: "a list",
+  object: "an object",
+  scalar: "a scalar",
+};
+
+// How a value is read and how it is sent, when no kind is both: an answer
+// read as one object that is a list, a list read as one object, a field read
+// as an object that is a string. `undefined` when they agree, or when either
+// side says nothing (`any`, `unknown`, a schema with no type).
+function kindsDiffer(
   checker: ts.TypeChecker,
-  symbol: ts.Symbol,
-): readonly ts.Symbol[] {
-  const roots = checker.getRootSymbols(symbol);
-  return roots.length > 0 ? roots : [symbol];
+  tsParts: readonly ts.Type[],
+  members: readonly Member[],
+): string | undefined {
+  const read = new Set<Kind>();
+  for (const part of tsParts) {
+    const kind = tsKind(checker, part);
+    if (!kind) return undefined;
+    read.add(kind);
+  }
+  const sent = new Set<Kind>();
+  for (const { schema } of members) {
+    const kind = schemaKind(schema);
+    if (!kind) return undefined;
+    sent.add(kind);
+  }
+  if (read.size === 0 || [...read].some((kind) => sent.has(kind)))
+    return undefined;
+  const names = (kinds: Set<Kind>) =>
+    [...kinds].map((kind) => KIND_NAMES[kind]).join(" or ");
+  return `read as ${names(read)}, sent as ${names(sent)}`;
+}
+
+const SCALAR =
+  ts.TypeFlags.StringLike |
+  ts.TypeFlags.NumberLike |
+  ts.TypeFlags.BooleanLike |
+  ts.TypeFlags.BigIntLike |
+  ts.TypeFlags.EnumLike;
+
+function tsKind(checker: ts.TypeChecker, type: ts.Type): Kind | undefined {
+  if (elementOf(checker, type)) return "list";
+  if (type.flags & SCALAR) return "scalar";
+  // A branded scalar (`string & { __brand: "Id" }`) is still a scalar.
+  if (type.isIntersection())
+    return type.types.some((t) => t.flags & SCALAR) ? "scalar" : "object";
+  return type.flags & ts.TypeFlags.Object ? "object" : undefined;
+}
+
+function schemaKind(schema: Schema): Kind | undefined {
+  if (schema.type === "array") return "list";
+  if (schema.type === "object" || schema.properties) return "object";
+  if (typeof schema.additionalProperties === "object") return "object";
+  const scalars = ["string", "number", "integer", "boolean"];
+  return schema.type && scalars.includes(schema.type) ? "scalar" : undefined;
 }
