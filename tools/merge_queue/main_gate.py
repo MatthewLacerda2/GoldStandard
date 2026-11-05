@@ -53,13 +53,21 @@ class MainGate:
         self.reds, self.unread = None, ""
 
     def runs_of(self, sha: str) -> list[dict]:
-        """A commit's check runs: asked again unless they had all finished lately."""
+        """A commit's check runs: asked again unless they had all finished, a
+        required check among them, lately."""
         if sha in self.kept:
             at, runs = self.kept[sha]
             if time.monotonic() - at < KEEP_SECONDS:
                 return runs
         runs = self.hub.check_runs(sha)
-        if runs and all(run.get("status") == "completed" for run in runs):
+        # Kept only once a required check has reported too: every job can be
+        # done in the seconds before `CI ok` exists.
+        reported = any(
+            run.get("status") == "completed"
+            for each in self.required
+            for run in checks.mine(each, runs)
+        )
+        if reported and all(run.get("status") == "completed" for run in runs):
             self.kept[sha] = (time.monotonic(), runs)
         return runs
 

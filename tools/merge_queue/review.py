@@ -7,9 +7,10 @@ through the `independent-review` skill before it merges; which changes is
 it: a pull request that hits a trigger and has no such comment for its head
 is handed back, never merged.
 
-**The record** is a comment whose first line is the heading alone
-(`## Independent review`, `**Independent review**`), not a sentence that
-starts with the words ("Independent review: pending"), written by the pull
+**The record** is a comment whose first line is the heading, alone or with a
+short note in parentheses (`## Independent review`, `**Independent review**`,
+`## Independent review (second round)`), not a sentence that starts with the
+words ("Independent review: pending"), written by the pull
 request's author or an assignee: the account the findings are answered from.
 
 **It vouches for one commit**: the next line, `Reviewed head: <full sha>`,
@@ -33,8 +34,11 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Collection
 
-# The first line of the comment the `independent-review` skill posts, alone.
-HEADING = re.compile(r"^[#*_\s]*independent review[#*_\s.:]*$", re.IGNORECASE)
+# The first line of the comment the `independent-review` skill posts: the
+# heading, alone or with a short note in parentheses (`(second round)`).
+HEADING = re.compile(
+    r"^[#*_\s]*independent review(?:\s*\([^()\n]{1,60}\))?[#*_\s.:]*$", re.IGNORECASE
+)
 # The line under that heading naming the commit it vouches for, alone (bold
 # or code marks allowed), as a full SHA: a short one names no head.
 REVIEWED_HEAD = re.compile(

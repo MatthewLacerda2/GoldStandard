@@ -101,9 +101,15 @@ class Aftermath:
             time.sleep(SETTLE_SECONDS)
         return False
 
+    @staticmethod
+    def fork(pull: dict) -> bool:
+        """A fork's branch name says nothing about this clone's branches: a fork's
+        `main` is not this `main`."""
+        return pull.get("head_repo") != pull.get("base_repo")
+
     def branch(self, pull: dict) -> list[str]:
         name = pull["branch"]
-        if pull.get("head_repo") != pull.get("base_repo"):
+        if self.fork(pull):
             return [f"`{name}` lives on a fork: not this repository's branch to delete."]
         if self.dry:
             return [f"would delete the remote branch `{name}`."]
@@ -112,11 +118,17 @@ class Aftermath:
     def worktrees(self, pull: dict) -> list[str]:
         """Free the worktrees on the branch, unless somebody's work is in one."""
         branch = pull["branch"]
+        if self.fork(pull):
+            return [f"`{branch}` lives on a fork: no worktree or branch here is its."]
         if not self.dry:
             talk.git_net("fetch", "--quiet", "origin", repo.BASE, cwd=self.root)
         listed = talk.git("worktree", "list", "--porcelain", cwd=self.root).stdout
         lines, kept = [], False
         for path, locked in worktrees_on(listed, branch):
+            if not Path(path).is_dir():
+                kept = True
+                lines.append(f"worktree {path} is gone from disk: `git worktree prune` clears it.")
+                continue
             why = "it is locked, by a session still using it" if locked else self.keep(path)
             if why:
                 kept = True
@@ -137,7 +149,12 @@ class Aftermath:
     def keep(self, path: str) -> str | None:
         if inside(path, self.root) or inside(path, os.getcwd()):
             return "the queue runs in it"
-        status = talk.git("status", "--porcelain", cwd=path)
+        # Every untracked file and every submodule counted, whatever
+        # `status.showUntrackedFiles` says: a new file nobody committed yet is
+        # work, and `worktree remove --force` would delete it.
+        status = talk.git(
+            "status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none", cwd=path
+        )
         cherry = talk.git("cherry", repo.UPSTREAM, "HEAD", cwd=path)
         if cherry.returncode != 0:
             return "its commits could not be compared with `main`"

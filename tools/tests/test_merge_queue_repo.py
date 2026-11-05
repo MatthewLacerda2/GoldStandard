@@ -1,12 +1,17 @@
 """`tools/merge_queue/repo.py` and `aftermath.py` against real git: a bare
-`origin` and a clone of it in a temporary directory, no network."""
+`origin` and a clone of it in a temporary directory, no network, and no git
+config from this machine (`GIT_CONFIG_GLOBAL`, `GIT_CONFIG_NOSYSTEM`): a test
+sets the config it means to test against."""
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tools import review_triggers
 from tools.merge_queue import aftermath, repo, talk
@@ -20,6 +25,8 @@ def git(cwd: Path, *args: str) -> str:
 
 class Clone(unittest.TestCase):
     def setUp(self) -> None:
+        hermetic = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+        self.enterContext(mock.patch.dict(os.environ, hermetic))
         place = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.origin, self.work = place / "origin.git", place / "work"
         subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(self.origin)], check=True)
@@ -187,8 +194,51 @@ class Clone(unittest.TestCase):
     def test_a_locked_worktree_is_left_to_its_session(self) -> None:
         wt, after = self.worktree_on_merged_feat()
         git(self.work, "worktree", "lock", str(wt))
-        self.assertIn("locked", after.worktrees({"branch": "feat"})[0])
+        lines = after.worktrees({"branch": "feat"})
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].endswith(" kept: it is locked, by a session still using it."))
         self.assertTrue(wt.exists())
+
+    def test_an_untracked_file_is_work_whatever_status_hides(self) -> None:
+        wt, after = self.worktree_on_merged_feat()
+        git(self.work, "config", "status.showUntrackedFiles", "no")
+        (wt / "new.txt").write_text("nobody committed this yet\n")
+        self.assertIn("uncommitted", after.worktrees({"branch": "feat"})[0])
+        self.assertTrue((wt / "new.txt").exists())
+
+    def test_a_worktree_gone_from_disk_is_said_not_crashed_on(self) -> None:
+        wt, after = self.worktree_on_merged_feat()
+        shutil.rmtree(wt)
+        self.assertIn("gone from disk", after.worktrees({"branch": "feat"})[0])
+
+    def test_a_forks_branch_name_is_not_this_clones(self) -> None:
+        _, after = self.worktree_on_merged_feat()
+        fork = {"branch": "feat", "head_repo": "someone/r", "base_repo": "o/r"}
+        self.assertIn("fork", after.worktrees(fork)[0])
+        self.assertIn("feat", git(self.work, "branch", "--list", "feat"))
+
+    def test_a_rebase_that_fails_without_a_conflict_says_why(self) -> None:
+        head = self.branch("feat", "b.txt", "new\n")
+        self.advance_main("c.txt", "main moves\n")
+        hooks = self.work.parent / "hooks"
+        hooks.mkdir()
+        (hooks / "pre-rebase").write_text("#!/bin/sh\necho 'refused by a hook' >&2\nexit 1\n")
+        (hooks / "pre-rebase").chmod(0o755)
+        git(self.work, "config", "core.hooksPath", str(hooks))
+        self.clone.fetch([])
+        fresh, lines = self.clone.rebase("feat", head, push=True)
+        self.assertIsNone(fresh)
+        self.assertIn("failed without a conflict: refused by a hook", lines[0])
+
+    def test_the_rebase_signs_nothing(self) -> None:
+        head = self.branch("feat", "b.txt", "new\n")
+        self.advance_main("c.txt", "main moves\n")
+        git(self.work, "config", "commit.gpgSign", "true")
+        git(self.work, "config", "gpg.program", "/nonexistent/gpg")
+        self.clone.fetch([])
+        fresh, lines = self.clone.rebase("feat", head, push=False)
+        self.assertEqual(lines, [])
+        self.assertIsNotNone(fresh)
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ from tools.merge_queue import github, order, talk
 BASE = "main"
 UPSTREAM = f"origin/{BASE}"
 RULESET = ".github/rulesets/main.json"
+NODE_MODULES = "frontend/node_modules"
 # A diff the queue parses is git's own, whatever this machine's config says:
 # no external or text-converting diff, no colour, no renames, and the `a/` and
 # `b/` prefixes `review_triggers.querying` reads (`diff.noprefix` and
@@ -174,20 +175,33 @@ class Clone:
             made = talk.git("worktree", "add", "--detach", work, head, cwd=self.root)
             if made.returncode != 0:
                 raise talk.MachineDown(f"could not check {branch} out: {made.stderr.strip()}")
+            # The route-tree merge driver runs the TanStack generator from the
+            # worktree's `frontend/node_modules`: lend it this checkout's.
+            modules = Path(self.root, NODE_MODULES).resolve()
+            lent = Path(work, NODE_MODULES)
+            if modules.is_dir() and lent.parent.is_dir() and not lent.exists():
+                lent.symlink_to(modules, target_is_directory=True)
             try:
                 return self._rebase_in(work, branch, head, push)
             finally:
+                if lent.is_symlink():
+                    lent.unlink()
                 talk.git("worktree", "remove", "--force", work, cwd=self.root)
 
     def _rebase_in(
         self, work: str, branch: str, head: str, push: bool
     ) -> tuple[str | None, list[str]]:
+        # The queue's own commits: its name, and no signing key it may not have.
         who = ("-c", "user.name=merge queue", "-c", "user.email=merge-queue@noreply")
-        done = talk.git(*who, "rebase", UPSTREAM, cwd=work)
+        unsigned = ("-c", "commit.gpgSign=false")
+        done = talk.git(*who, *unsigned, "rebase", UPSTREAM, cwd=work)
         if done.returncode != 0:
             listed = talk.git("diff", "--name-only", "--diff-filter=U", cwd=work).stdout.split()
             talk.git("rebase", "--abort", cwd=work)
-            where = ", ".join(f"`{p}`" for p in listed) or "a path git did not name"
+            if not listed:
+                why = (done.stderr or done.stdout).strip() or f"exit {done.returncode}"
+                return None, [f"the rebase onto `{BASE}` failed without a conflict: {why}"]
+            where = ", ".join(f"`{p}`" for p in listed)
             return None, [
                 f"it conflicts with `{BASE}` in {where}: resolve it on the branch and push."
             ]

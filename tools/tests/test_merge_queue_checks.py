@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 
 from tools.merge_queue import checks
@@ -78,9 +79,18 @@ class OnAHead(unittest.TestCase):
         older = check_run(status="in_progress", name="backend", run_id=0)
         self.assertEqual(self.state(failed, older), checks.RED)
 
+    def test_a_job_that_just_finished_may_still_be_followed_by_ci_ok(self) -> None:
+        now = datetime(2026, 11, 5, 12, 0, tzinfo=UTC)
+        backend = {**check_run(name="backend"), "completed_at": "2026-11-05T11:59:57Z"}
+        self.assertEqual(checks.head([CI_OK], [backend], LATE, now).state, checks.PENDING)
+        settled = {**backend, "completed_at": "2026-11-05T11:50:00Z"}
+        self.assertEqual(checks.head([CI_OK], [settled], LATE, now).state, checks.NO_RUN)
+
     def test_red_is_an_answer_while_another_check_still_runs(self) -> None:
         both = (CI_OK, Required("gate"))
-        red, running = check_run("failure"), check_run(status="queued", name="gate")
+        # The gate's run is newer than the red `CI ok`, but it is another
+        # required check's, so it never makes this one wait.
+        red, running = check_run("failure"), check_run(status="queued", name="gate", run_id=2)
         self.assertEqual(self.state(red, running, required=both), checks.RED)
         self.assertEqual(self.state(check_run(), required=both), checks.NO_RUN)
 

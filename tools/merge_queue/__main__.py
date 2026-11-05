@@ -105,10 +105,21 @@ def mergeable(hub: github.GitHub, clone: repo.Clone, judged: judge.Judge, number
 
 def report(queue: Queue) -> None:
     """The run in three lines: merged, handed back, still in line."""
+    would = "would be " if queue.dry else ""
     merged = ", ".join(f"#{n}" for n in queue.merged) or "none"
     handed = "; ".join(f"#{n} ({why})" for n, why in queue.handed.items()) or "none"
     waiting = "; ".join(f"#{n} ({why})" for n, why in sorted(queue.in_line.items())) or "none"
-    talk.say(f"summary: merged {merged}.", f"handed back: {handed}", f"still in line: {waiting}")
+    talk.say(
+        f"summary: {would}merged {merged}.",
+        f"{would}handed back: {handed}",
+        f"still in line: {waiting}",
+    )
+
+
+def memory_for(clone: repo.Clone, writes: bool) -> Memory:
+    """The queue's memory: read always (a dry run sees the real clocks), written
+    only by a run that may write."""
+    return Memory(clone.common_dir() / STATE, read_only=not writes)
 
 
 def run(opts: argparse.Namespace) -> tuple[int, str]:
@@ -125,7 +136,7 @@ def run(opts: argparse.Namespace) -> tuple[int, str]:
         hub = github.GitHub(clone.repository())
         clone.fetch([])
         required = checks.required(clone.ruleset())
-        memory = Memory(clone.common_dir() / STATE, read_only=not writes)
+        memory = memory_for(clone, writes)
         judged = judge.Judge(hub, clone, judge.MainGate(hub, clone, required, memory, opts.dry_run))
         if opts.mergeable is not None:
             return mergeable(hub, clone, judged, opts.mergeable), ""

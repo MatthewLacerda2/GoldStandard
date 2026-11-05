@@ -42,9 +42,13 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 GREEN, PENDING, RED, NO_RUN = "green", "pending", "red", "no run"
 
+# How long after a job finishes the next one may still be unqueued: `CI ok`
+# appears a few seconds after the last job it needs.
+SETTLING_SECONDS = 60
 # How long a required context may have no run on a head before that is an answer.
 RUN_APPEARS_SECONDS = 300
 # Conclusions that judged nothing: the commit before decides.
@@ -116,8 +120,26 @@ def mine(required: Required, runs: list[dict]) -> list[dict]:
     return sorted(found, key=lambda run: run.get("id") or 0)
 
 
-def one(required: Required, runs: list[dict]) -> tuple[str, str]:
-    """One required context's state on a head, and a line saying it."""
+def stirring(run: dict, now: datetime) -> bool:
+    """Whether a check run is unfinished, or finished so lately that the job
+    after it (`CI ok`, last of all) may not have been queued yet."""
+    if run.get("status") != "completed":
+        return True
+    done = run.get("completed_at")
+    if not done:
+        return False
+    return (now - datetime.fromisoformat(done)).total_seconds() < SETTLING_SECONDS
+
+
+def one(
+    required: Required,
+    runs: list[dict],
+    others: frozenset[str] = frozenset(),
+    now: datetime | None = None,
+) -> tuple[str, str]:
+    """One required context's state on a head, and a line saying it. `others`
+    are the other required contexts, whose runs never stand in for this one's."""
+    now = now or datetime.now(UTC)
     found = mine(required, runs)
     name = f"`{required.context}`"
     if not found:
@@ -130,21 +152,31 @@ def one(required: Required, runs: list[dict]) -> tuple[str, str]:
         return GREEN, f"{name} passed."
     if conclusion == "skipped":
         return NO_RUN, f"{name} was skipped on this commit (a draft's run): it checked nothing."
-    later = [r for r in runs if (r.get("id") or 0) > (run.get("id") or 0)]
-    if any(r.get("status") != "completed" for r in later if same_app(required, r)):
+    later = [
+        r
+        for r in runs
+        if (r.get("id") or 0) > (run.get("id") or 0)
+        and same_app(required, r)
+        and r.get("name") not in others
+    ]
+    if any(stirring(r, now) for r in later):
         # A re-run of the failed jobs, or a reopened pull request's new run, is
-        # going; `CI ok` reports again once its jobs finish.
+        # going (or just finished); `CI ok` reports again once its jobs finish.
         return PENDING, f"{name} failed, and a newer run is going: waiting for it."
     return RED, f"{name} concluded {conclusion}: {run.get('html_url') or 'the run'}"
 
 
-def head(required: list[Required], runs: list[dict], waited: float) -> Verdict:
+def head(
+    required: list[Required], runs: list[dict], waited: float, now: datetime | None = None
+) -> Verdict:
     """A head's CI verdict. `runs` are every check run on the head; `waited`
     is how long the queue has watched this head, in seconds."""
-    found = [one(each, runs) for each in required]
+    now = now or datetime.now(UTC)
+    names = frozenset(each.context for each in required)
+    found = [one(each, runs, names - {each.context}, now) for each in required]
     by_state = {state: [line for s, line in found if s == state] for state in (RED, PENDING)}
     absent = [line for s, line in found if s == NO_RUN]
-    going = sorted({r.get("name") or "?" for r in runs if r.get("status") != "completed"})
+    going = sorted({r.get("name") or "?" for r in runs if stirring(r, now)})
     if by_state[RED]:
         return Verdict(RED, by_state[RED])
     if by_state[PENDING]:

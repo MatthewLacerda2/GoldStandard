@@ -59,7 +59,9 @@ class Queue:
         number, reason = pull["number"], lines[0]
         news = not self.opts.watch or self.memory.first_time(number, pull["head"], reason)
         if self.dry:
+            # Said and counted as a real pass would, so its exit status matches.
             talk.say(f"would hand back #{number}: {reason}", *lines[1:])
+            self.handed[number] = reason
         elif news:
             talk.say(f"HANDED BACK #{number}: {reason}", *lines[1:])
             self.handed[number] = reason
@@ -191,10 +193,12 @@ class Queue:
         """Merge it, then its aftermath. True when `main` moved."""
         number, head = pull["number"], pull["head"]
         if self.dry:
+            # A real pass ends at its merge, since `main` moved; so does this one.
             talk.say(f"#{number}: would merge {head[:7]} into `{repo.BASE}`.")
+            self.merged.append(number)
             for line in self.after.run(pull)[1]:
                 talk.say(f"#{number}: {line}")
-            return False
+            return True
         ok, why = self.hub.merge(number, head)
         if ok is None:
             self.narrate(number, why)

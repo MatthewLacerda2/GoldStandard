@@ -23,6 +23,10 @@ class TheRecord(unittest.TestCase):
             named(f"## Independent review\n**Reviewed head:** `{HEAD.upper()}`"), [HEAD]
         )
 
+    def test_a_short_note_after_the_heading_is_fine(self) -> None:
+        for heading in ("## Independent review (second round)", "**Independent review (round 3)**"):
+            self.assertEqual(named(f"{heading}\nReviewed head: {HEAD}"), [HEAD], heading)
+
     def test_a_sentence_starting_with_the_words_is_no_record(self) -> None:
         self.assertEqual(named(f"Independent review is pending\nReviewed head: {HEAD}"), [])
 

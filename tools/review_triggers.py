@@ -65,6 +65,8 @@ TRIGGERS: dict[str, tuple[str, ...]] = {
         ".github/workflows/**",
         ".github/rulesets/**",
         "Makefile",
+        # The merge drivers the queue's own rebase runs.
+        ".gitattributes",
         "tools/**",
         ".githooks/**",
         "backend/tools/**",
@@ -75,6 +77,7 @@ TRIGGERS: dict[str, tuple[str, ...]] = {
         "backend/mutation-sensitive.txt",
         "frontend/eslint-rules/**",
         "frontend/eslint.config.*",
+        "frontend/knip.*",
         "frontend/**/tsconfig*.json",
         # The scripts the frontend gates run (the API contract check, its
         # baseline among them).
