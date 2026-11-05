@@ -44,9 +44,11 @@ updates:
   # pin and the image together (python-version in backend.yml, packageManager
   # in package.json), and CI never builds the images, so a Dependabot PR that
   # moved only the image would pass green while the two drift apart. Those
-  # bumps are made by hand, in one PR. Dependabot can't read pgvector's `pg16`
-  # tag at all, so the Postgres major (a dump and restore of every data
-  # volume) is never proposed either.
+  # bumps are made by hand, in one PR. Bun's pin names the patch too, so a Bun
+  # patch also moves the image alone; frontend/src/bun-version.test.ts keeps
+  # that PR red until packageManager is bumped on it as well. Dependabot can't
+  # read pgvector's `pg16` tag at all, so the Postgres major (a dump and
+  # restore of every data volume) is never proposed either.
   - package-ecosystem: docker
     directories: [/backend, /frontend, /docker/postgres]
     schedule: { interval: weekly }
