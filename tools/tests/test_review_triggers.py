@@ -33,6 +33,7 @@ class Triggers(unittest.TestCase):
         self.assertEqual(hit("backend/api/endpoints.py"), ["auth"])
         self.assertEqual(hit(".github/workflows/ci.yml", "tools/x.py"), ["CI and the gates"])
         self.assertEqual(hit("frontend/tsconfig.app.json"), ["CI and the gates"])
+        self.assertEqual(hit("frontend/scripts/contract/baseline.txt"), ["CI and the gates"])
 
     def test_everything_else_owes_nothing(self) -> None:
         self.assertEqual(

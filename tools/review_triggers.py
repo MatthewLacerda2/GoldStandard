@@ -68,7 +68,10 @@ TRIGGERS: dict[str, tuple[str, ...]] = {
         "backend/tests/conftest.py",
         "frontend/eslint-rules/**",
         "frontend/eslint.config.*",
-        "frontend/tsconfig*.json",
+        "frontend/**/tsconfig*.json",
+        # The scripts the frontend gates run (the API contract check, its
+        # baseline among them).
+        "frontend/scripts/**",
         "frontend/vite.config.*",
         "frontend/vitest.config.*",
         "frontend/.prettierrc*",
