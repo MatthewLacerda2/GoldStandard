@@ -44,6 +44,15 @@ letter, and a string literal passed to `placeholder`, `title`, `aria-label` or
 Letter-free text (`·`, `—`, `/`, `:`, digits) and anything in an expression
 container — `{t("items.heading")}` and `{item.name}` alike — are untouched.
 
+## No promises in comments (an ESLint error too)
+
+`local/no-marker-comment` fails a comment carrying `TODO`, `FIXME`, `XXX` or
+`HACK` as a whole upper-case word: do the work now, or file an issue and delete
+the comment. Strings are data and never trip it. The rare comment that must
+carry the word says why, inline: `// lint: allow(marker) <why>` on the line or
+in the comment lines directly above it — the same spelling the backend's
+`house_lint.py` reads.
+
 ## Gate before pushing
 
 `make frontend` = `front-lint` (`bun run check`: tsc + eslint + prettier) ·

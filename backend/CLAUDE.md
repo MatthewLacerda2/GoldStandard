@@ -31,6 +31,14 @@ never pushes it over. Any other string still counts.
   first 15 lines; `tests/**` is exempt.
 - Endpoint handler ≤ 50 lines. Test ≤ 50 lines.
 
+## No promises in comments (`marker`, also `tools/house_lint.py`)
+
+A comment carrying `TODO`, `FIXME`, `XXX` or `HACK` as a whole upper-case word
+fails: do the work now, or file an issue and delete the comment. Strings are
+data and never trip it. The rare comment that must carry the word says why,
+inline: `# lint: allow(marker) <why>` on the line or in the comment lines
+directly above it.
+
 ## Worked example
 
 `items` runs cleanly through every layer — `api/v1/items.py`,

@@ -18,6 +18,13 @@ documenting a file never pushes it over; any other string still counts):
      Only ``router`` counts here — the unversioned ``@app.get`` baseline routes
      are outside the versioned API contract. Rules 2 and 3 stay broader and
      still cover them.
+  5. ``marker``: no comment carries one of the ``MARKERS``, as a whole
+     upper-case word. A comment promising to come back later is work nobody is
+     assigned to: do it now, or file an issue and delete the comment. Only
+     comments are read — a string holding the word is data. The rare comment
+     that must carry the word is excused inline, with a reason:
+     ``lint: allow(marker) <why>`` on the line or in the comment lines directly
+     above it.
 
 Rule 4 is structural only — that a body is a declared model, not that its
 fields carry the right constraints. A template cannot know what its users will
@@ -39,6 +46,7 @@ from __future__ import annotations
 
 import ast
 import io
+import re
 import sys
 import tokenize
 from pathlib import Path
@@ -51,6 +59,10 @@ _HTTP_METHODS = frozenset({"get", "post", "put", "patch", "delete"})
 _MARKER_SCAN_LINES = 15
 _SCHEMA_PACKAGE = "schemas"
 _ROUTER_OBJECT = "router"
+
+MARKERS = ("TODO", "FIXME", "XXX", "HACK")
+_MARKER_WORD = re.compile(rf"(?<![A-Za-z0-9_])(?:{'|'.join(MARKERS)})(?![A-Za-z0-9_])")
+MARKER_ADVICE = "do it now, or file an issue and delete the comment"
 
 # FastAPI's parameter markers. A parameter carrying one is injected by the
 # framework, so it is not a request body.
@@ -334,6 +346,34 @@ def check_router_io(path: Path, tree: ast.Module) -> list[str]:
     return violations
 
 
+def _grants(line: str, rule: str) -> bool:
+    """True if ``line`` carries ``lint: allow(<rule>)`` followed by a reason."""
+    return re.search(rf"lint: allow\({re.escape(rule)}\)[\s:—-]*\w", line) is not None
+
+
+def _allowed(lines: list[str], line: int, rule: str) -> bool:
+    """True if 1-based ``line``, or the run of comment lines directly above it,
+    grants an allow for ``rule``."""
+    if _grants(lines[line - 1], rule):
+        return True
+    above = lines[: line - 1]
+    while above and above[-1].lstrip().startswith("#"):
+        if _grants(above.pop(), rule):
+            return True
+    return False
+
+
+def check_markers(path: Path, source: str) -> list[str]:
+    """Rule 5: no comment carries a marker, unless an allow excuses it."""
+    lines = source.splitlines()
+    violations: list[str] = []
+    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+        match = _MARKER_WORD.search(tok.string) if tok.type == tokenize.COMMENT else None
+        if match and not _allowed(lines, tok.start[0], "marker"):
+            violations.append(f"{path}:{tok.start[0]}: '{match[0]}' comment: {MARKER_ADVICE}")
+    return violations
+
+
 def check_source(path: Path, source: str) -> list[str]:
     """Run every rule against a single file's source text.
 
@@ -349,6 +389,7 @@ def check_source(path: Path, source: str) -> list[str]:
         check_file_length(path, source, code)
         + check_function_lengths(path, tree, code)
         + check_router_io(path, tree)
+        + check_markers(path, source)
     )
 
 

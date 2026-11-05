@@ -59,7 +59,7 @@ export default tseslint.config(
       },
     },
     rules: {
-      // --- Local design-system rules: all ERROR. ---
+      // --- Local house rules: all ERROR. ---
       "local/one-exported-component-per-file": "error",
       "local/no-arbitrary-text": "error",
       "local/no-legacy-text-scale": "error",
@@ -67,6 +67,8 @@ export default tseslint.config(
       "local/no-hand-rolled-form-control": "error",
       "local/no-redundant-font-utility": "error",
       "local/no-untranslated-text": "error",
+      // A comment promising work later: do it now, or file an issue.
+      "local/no-marker-comment": "error",
 
       // --- Color allowlist via the real theme. ---
       "better-tailwindcss/no-unknown-classes": [
