@@ -134,8 +134,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
-    env:
-      HUSKY: 0
     steps:
       # Full history: it fetches every branch, so `origin/main` exists and
       # `git merge-base HEAD origin/main` can be read by the gates that compare

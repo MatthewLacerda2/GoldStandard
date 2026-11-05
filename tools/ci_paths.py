@@ -59,9 +59,11 @@ LAYERS: dict[str, tuple[str, ...]] = {
 
 # Tracked files no layer's gates read. A change to only these runs just the
 # jobs that run on every change (`changes`, `tools`, `CI ok`). `tools/` is
-# here because the `tools` job runs `make tools` on every change anyway.
+# here because the `tools` job runs `make tools` on every change anyway, and
+# `.githooks/` because its tests are in `tools/tests/`.
 UNGATED = (
     "**/*.md",
+    ".githooks/**",
     ".claude/**",
     ".github/dependabot.yml",
     ".github/rulesets/**",
