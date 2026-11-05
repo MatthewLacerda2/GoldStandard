@@ -32,6 +32,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 import asyncpg
+from sqlalchemy.exc import ArgumentError
 
 from tools import mutation_db
 
@@ -147,25 +148,34 @@ def explain_failed_run(mutants: Path, env: dict[str, str], backend: Path = BACKE
     )
 
 
-def _admin_dsn() -> str:
+def _admin_args() -> dict:
     """The maintenance database, from the URL the tests use."""
     from core.config import get_settings
     from core.database import normalize_database_url
 
     url = os.environ.get("DATABASE_URL") or get_settings().DATABASE_URL
-    return mutation_db.admin_dsn(normalize_database_url(url))
+    return mutation_db.admin_connect_args(normalize_database_url(url))
 
 
-# Postgres down or refusing us, or settings that do not load: mutmut has failed
-# on it too (or will), and says so.
-_UNREACHABLE = (OSError, ValueError, asyncpg.PostgresError, asyncpg.InterfaceError)
+# Postgres down or refusing us, or settings that do not load: a URL SQLAlchemy
+# cannot read (`ArgumentError`), another driver's (`ValueError`), or a query
+# parameter `asyncpg.connect` refuses or mistypes (`TypeError`). mutmut has
+# failed on it too (or will), and says so.
+_UNREACHABLE = (
+    OSError,
+    ValueError,
+    TypeError,
+    ArgumentError,
+    asyncpg.PostgresError,
+    asyncpg.InterfaceError,
+)
 
 
 def _sweep(base: str) -> None:
     """Drop this worktree's mutation databases, never raising: in the driver's
     ``finally`` a traceback would replace mutmut's exit code and the diagnosis."""
     try:
-        dropped = asyncio.run(mutation_db.sweep(_admin_dsn(), base))
+        dropped = asyncio.run(mutation_db.sweep(_admin_args(), base))
     except _UNREACHABLE as exc:
         print(f"[back-mutate] could not drop the test databases: {type(exc).__name__}: {exc}")
         return

@@ -18,16 +18,38 @@ import hashlib
 import os
 
 import asyncpg
+from sqlalchemy import make_url
 
 # What the driver sets and the conftest reads: the base of every name.
 ENV = "GS_MUTATION_DB"
 
+_ASYNCPG = "postgresql+asyncpg"
 
-def admin_dsn(database_url: str) -> str:
-    """The maintenance ``postgres`` database of the server ``database_url``
-    (a normalized SQLAlchemy asyncpg URL) names, as a raw asyncpg DSN."""
-    head = database_url.rpartition("/")[0]
-    return f"{head.replace('postgresql+asyncpg://', 'postgresql://')}/postgres"
+# URL parameters SQLAlchemy's asyncpg dialect keeps for its own adapter, which
+# `asyncpg.connect` would refuse as unknown arguments.
+_ADAPTER_ONLY = ("prepared_statement_cache_size", "prepared_statement_name_func")
+
+
+def admin_connect_args(database_url: str) -> dict:
+    """``asyncpg.connect`` arguments for the maintenance ``postgres`` database
+    of the server ``database_url`` (a normalized SQLAlchemy asyncpg URL) names.
+
+    They are the ones SQLAlchemy's dialect hands asyncpg for the app's own
+    connections: each URL parameter arrives under its own name, as a string,
+    so the ones asyncpg takes as strings (``ssl=require``,
+    ``command_timeout=30``) work here as they do for the app, and any other one
+    (``timeout``, ``statement_cache_size``, a libpq-only name) fails here as it
+    does there; naming them for asyncpg is ``normalize_database_url``'s job. A
+    raw DSN would not do: asyncpg reads a DSN by libpq's names (``sslmode``)
+    and sends any other one to the server as a setting, which it refuses.
+    Another driver's URL is refused: its arguments are not asyncpg's.
+    """
+    url = make_url(database_url)
+    if url.drivername != _ASYNCPG:
+        raise ValueError(f"the test databases need a {_ASYNCPG} URL, not {url.drivername}")
+    url = url.set(database="postgres")
+    _, args = url.get_dialect()().create_connect_args(url)
+    return {key: value for key, value in args.items() if key not in _ADAPTER_ONLY}
 
 
 async def drop(conn: asyncpg.Connection, name: str) -> None:
@@ -51,9 +73,10 @@ def process_name(base: str) -> str:
     return f"{base}_{os.getpid()}"
 
 
-async def sweep(admin_dsn: str, base: str) -> list[str]:
-    """Drop every database of ``base``'s runs; return their names."""
-    conn = await asyncpg.connect(admin_dsn)
+async def sweep(admin_args: dict, base: str) -> list[str]:
+    """Drop every database of ``base``'s runs; return their names.
+    ``admin_args`` is what ``admin_connect_args`` returns."""
+    conn = await asyncpg.connect(**admin_args)
     try:
         rows = await conn.fetch(
             "SELECT datname FROM pg_database WHERE starts_with(datname, $1)", f"{base}_"

@@ -18,7 +18,7 @@ import subprocess
 import asyncpg
 import pytest
 import pytest_asyncio
-from sqlalchemy import event
+from sqlalchemy import URL, event, make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -94,15 +94,14 @@ def _test_db_name() -> str:
     return mutation_db.process_name(base) if base else _worktree_db_name()
 
 
-def _split_url(url: str) -> tuple[str, str]:
-    """Split a SQLAlchemy asyncpg URL into (prefix-up-to-db, current-db)."""
-    head, _, tail = url.rpartition("/")
-    return head, tail
+def _test_url(db_name: str) -> URL:
+    """The base URL on the test database ``db_name``, every query parameter kept."""
+    return make_url(_base_url()).set(database=db_name)
 
 
 async def _admin_connect() -> asyncpg.Connection:
     """A raw connection to the maintenance ``postgres`` database."""
-    return await asyncpg.connect(mutation_db.admin_dsn(_base_url()))
+    return await asyncpg.connect(**mutation_db.admin_connect_args(_base_url()))
 
 
 async def _ensure_database(db_name: str) -> None:
@@ -149,8 +148,7 @@ async def engine():
     """
     global _READY_DB
     db_name = _test_db_name()
-    head, _ = _split_url(_base_url())
-    test_engine = create_async_engine(f"{head}/{db_name}", future=True, poolclass=NullPool)
+    test_engine = create_async_engine(_test_url(db_name), future=True, poolclass=NullPool)
     if _READY_DB != db_name:
         await _ensure_database(db_name)
         async with test_engine.begin() as conn:

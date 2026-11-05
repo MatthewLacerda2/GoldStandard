@@ -84,9 +84,9 @@ class BaseWorktree(ScratchRepository):
         drop.assert_not_called()
 
     def test_the_drop_uses_names_the_conftest_defines(self) -> None:
-        # The database's name is the conftest's to derive, never guessed here.
+        # The database's name and connection are the conftest's, never rebuilt here.
         conftest = CONFTEST.read_text(encoding="utf-8")
-        for name in ("_base_url", "_split_url", "_test_db_name"):
+        for name in ("_drop_database", "_test_db_name"):
             self.assertIn(name, regression_runners.DROP_DATABASE)
             self.assertIn(f"def {name}(", conftest)
 

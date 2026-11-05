@@ -269,20 +269,14 @@ def run_target(t: Target, base: Path, scratch: Path, python: str, bun: str) -> s
 
 
 # Drops the test database the base's own conftest made for the base worktree,
-# by the conftest's own naming, so the name is never guessed here. Run from
-# the worktree's backend/ while it exists.
+# by the conftest's own naming and connection, so neither the name nor the
+# server's address is rebuilt here. Run from the worktree's backend/ while it
+# exists.
 DROP_DATABASE = """
-import asyncio, asyncpg
-from tests.conftest import _base_url, _split_url, _test_db_name
-async def drop():
-    head, _ = _split_url(_base_url())
-    conn = await asyncpg.connect(head.replace("postgresql+asyncpg://", "postgresql://") + "/postgres")
-    try:
-        await conn.execute(f'DROP DATABASE IF EXISTS "{_test_db_name()}" WITH (FORCE)')
-    finally:
-        await conn.close()
-    print("dropped", _test_db_name())
-asyncio.run(drop())
+import asyncio
+from tests.conftest import _drop_database, _test_db_name
+asyncio.run(_drop_database(_test_db_name()))
+print("dropped", _test_db_name())
 """
 
 

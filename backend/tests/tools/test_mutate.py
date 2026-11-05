@@ -124,7 +124,7 @@ def test_a_name_no_mutant_matches_is_named_instead_of_a_failing_test(tmp_path, m
 
 
 def test_a_database_that_refuses_the_sweep_keeps_mutmuts_exit_code(monkeypatch, capsys):
-    async def refuse(dsn, base):
+    async def refuse(admin_args, base):
         raise asyncpg.InvalidPasswordError("password authentication failed")
 
     explained = []
@@ -134,6 +134,21 @@ def test_a_database_that_refuses_the_sweep_keeps_mutmuts_exit_code(monkeypatch, 
     monkeypatch.setattr(mutate, "unmatched", lambda mutants, names: [])
     assert mutate.main([SECURITY]) == 3
     assert explained and "InvalidPasswordError" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("url", "error"),
+    [
+        ("not a url", "ArgumentError"),
+        ("postgresql+psycopg://u:p@db/app", "ValueError"),
+        ("postgresql+asyncpg://u:p@db/app?application_name=x", "TypeError"),
+        ("postgresql+asyncpg://u:p@db/app?timeout=10", "TypeError"),
+    ],
+)
+def test_a_url_asyncpg_cannot_take_skips_the_sweep_without_raising(url, error, monkeypatch, capsys):
+    monkeypatch.setenv("DATABASE_URL", url)
+    mutate._sweep("test_gs_mut_x")
+    assert f"could not drop the test databases: {error}" in capsys.readouterr().out
 
 
 def _mutants_tree(root, conftest: str):
