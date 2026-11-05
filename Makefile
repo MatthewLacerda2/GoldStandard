@@ -1,6 +1,6 @@
 # Single task runner. CI invokes these exact targets so local and CI never drift.
 # Override the interpreter in CI with: make backend PYTHON=python
-# Locally a venv is used: make backend PYTHON=.venv/bin/python (see backend/README note).
+# Locally a venv is used: make backend PYTHON=.venv/bin/python (README, Getting started).
 
 PYTHON ?= python3.14
 BUN    ?= bun
@@ -94,6 +94,83 @@ front-contract:
 
 front-install:
 	cd frontend && $(BUN) install
+
+# ---------------------------------------------------------------------------
+# Clone setup and the pre-commit hook  (`make setup` once per clone)
+# ---------------------------------------------------------------------------
+# One setting in the repository config, so it covers every worktree of the
+# clone at once. It replaces any hooks path set before, which also stops hooks
+# kept in .git/hooks from running. The path is relative to each worktree, so a
+# worktree on a branch that predates .githooks/ runs no hook at all.
+.PHONY: setup pre-commit-scope pre-commit pre-commit-back pre-commit-front back-fix front-fix
+setup:
+	git config core.hooksPath .githooks
+	@echo "setup: each commit and merge now runs 'make pre-commit' (.githooks/), in every worktree of this clone."
+	@echo "setup: hooks in .git/hooks no longer run, and a branch without .githooks/ runs none."
+	@echo "setup: to commit work in progress anyway, use 'git commit --no-verify'."
+
+# The layers the index changes, as one loop: the hook reads it through
+# `pre-commit-scope`, and a `make pre-commit` by hand reads it here.
+staged_layers = for l in backend frontend; do git diff --cached --quiet -- $$l || echo $$l; done
+STAGED_LAYERS ?= $(shell $(staged_layers))
+
+# The hook runs this while git's environment still points at the index being
+# committed, and passes what it prints to `pre-commit`. The lint gates read the
+# working tree, so a touched layer whose files on disk are not what the commit
+# lands is refused: lint would judge something other than the commit. That is
+# an unstaged edit, an untracked file, or, under `git commit <path>`, a staged
+# file the pathspec leaves out.
+pre-commit-scope:
+	@layers="$(STAGED_LAYERS)"; for l in $$layers; do \
+		if ! git diff --quiet -- $$l || [ -n "$$(git ls-files --others --exclude-standard -- $$l)" ]; then \
+			echo "pre-commit: $$l/ has changes that are not part of this commit, and lint reads the files on disk." >&2; \
+			git diff --name-only -- $$l | sed 's/^/pre-commit:   /' >&2; \
+			git ls-files --others --exclude-standard -- $$l | sed 's/^/pre-commit:   /' >&2; \
+			echo "pre-commit: stage what belongs and commit without a path, or unstage the rest and set it" >&2; \
+			echo "pre-commit: aside: git stash push --keep-index --include-untracked" >&2; \
+			exit 1; \
+		fi; \
+	done; echo $$layers
+
+# What .githooks/pre-commit runs: each touched layer's lint gate, never its
+# tests or build. A layer the commit does not touch is skipped and says so; a
+# touched one whose tools are not installed fails rather than passing unchecked.
+# A fast check that reads the whole repository joins the prerequisites here.
+# docs-lint is one: it reads the docs on disk, which pre-commit-scope does not
+# compare with the index.
+pre-commit: docs-lint pre-commit-back pre-commit-front
+	@echo "pre-commit: ok"
+
+pre-commit-back:
+	@if [ -z "$(filter backend,$(STAGED_LAYERS))" ]; then \
+		echo "pre-commit: backend skipped, nothing staged under backend/."; \
+	elif ! (cd backend && $(PYTHON) -m ruff --version) >/dev/null 2>&1; then \
+		echo "pre-commit: no ruff for PYTHON=$(PYTHON) (run from backend/): run 'make back-install'."; \
+		exit 1; \
+	elif ! $(MAKE) --no-print-directory back-lint; then \
+		echo "pre-commit: backend lint failed. Fix: make back-fix PYTHON=$(PYTHON) (file and test length by hand)."; \
+		exit 1; \
+	fi
+
+pre-commit-front:
+	@if [ -z "$(filter frontend,$(STAGED_LAYERS))" ]; then \
+		echo "pre-commit: frontend skipped, nothing staged under frontend/."; \
+	elif ! command -v $(BUN) >/dev/null 2>&1 || [ ! -x frontend/node_modules/.bin/eslint ]; then \
+		echo "pre-commit: no $(BUN) on PATH, or frontend/node_modules missing: install Bun, then 'make front-install'."; \
+		exit 1; \
+	elif ! $(MAKE) --no-print-directory front-lint; then \
+		echo "pre-commit: frontend lint failed. Fix: make front-fix (type errors by hand)."; \
+		exit 1; \
+	fi
+
+# What a failed lint points at. Every fixer runs even when one leaves errors
+# behind, the formatter last, and the target fails if a fixer left errors.
+# House-lint findings and type errors are not theirs: those are fixed by hand.
+back-fix:
+	cd backend && { $(PYTHON) -m ruff check --fix .; s=$$?; $(PYTHON) -m ruff format . && exit $$s; }
+
+front-fix:
+	cd frontend && { $(BUN) run eslint --fix .; s=$$?; $(BUN) run prettier --write . && exit $$s; }
 
 # ---------------------------------------------------------------------------
 # Repository setup  (run once in a repo made from this template; needs `gh`)

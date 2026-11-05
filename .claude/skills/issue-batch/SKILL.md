@@ -128,13 +128,16 @@ either branch ever declared. A column one branch removed sits there, and the oth
 branch's next insert fails on a `NOT NULL` nobody wrote. Cheap to avoid,
 expensive to diagnose.
 
-Two things a worktree does *not* isolate:
+Three things a worktree does *not* isolate:
 
 - **The compose stack is a singleton.** It binds 5432, 8000 and 3000 on the host,
   so only one worktree can hold it. `CLAUDE.md` says not to start it to "check"
   something anyway — the gates are how you verify.
 - **Anything under `~`.** Bun's and pip's caches are shared, which is fine, and is
   the reason parallel gate runs are cheap here.
+- **The repository config.** Every worktree reads the same `.git/config`, so a
+  `git config` run in one (`make setup`'s `core.hooksPath` included) changes it
+  for all of them and for the main checkout.
 
 A worktree costs `backend/.venv` and `frontend/node_modules` — hundreds of
 megabytes, not the gigabytes a compiled target directory costs — so removing one is
@@ -146,7 +149,10 @@ stale worktree keeps a stale test database alive behind it.
 - Assign the user the moment work actually begins, and tell them. No assignee
   means free for grabs. **Unassign** if it turns out the issue was never started.
 - Worktree off the latest `main`, branch `feat/…` or `fix/…`, pushed under the
-  same name.
+  same name. Install the layers it will touch there (`make back-install`,
+  `make front-install`): the pre-commit hook refuses a commit to a layer whose
+  tools are missing. The hook itself is `make setup`, once per clone, never per
+  worktree.
 - The pull request says `Closes #N` for the issue it closes — with the number
   checked — and is opened as a **draft** on the first push (`ci-merge`, *What a
   ready pull request claims*).

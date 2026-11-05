@@ -57,7 +57,9 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
 - **`make check` is the law.** `make backend` and `make frontend` each run their
   layer's lint + build + test, and `make tools` lints and tests the repository's
   own tooling and runs the docs lint and the marker check; CI calls the same
-  targets. Gates must be green before pushing.
+  targets. Gates must be green before pushing. Once `make setup` has run, each
+  commit runs the fast half, `make pre-commit`: the lint gate of every layer it
+  touches, no tests and no build.
 - **One check says CI passed.** `.github/workflows/ci.yml` runs on every ready
   pull request and every push to `main`, skips the layers a change did not
   touch (`tools/ci_paths.py` holds the list), and ends in a `CI ok` job that
@@ -104,6 +106,7 @@ frontend/   React 19 · Vite · TanStack Router/Query · Tailwind v4 · ShadCN �
 docker/     postgres (pgvector/pgvector:pg16)
 tools/      repository tooling: stdlib-only Python, linted and tested by `make tools`
 Makefile    the single task runner; CI invokes these targets
+.githooks/  the pre-commit hook (`make pre-commit`), installed by `make setup`
 CLAUDE.md   the operating contract
 ```
 
@@ -111,6 +114,10 @@ CLAUDE.md   the operating contract
 
 ```sh
 cp .env.example .env
+
+# Once per clone: each commit then runs `make pre-commit`, the lint gate of
+# every layer it touches (`git commit --no-verify` skips it for a WIP commit)
+make setup
 
 # Backend gates (creates backend/.venv, installs, then lints/builds/tests)
 make back-install
@@ -128,6 +135,14 @@ The backend tests need a Postgres with `pgvector` reachable via `DATABASE_URL`
 (`docker compose up -d --wait postgres` provides one). Running the full stack is
 `docker compose up --build` — postgres + backend + an nginx-served frontend that
 reverse-proxies `/api/*`.
+
+About the hook `make setup` installs. It is one `core.hooksPath` setting in
+the repository config, so it covers every worktree of the clone at once,
+replaces any hooks path set before, and stops hooks kept in `.git/hooks` from
+running. The path is relative, so a worktree on a branch older than `.githooks/`
+runs no hook. A commit that touches a layer needs that layer installed in its
+worktree (`make back-install` / `make front-install`), and the layer's working
+tree must match what is staged, since lint reads the files on disk.
 
 ## Protecting `main` (one-time setup)
 

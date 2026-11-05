@@ -50,4 +50,5 @@ for new resources rather than inventing a new one.
 `make backend` = `back-lint` (ruff + ruff-format + `house_lint.py`) ·
 `back-build` (imports `main`, and fails when `frontend/openapi.json` no longer
 matches what the endpoints answer: run `make openapi` and commit it) ·
-`back-test` (pytest). Green before you push.
+`back-test` (pytest). Green before you push. Once `make setup` has run, each
+commit touching `backend/` runs `back-lint` first; `make back-fix` fixes what ruff can.

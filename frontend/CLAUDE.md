@@ -58,4 +58,6 @@ silence it, as they do any rule, and nothing yet asks them for a reason.
 
 `make frontend` = `front-lint` (`bun run check`: tsc + eslint + prettier) ·
 `front-build` (vite) · `front-test` (vitest) · `front-contract`
-(`scripts/check-contract.ts`). Green before you push.
+(`scripts/check-contract.ts`). Green before you push. Once `make setup` has
+run, each commit touching `frontend/` runs `front-lint` first; `make front-fix`
+fixes what eslint and prettier can.

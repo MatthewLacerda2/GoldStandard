@@ -1,0 +1,52 @@
+#!/bin/sh
+# Runs before every commit (and, through pre-merge-commit, every merge that
+# makes one): `make pre-commit`, the lint gate of each layer the commit touches.
+# No tests and no build: an agent commits many times per task, deliberate
+# break-and-restore cycles included, and the full gates are `make check`,
+# before a push.
+#
+# This folder is committed, and `make setup` (once per clone) points git at it
+# with `core.hooksPath`. Worktrees share the repository config, so one setup
+# covers every worktree of the clone.
+#
+# A known limit: `git commit --amend` is compared with the commit it amends,
+# so it checks only what the amend itself changes.
+
+set -e
+
+cd "$(git rev-parse --show-toplevel)"
+
+no_verify() {
+	echo "pre-commit: nothing was committed. To commit work in progress anyway: git commit --no-verify" >&2
+}
+
+if ! command -v make >/dev/null 2>&1; then
+	echo "pre-commit: make is not installed, so the lint gates cannot run." >&2
+	no_verify
+	exit 1
+fi
+
+# Read what the commit lands before git's environment is cleared below:
+# `git commit -a` and `git commit <path>` stage into a temporary index that
+# only GIT_INDEX_FILE points at, so the plain index would show nothing staged.
+if ! STAGED_LAYERS=$(make -s --no-print-directory pre-commit-scope); then
+	no_verify
+	exit 1
+fi
+
+# Git exports these to a hook (GIT_DIR in a linked worktree). Nothing below
+# needs them, and any command that runs `git` in a scratch folder would
+# otherwise act on this repository.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_PREFIX
+
+# The backend gates run from backend/, so a PYTHON relative to it is fine.
+# Prefer the venv `make back-install` creates over the Makefile's default.
+if [ -z "${PYTHON:-}" ] && [ -x backend/.venv/bin/python ]; then
+	PYTHON=.venv/bin/python
+	export PYTHON
+fi
+
+if ! make --no-print-directory pre-commit STAGED_LAYERS="$STAGED_LAYERS"; then
+	no_verify
+	exit 1
+fi

@@ -229,6 +229,7 @@ make check      # everything
 make tools      # tools/: ruff + tests; docs-lint (CLAUDE.md and skill limits)
 make backend    # back-lint + back-build + back-test
 make frontend   # front-lint + front-build + front-test + front-contract
+make setup      # once per clone: each commit runs `make pre-commit` (lint only)
 ```
 
 **Gates must be green before you push.** Scope your run to the layer you touched
