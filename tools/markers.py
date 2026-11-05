@@ -8,16 +8,28 @@ this holds every other tracked file that takes comments (`FILES`). The rest
 take none, or are prose and generated files (`NOT_READ`), and
 `tools/tests/test_markers.py` fails on a tracked file none of the three names.
 
-Only comment text is read, for the marker and the allow alike. In a `#` file, a
-`#` at the start of a line or after whitespace, outside quotes and not escaped
-with a backslash, starts a comment, so `echo "a # b"`, `$#` and `${#x}` are not
-comments. Quotes are tracked within a line only, which can hide a comment (a
-stray apostrophe before it) but never invents one.
+Only comment text is read, for the marker and the allow alike, each comment
+on its own and without its delimiters. In a `#` file, a `#` at the start of a
+line or after whitespace, outside quotes and not escaped with a backslash,
+starts a comment, so `echo "a # b"`, `$#` and `${#x}` are not comments. The
+readers are line-based approximations, not parsers, and they can be wrong both
+ways:
+
+- they miss a comment: one behind a stray apostrophe (quotes are tracked
+  within a line only), or a `#` straight after code (`x := 1#c` in Make);
+- they invent one: a `#` line inside a multi-line string, a `#` that is part
+  of a `.gitignore` pattern (`build/ #x`), a `/*` or `<!--` inside a quoted
+  string in CSS or HTML.
+
+An invented comment fails closed: the finding is answered by rewording the
+line or by an allow. HTML is read for `<!-- -->` only, not the `//` comments of
+an inline `<script>`.
 
 The rare comment that must carry the word says why, inline:
-`lint: allow(marker) <why>` in the comment on the line or on the line directly
-above it, the spelling the other two lints read. An allow without a reason
-excuses nothing.
+`lint: allow(marker) <why>` in a comment on the line or on the line directly
+above it, the spelling the other two lints read. An allow excuses nothing
+without a reason: something after it besides separators and markers, so
+`# lint: allow(marker) # TODO` is no reason, while a reason may quote the word.
 
     python3.14 tools/markers.py   # scans the tracked files; exit 1 on a finding
 """
@@ -76,12 +88,14 @@ NOT_READ = (
 )
 
 _MARKER_WORD = re.compile(rf"(?<![A-Za-z0-9_])(?:{'|'.join(MARKERS)})(?![A-Za-z0-9_])")
-# The reason starts at the first character that is not a separator, so it may
-# open with a backtick, quote or bracket.
-_ALLOW = re.compile(r"lint: allow\(marker\)[\s:—-]*[^\s:—-]")
+_ALLOW = re.compile(r"lint: allow\(marker\)(.*)")
+# A reason is any character that is not a separator, so it may open with a
+# backtick, quote or bracket.
+_REASON = re.compile(r"[^\s:—#*/-]")
+# The group is the comment's text inside its delimiters.
 _BLOCKS = {
-    "css": re.compile(r"/\*.*?\*/", re.DOTALL),
-    "html": re.compile(r"<!--.*?-->", re.DOTALL),
+    "css": re.compile(r"/\*(.*?)\*/", re.DOTALL),
+    "html": re.compile(r"<!--(.*?)-->", re.DOTALL),
 }
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -103,28 +117,35 @@ def comment_of(line: str) -> str | None:
     return None
 
 
-def _python_comments(text: str) -> dict[int, str]:
+def _python_comments(text: str) -> dict[int, list[str]]:
     tokens = tokenize.generate_tokens(io.StringIO(text).readline)
-    return {t.start[0]: t.string for t in tokens if t.type == tokenize.COMMENT}
+    return {t.start[0]: [t.string] for t in tokens if t.type == tokenize.COMMENT}
 
 
-def _block_comments(text: str, pattern: re.Pattern[str]) -> dict[int, str]:
-    comments: dict[int, str] = {}
+def _block_comments(text: str, pattern: re.Pattern[str]) -> dict[int, list[str]]:
+    comments: dict[int, list[str]] = {}
     for match in pattern.finditer(text):
         first = text.count("\n", 0, match.start()) + 1
-        for offset, part in enumerate(match[0].split("\n")):
-            comments[first + offset] = f"{comments.get(first + offset, '')} {part}"
+        for offset, part in enumerate(match[1].split("\n")):
+            comments.setdefault(first + offset, []).append(part)
     return comments
 
 
-def comments(syntax: str, text: str) -> dict[int, str]:
-    """The comment text on each 1-based line of `text`, in the file's `syntax`."""
+def comments(syntax: str, text: str) -> dict[int, list[str]]:
+    """The comments on each 1-based line of `text`, in the file's `syntax`."""
     if syntax == "python":
         return _python_comments(text)
     if syntax in _BLOCKS:
         return _block_comments(text, _BLOCKS[syntax])
     found = {at: comment_of(line) for at, line in enumerate(text.split("\n"), 1)}
-    return {at: comment for at, comment in found.items() if comment is not None}
+    return {at: [comment] for at, comment in found.items() if comment is not None}
+
+
+def grants(comment: str) -> bool:
+    """Whether `comment` carries an allow with a reason: something after it
+    besides separators and markers."""
+    allow = _ALLOW.search(comment)
+    return bool(allow and _REASON.search(_MARKER_WORD.sub("", allow[1])))
 
 
 def check(path: str, text: str, syntax: str = "hash") -> list[str]:
@@ -134,10 +155,10 @@ def check(path: str, text: str, syntax: str = "hash") -> list[str]:
     except (SyntaxError, tokenize.TokenError) as exc:
         return [f"{path}: could not read its comments: {exc}"]
     findings: list[str] = []
-    for line, comment in by_line.items():
-        match = _MARKER_WORD.search(comment)
-        allowed = any(_ALLOW.search(by_line.get(at, "")) for at in (line, line - 1))
-        if match and not allowed:
+    for line, found in by_line.items():
+        match = next(filter(None, map(_MARKER_WORD.search, found)), None)
+        near = [*by_line.get(line, []), *by_line.get(line - 1, [])]
+        if match and not any(map(grants, near)):
             findings.append(f"{path}:{line}: '{match[0]}' comment: {ADVICE}")
     return findings
 
@@ -161,15 +182,21 @@ def tracked() -> list[str]:
     return [path for path in listing.split("\0") if path]
 
 
+def scan(path: str, root: Path = ROOT) -> list[str]:
+    """The findings in the tracked file `path`, if this check reads it."""
+    syntax, file = syntax_of(path), root / path
+    if not syntax or not file.is_file():  # a file deleted locally has nothing to read
+        return []
+    try:
+        text = file.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return [f"{path}: not UTF-8 text, so its comments cannot be read"]
+    return check(path, text, syntax)
+
+
 def main() -> int:
     """Scan the tracked files this check reads; print each finding."""
-    findings: list[str] = []
-    for path in tracked():
-        syntax, file = syntax_of(path), ROOT / path
-        if (
-            syntax and file.is_file()
-        ):  # a tracked file deleted locally has nothing to read
-            findings += check(path, file.read_text(encoding="utf-8"), syntax)
+    findings = [finding for path in tracked() for finding in scan(path)]
     print("\n".join(findings) or "markers: clean")
     return 1 if findings else 0
 

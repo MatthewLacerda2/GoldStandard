@@ -82,10 +82,10 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
   `house_lint.py` reads the backend's Python, `local/no-marker-comment` the
   frontend's TypeScript, and `tools/markers.py` every other tracked file that
   takes comments (scripts, hooks, workflows, the `Makefile`, Dockerfiles,
-  config files, CSS, HTML, the root tools' Python). Only Markdown, JSON and
-  generated files go unread, and a test fails on a file kind none of them
-  names. The rare comment that must carry the word says why:
-  `lint: allow(marker) <why>`.
+  config files, CSS `/* */` and HTML `<!-- -->` comments, the root tools'
+  Python). Only Markdown, JSON and generated files go unread, and a test fails
+  on a file kind none of them names. The rare comment that must carry the word
+  says why: `lint: allow(marker) <why>`.
 - **A tested local ESLint plugin (frontend):** the design-system rules above are
   real rules with their own colocated test suites, run by Vitest alongside the
   app tests. `max-lines: 550` per file.

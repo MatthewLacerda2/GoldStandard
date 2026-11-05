@@ -21,7 +21,9 @@ def test_each_marker_in_a_comment_fails(marker: str):
     ]
 
 
-@pytest.mark.parametrize("comment", ["todos", "TODO_LIST", "hacker", "XXXL", "todo", "Fixme"])
+@pytest.mark.parametrize(
+    "comment", ["todos", "TODO_LIST", "MYTODO", "_HACK", "hacker", "XXXL", "todo", "Fixme"]
+)
 def test_a_word_that_only_contains_a_marker_passes(comment: str):
     assert _markers(f"# {comment}\n") == []
 
@@ -44,6 +46,9 @@ def test_an_allow_excuses_only_the_line_below_it():
 def test_an_allow_needs_a_reason():
     assert len(_markers("# TODO  lint: allow(marker)\n")) == 1
     assert len(_markers("# TODO  lint: allow(marker) -- \n")) == 1
+    assert len(_markers("# TODO  lint: allow(marker): —\n")) == 1
+    assert len(_markers("# lint: allow(marker) # FIXME\n")) == 1
+    assert _markers("# TODO  lint: allow(marker): — the format\n") == []
 
 
 def test_an_allow_for_another_rule_or_in_a_string_does_not_excuse():

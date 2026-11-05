@@ -24,7 +24,10 @@ documenting a file never pushes it over; any other string still counts):
      comments are read — a string holding the word is data. The rare comment
      that must carry the word is excused inline, with a reason:
      ``lint: allow(marker) <why>`` in the comment on the line or in the one
-     directly above it. Only comment text is read for the allow too.
+     directly above it. Only comment text is read for the allow too, and a
+     reason is something besides separators and markers, so
+     ``# lint: allow(marker) # FIXME`` gives none while a reason may quote
+     the word.
 
 Rule 4 is structural only — that a body is a declared model, not that its
 fields carry the right constraints. A template cannot know what its users will
@@ -64,7 +67,8 @@ MARKERS = ("TODO", "FIXME", "XXX", "HACK")
 _MARKER_WORD = re.compile(rf"(?<![A-Za-z0-9_])(?:{'|'.join(MARKERS)})(?![A-Za-z0-9_])")
 # The reason after an allow starts at its first character that is not a
 # separator, so a reason may open with a backtick, quote or bracket.
-_MARKER_ALLOW = re.compile(r"lint: allow\(marker\)[\s:—-]*[^\s:—-]")
+_MARKER_ALLOW = re.compile(r"lint: allow\(marker\)(.*)")
+_MARKER_REASON = re.compile(r"[^\s:—#*/-]")
 MARKER_ADVICE = "do it now, or file an issue and delete the comment"
 
 # FastAPI's parameter markers. A parameter carrying one is injected by the
@@ -352,7 +356,11 @@ def check_router_io(path: Path, tree: ast.Module) -> list[str]:
 def _allowed(comments: dict[int, str], line: int) -> bool:
     """True if the comment on ``line``, or on the line directly above, allows a
     marker: ``lint: allow(marker)`` followed by a reason."""
-    return any(_MARKER_ALLOW.search(comments.get(at, "")) for at in (line, line - 1))
+    for at in (line, line - 1):
+        allow = _MARKER_ALLOW.search(comments.get(at, ""))
+        if allow and _MARKER_REASON.search(_MARKER_WORD.sub("", allow[1])):
+            return True
+    return False
 
 
 def check_markers(path: Path, source: str) -> list[str]:
