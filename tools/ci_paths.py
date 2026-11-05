@@ -7,14 +7,18 @@ job reads one of the lines it prints:
 
     backend=true|false    the backend gates (Postgres, pip, `make backend`)
     frontend=true|false   the frontend gates (Bun, `make frontend`)
-    code=true|false       anything but Markdown changed, for a job that checks
-                          the whole repository rather than one layer
+    code=true|false       anything a gate reads changed (any non-Markdown file,
+                          or a page a layer counts), for a job that checks the
+                          whole repository rather than one layer
 
 A layer's patterns are read in order, the last one a path matches decides
 whether it counts, and a `!` excludes, which is how GitHub reads a workflow's
-`paths:` filter. `*` stops at a `/`, `**` does not. Markdown never counts for a
-layer: no gate reads a page today. A page a gate starts reading is re-included
-by name after the `!**/*.md`, or editing it would skip the gate that reads it.
+`paths:` filter. `*` stops at a `/`, `**` does not. Markdown counts for a layer
+only when that layer's gates read it: `make front-lint` runs `prettier --check
+.` over all of `frontend/`, pages included, while nothing in `make backend`
+reads a `.md` file, so the backend excludes them. Before excluding Markdown
+from a layer, check its gates; a page they read and the list skips is a
+change that merges unchecked and turns `main` red.
 
 Every tracked file is either claimed by a layer or listed in `UNGATED`, and
 `tools/tests/test_ci_paths.py` holds the repository to that, so a new top-level
@@ -23,7 +27,8 @@ folder cannot slip past every gate unnoticed.
 An empty or unreadable diff runs everything: there is nothing to say it was
 safe to skip.
 
-    git diff --name-only --no-renames BASE HEAD | python3.14 tools/ci_paths.py
+    git -c core.quotePath=false diff --name-only --no-renames BASE HEAD \
+        | python3.14 tools/ci_paths.py
 """
 
 from __future__ import annotations
@@ -48,7 +53,8 @@ LAYERS: dict[str, tuple[str, ...]] = {
         *_SHARED,
         "!**/*.md",
     ),
-    "frontend": ("frontend/**", *_SHARED, "!**/*.md"),
+    # No `!**/*.md`: Prettier checks frontend/'s Markdown too.
+    "frontend": ("frontend/**", *_SHARED),
 }
 
 # Tracked files no layer's gates read. A change to only these runs just the
@@ -79,7 +85,7 @@ def decide(files: list[str]) -> dict[str, bool]:
     if not files:
         return {**dict.fromkeys(LAYERS, True), "code": True}
     answer = {name: any(counts(p, f) for f in files) for name, p in LAYERS.items()}
-    answer["code"] = any(not f.endswith(".md") for f in files)
+    answer["code"] = any(answer.values()) or any(not f.endswith(".md") for f in files)
     return answer
 
 

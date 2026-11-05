@@ -26,6 +26,13 @@ class WhatAChangeRuns(unittest.TestCase):
         answer = runs("README.md", "backend/CLAUDE.md", ".claude/skills/x/SKILL.md")
         self.assertEqual(answer, {"backend": False, "frontend": False, "code": False})
 
+    def test_frontend_markdown_runs_the_frontend(self) -> None:
+        # `make front-lint` runs Prettier over every file in frontend/.
+        self.assertEqual(
+            runs("frontend/CLAUDE.md"),
+            {"backend": False, "frontend": True, "code": True},
+        )
+
     def test_a_layer_runs_its_own_gates_only(self) -> None:
         self.assertEqual(
             runs("backend/api/items.py"),

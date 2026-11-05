@@ -21,7 +21,10 @@ name: CI
 # too). A draft cannot merge, so there is nothing to check yet.
 # `ready_for_review` in `types:` is what brings the run that counts, and
 # leaving it out fails open: a draft marked ready with no new push would never
-# get a run, and its skipped checks would read as passing.
+# get a run, and its skipped checks would read as passing. `edited` is left
+# out, since every title or body edit would re-run CI. The cost is that
+# retargeting a pull request's base brings no new run; push a commit, or close
+# and reopen it, to get one.
 on:
   push:
     branches: [main]
@@ -31,8 +34,14 @@ on:
 permissions:
   contents: read
 
+# A push to a pull request cancels the run of the head it replaced. That run's
+# `CI ok` then reports red, on a commit that is no longer the head and cannot
+# merge. Pushes to `main` get a group per commit and are never cancelled, so
+# every commit on `main` carries a real verdict and a red one always means a
+# job failed. `CI ok` keeps `always()` rather than `!cancelled()`: a cancelled
+# run must not leave the head with a skipped `CI ok`, which reads as passing.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -63,7 +72,9 @@ jobs:
         env:
           BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || github.event.before }}
         run: |
-          if files=$(git diff --name-only --no-renames "$BASE" HEAD); then
+          # core.quotePath=false: a non-ASCII path comes out as itself, not
+          # as a quoted octal escape that matches no pattern.
+          if files=$(git -c core.quotePath=false diff --name-only --no-renames "$BASE" HEAD); then
             printf '%s\n' "$files"
             printf '%s\n' "$files" | python tools/ci_paths.py | tee -a "$GITHUB_OUTPUT"
           else

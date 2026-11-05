@@ -15,7 +15,7 @@ import re
 import unittest
 from pathlib import Path
 
-from tools.ci_paths import decide
+from tools.ci_paths import LAYERS, decide
 
 GITHUB = Path(__file__).resolve().parents[2] / ".github"
 WORKFLOW = GITHUB / "workflows" / "ci.yml"
@@ -59,6 +59,16 @@ class CiOk(unittest.TestCase):
         # Without always() it is skipped after a failure, and GitHub reads a
         # skipped required check as a satisfied one.
         self.assertRegex(self.jobs[OK_JOB], r"\n    if: .*always\(\)")
+
+    def test_each_layer_job_runs_on_its_own_answer(self) -> None:
+        # A typo here skips the job forever, and `CI ok` reads skipped as fine.
+        for layer in LAYERS:
+            block = self.jobs[layer]
+            self.assertIn("    needs: changes\n", block, layer)
+            self.assertIn(f"    if: needs.changes.outputs.{layer} == 'true'\n", block)
+
+    def test_the_diff_keeps_non_ascii_paths_readable(self) -> None:
+        self.assertIn("git -c core.quotePath=false diff", self.jobs["changes"])
 
     def test_every_change_prints_what_the_workflow_reads(self) -> None:
         for key in decide([]):
