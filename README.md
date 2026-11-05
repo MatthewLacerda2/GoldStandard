@@ -105,8 +105,8 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
   says why: `lint: allow(marker) <why>`.
 - **Code nothing calls fails:** `back-deadcode` (vulture, with code only the
   tests use counted as dead) and `front-deadcode` (knip for files, exports and
-  dependencies, plus every locale key read somewhere). What stays on purpose
-  says why, inline.
+  dependencies, plus every locale key read somewhere, and every key the code
+  asks for present in every locale). What stays on purpose says why, inline.
 - **A tested local ESLint plugin (frontend):** the design-system rules above are
   real rules with their own colocated test suites, run by Vitest alongside the
   app tests. `max-lines: 550` per file.
