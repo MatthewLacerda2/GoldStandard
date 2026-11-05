@@ -54,7 +54,6 @@ from __future__ import annotations
 import argparse
 import ast
 import io
-import os
 import re
 import sys
 import tokenize
@@ -164,9 +163,9 @@ def _is_router_handler(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return False
 
 
-def check_file_length(path: Path, source: str, code: set[int]) -> list[str]:
+def check_file_length(path: Path, source: str, code: set[int], *, under_tests: bool) -> list[str]:
     """Rule 1: enforce the maximum file length, in lines of code."""
-    if _is_under_tests(path):
+    if under_tests:
         return []
     header = "\n".join(source.splitlines()[:_MARKER_SCAN_LINES])
     if DATA_FILE_MARKER in header:
@@ -177,10 +176,11 @@ def check_file_length(path: Path, source: str, code: set[int]) -> list[str]:
     return [f"{path}: file has {count} lines of code (max {MAX_FILE_LINES})"]
 
 
-def check_function_lengths(path: Path, tree: ast.Module, code: set[int]) -> list[str]:
+def check_function_lengths(
+    path: Path, tree: ast.Module, code: set[int], *, under_tests: bool
+) -> list[str]:
     """Rules 2 and 3: enforce handler and test function length limits."""
     violations: list[str] = []
-    under_tests = _is_under_tests(path)
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
@@ -384,9 +384,13 @@ def check_markers(path: Path, source: str) -> list[str]:
     return violations
 
 
-def check_source(path: Path, source: str, *, lengths_only: bool = False) -> list[str]:
+def check_source(
+    path: Path, source: str, *, lengths_only: bool = False, in_tree: Path | None = None
+) -> list[str]:
     """Run every rule against a single file's source text, or only the length
-    rules (1-3) with ``lengths_only``.
+    rules (1-3) with ``lengths_only``. ``in_tree`` is where the file sits in the
+    tree being scanned, and whether it is under ``tests/`` is read from that
+    (default: ``path``), so the folders above the tree never count.
 
     The file is parsed once here; a syntax error is the only violation reported
     for a file that does not parse. It is tokenized twice, once for the lines
@@ -397,25 +401,34 @@ def check_source(path: Path, source: str, *, lengths_only: bool = False) -> list
     except SyntaxError as exc:
         return [f"{path}: syntax error: {exc}"]
     code = code_lines(source, tree)
-    lengths = check_file_length(path, source, code) + check_function_lengths(path, tree, code)
+    under_tests = _is_under_tests(in_tree or path)
+    lengths = check_file_length(path, source, code, under_tests=under_tests)
+    lengths += check_function_lengths(path, tree, code, under_tests=under_tests)
     if lengths_only:
         return lengths
     return lengths + check_router_io(path, tree) + check_markers(path, source)
 
 
 def iter_python_files(root: Path) -> list[Path]:
-    """Yield Python files under ``root``, skipping caches and virtualenvs."""
+    """Python files under ``root``, skipping caches and virtualenvs inside it."""
     # `mutants/` is mutmut's working copy (`make back-mutate`), not source.
     skip = {".venv", "__pycache__", ".ruff_cache", ".pytest_cache", ".git", "mutants"}
-    return sorted(p for p in root.rglob("*.py") if not any(part in skip for part in p.parts))
+    return sorted(
+        p for p in root.rglob("*.py") if not any(part in skip for part in p.relative_to(root).parts)
+    )
 
 
 def scan(root: Path, *, lengths_only: bool = False) -> list[str]:
-    """Scan the tree under ``root`` and return all violations."""
+    """Scan the tree under ``root`` and return all violations. A root that is
+    missing, or holds no Python file, is one: a scan of nothing passes nothing."""
+    files = iter_python_files(root) if root.is_dir() else []
+    if not files:
+        return [f"{root}: no Python files to scan (is it the right folder?)"]
     violations: list[str] = []
-    for path in iter_python_files(root):
+    for path in files:
         source = path.read_text(encoding="utf-8")
-        violations.extend(check_source(path, source, lengths_only=lengths_only))
+        in_tree = path.relative_to(root)
+        violations.extend(check_source(path, source, lengths_only=lengths_only, in_tree=in_tree))
     return violations
 
 
@@ -426,9 +439,7 @@ def main(argv: list[str] | None = None) -> int:
         "--lengths", metavar="ROOT", type=Path, help="scan ROOT with the length rules only"
     )
     args = parser.parse_args(argv)
-    # Relative to where it runs, so a folder named `tests` above the tree
-    # cannot exempt everything in it from the file-length rule.
-    root = args.lengths or Path(os.path.relpath(Path(__file__).resolve().parent.parent))
+    root = args.lengths or Path(__file__).resolve().parent.parent
     violations = scan(root, lengths_only=args.lengths is not None)
     if violations:
         for v in violations:

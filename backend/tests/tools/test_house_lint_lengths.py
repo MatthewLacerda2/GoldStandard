@@ -42,3 +42,15 @@ def test_main_scans_the_tree_it_is_given(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "test 'test_big'" in out
     assert f"big.py: file has {house_lint.MAX_FILE_LINES + 1} lines" in out
+
+
+def test_a_tests_folder_above_the_tree_exempts_nothing(tmp_path):
+    root = tmp_path / "tests/repo"
+    root.mkdir(parents=True)
+    (root / "big.py").write_text("x = 1\n" * (house_lint.MAX_FILE_LINES + 1))
+    assert any("big.py: file has" in v for v in house_lint.scan(root, lengths_only=True))
+
+
+def test_a_missing_or_empty_root_fails(tmp_path):
+    for root in (tmp_path / "missing", tmp_path):
+        assert house_lint.main(["--lengths", str(root)]) == 1

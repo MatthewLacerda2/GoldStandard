@@ -3,7 +3,8 @@
 The real hook and the real Makefile run, with a stub standing in for `python`,
 `bun` and `ruff`: it records its arguments and git's environment, and fails
 while a `fail` file exists, bar the pin checks: it answers `--version` as the
-pinned ruff, and passes the backend's `tools/pins.py`.
+pinned ruff, and passes the backend's `tools/pins.py` unless a `drift` file
+exists.
 """
 
 from __future__ import annotations
@@ -21,13 +22,19 @@ CLEARED = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR")
 CLEARED += ("GIT_OBJECT_DIRECTORY", "GIT_PREFIX")
 DROPPED = ("MAKEFLAGS", "MAKELEVEL", "MFLAGS", "PYTHON", "BUN", "RUFF")
 RUFF_PIN = "9.9.9"
+SCOPE = "pre-commit: {} lint would read changes that are not part of this commit"
 
 STUB = """\
 #!/bin/sh
 env | grep '^GIT_' > {out}/env.txt || true
 echo "$*" >> {out}/calls.txt
 [ "$1" = --version ] && echo "ruff {pin}" && exit 0
-[ "$1" = tools/pins.py ] && exit 0
+if [ "$1" = tools/pins.py ]; then
+    [ -f {out}/drift ] || exit 0
+    echo "pins: ruff is 0.0.1, the pin is {pin}"
+    echo "pins: stub does not match requirements.txt: run make back-install"
+    exit 1
+fi
 [ -f {out}/fail ] && exit 1
 exit 0
 """
@@ -71,6 +78,7 @@ class Scratch(unittest.TestCase):
             (self.repo / layer).mkdir(exist_ok=True)
             (self.repo / layer / "a.txt").write_text("one\n")
         (self.repo / "backend/requirements-dev.txt").write_text(f"ruff=={RUFF_PIN}\n")
+        (self.repo / "backend/pyproject.toml").write_text("[tool.ruff]\n")
         (self.repo / "backend/tools").mkdir()
         shutil.copy(ROOT / "backend/tools/house_lint.py", self.repo / "backend/tools")
 
@@ -157,7 +165,7 @@ class TheHook(Scratch):
                 leave_out()
                 done = self.commit(*path)
                 self.assertNotEqual(done.returncode, 0)
-                self.assertIn("backend/ has changes that are not part of this commit", done.stderr)
+                self.assertIn(SCOPE.format("backend"), done.stderr)
                 self.assertIn(f"backend/{listed}", done.stderr)
                 self.assertEqual(self.calls(), "")
                 self.git("reset", "-q", "--hard")
@@ -173,6 +181,16 @@ class TheHook(Scratch):
         self.assertIn("tools/pins.py requirements.txt requirements-dev.txt", self.calls())
         self.assertIn("-m ruff check .", self.calls())
 
+    def test_a_drifted_venv_blocks_the_commit_before_lint(self) -> None:
+        (self.out / "drift").write_text("")
+        (self.repo / "backend/a.txt").write_text("two\n")
+        done = self.commit("-a")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("pre-commit: pins: ruff is 0.0.1", done.stderr)
+        self.assertIn("run make back-install", done.stderr)
+        self.assertNotIn("-m ruff check", self.calls())
+        self.assertEqual(self.commits(), 1)
+
     def test_a_commit_to_tools_runs_its_lint_and_length_limits(self) -> None:
         (self.repo / "tools/a.txt").write_text("two\n")
         done = self.commit("-a")
@@ -182,15 +200,26 @@ class TheHook(Scratch):
         self.assertIn("house_lint: clean", said)
         self.assertIn("backend skipped", said)
 
-    def test_tools_is_held_to_the_same_scope_check(self) -> None:
-        (self.repo / "tools/a.txt").write_text("staged\n")
-        self.git("add", "tools/a.txt")
-        (self.repo / "tools/b.txt").write_text("untracked\n")
-        done = self.commit()
-        self.assertNotEqual(done.returncode, 0)
-        self.assertIn("tools/ has changes that are not part of this commit", done.stderr)
-        self.assertIn("tools/b.txt", done.stderr)
-        self.assertEqual(self.calls(), "")
+    def test_tools_is_held_to_the_same_scope_check_over_what_its_lint_reads(self) -> None:
+        cases = {"untracked": "tools/b.txt", "the backend's ruff rules": "backend/pyproject.toml"}
+        for case, left_out in cases.items():
+            with self.subTest(case):
+                (self.repo / "tools/a.txt").write_text("staged\n")
+                self.git("add", "tools/a.txt")
+                (self.repo / left_out).write_text("on disk only\n")
+                done = self.commit()
+                self.assertNotEqual(done.returncode, 0)
+                self.assertIn(SCOPE.format("tools"), done.stderr)
+                self.assertIn(left_out, done.stderr)
+                self.assertEqual(self.calls(), "")
+                self.git("reset", "-q", "--hard")
+                (self.repo / "tools/b.txt").unlink(missing_ok=True)
+
+    def test_a_change_to_what_tools_lint_reads_lints_tools(self) -> None:
+        (self.repo / "backend/pyproject.toml").write_text("[tool.ruff]\nline-length = 1\n")
+        done = self.commit("-a")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("check --config backend/pyproject.toml tools", self.calls())
 
     def test_a_merge_is_checked_too(self) -> None:
         self.git("checkout", "-q", "-b", "side")
@@ -219,6 +248,7 @@ class TheMakeTarget(Scratch):
         self.git("add", "backend/é.txt", "frontend")
         back = self.make("pre-commit-back", "PYTHON=/nonexistent/python")
         self.assertNotEqual(back.returncode, 0)
+        self.assertIn("no interpreter at PYTHON=/nonexistent/python", back.stdout)
         self.assertIn("make back-install", back.stdout)
         front = self.make("pre-commit-front", "BUN=/nonexistent/bun")
         self.assertNotEqual(front.returncode, 0)
@@ -233,6 +263,7 @@ class TheMakeTarget(Scratch):
             with self.subTest(case):
                 done = self.make("pre-commit-tools", *args)
                 self.assertNotEqual(done.returncode, 0)
+                self.assertIn("pre-commit: tools-ruff:", done.stdout)
                 self.assertIn("run make back-install", done.stdout)
                 self.assertNotIn("tools-fix", done.stdout)
                 self.assertNotIn("check --config", self.calls())
@@ -242,6 +273,14 @@ class TheMakeTarget(Scratch):
         done = self.make("back-fix", f"PYTHON={self.stub}")
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("-m ruff format .", self.calls())
+
+    def test_no_fixer_runs_off_its_pin(self) -> None:
+        (self.out / "drift").write_text("")
+        back = self.make("back-fix", f"PYTHON={self.stub}")
+        tools = self.make("tools-fix", f"RUFF={self.stub}", "RUFF_PIN=0.0.1")
+        self.assertNotEqual(back.returncode, 0)
+        self.assertNotEqual(tools.returncode, 0)
+        self.assertNotIn("--fix", self.calls())
 
     def test_tools_fix_formats_even_when_errors_are_left(self) -> None:
         self.make_tools_fail()
