@@ -41,7 +41,7 @@ updates:
         update-types: [minor, patch]
 
   # Images get patches only. A minor of Python, Bun or nginx has to move CI's
-  # pin and the image together (python-version in backend.yml, packageManager
+  # pin and the image together (python-version in ci.yml, packageManager
   # in package.json), and CI never builds the images, so a Dependabot PR that
   # moved only the image would pass green while the two drift apart. Those
   # bumps are made by hand, in one PR. Bun's pin names the patch too, so a Bun

@@ -49,25 +49,26 @@ has drifted from its manifest is green on nothing.
 Every CI fact this skill relies on lives in this section, so a change to the
 workflows is a change here.
 
-- **Two workflows, `backend.yml` and `frontend.yml`, always trigger** — on
-  every pull request and every push to `main` — and a first step decides from
-  the changed paths whether the gates run: `backend.yml` on `backend/`,
-  `docker/`, `docker-compose.yml`, `.env.example`, the `Makefile` and itself;
-  `frontend.yml` on `frontend/`, the `Makefile` and itself. A branch touching
-  neither still gets both checks, passing in seconds with the gates skipped.
-- **A draft runs no gates.** Both jobs carry
-  `if: ${{ !github.event.pull_request.draft }}`, so marking a pull request ready
-  is the moment anything is checked; until then the local gates are all you
-  have.
+- **One workflow, `ci.yml`, runs on every ready pull request and every push to
+  `main`**, and ends in **`CI ok`**, the one check that says CI passed. Its
+  first job, `changes`, asks `tools/ci_paths.py` which layers the change
+  touches, and the `backend` and `frontend` jobs run only for theirs (that file
+  holds the paths). `tools` (`make tools`) runs on every change. A
+  Markdown-only branch still gets `CI ok`, green with the layer jobs skipped.
+- **A draft runs nothing.** Every job is skipped on a draft, so marking a pull
+  request ready is the moment anything is checked (`ready_for_review` starts
+  the run); until then the local gates are all you have.
 - **CI's environment:** `make backend PYTHON=python` on a clean Python 3.14 with
   `requirements.txt` installed fresh, and `bun install --frozen-lockfile`.
 - **Absent and passing are different states.** A branch that conflicts with
   `main` gets no run at all, and on the pull request page that reads exactly
-  like checks that have not started. Never write a wait loop that reads zero
-  completed checks as success: `gh pr checks <n>` alongside
-  `gh run list --branch <branch>` tells you whether a run exists.
-- **Nothing but you stops a red merge.** `main` carries no branch protection
-  and no ruleset.
+  like checks that have not started. Wait for `CI ok` on the head commit, and
+  never write a wait loop that reads zero completed checks as success:
+  `gh pr checks <n>` alongside `gh run list --branch <branch>` tells you
+  whether a run exists.
+- **Nothing but you stops a red merge** until the repo applies the ruleset that
+  requires `CI ok` (README, *Protecting `main`*); a repo made from the template
+  starts without it. `gh api repos/{owner}/{repo}/rulesets` says which.
 
 ## The merge, one branch at a time
 

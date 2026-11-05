@@ -224,12 +224,13 @@ check that only runs in CI, or only locally.
 
 ```
 make check      # everything
+make tools      # the repository's own tools (tools/), stdlib-only
 make backend    # back-lint + back-build + back-test
 make frontend   # front-lint + front-build + front-test
 ```
 
 **Gates must be green before you push.** Scope your run to the layer you touched
-(`make backend` / `make frontend`) and run `make check` before opening a PR.
+(`make backend` / `make frontend` / `make tools`) and run `make check` before opening a PR.
 A red gate is never handed off as "probably pre-existing": re-run that target on
 `origin/main`, and only if it is red there too, say so with the output.
 

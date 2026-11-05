@@ -109,7 +109,8 @@ Paste every list whose trigger the PR hits.
   `repositories/` → `models/`); public contracts unchanged; moved code still
   tested; dead code left behind; scope beyond the refactor.
 - **CI and the gates** — a red gate still fails the job; triggers still fire
-  (draft PRs, path filters, branches); `make` locally and Actions still run the
+  (draft PRs, `ready_for_review`, the `changes` path list, branches) and
+  `CI ok` still `needs:` every job; `make` locally and Actions still run the
   same target (the no-drift rule); a lint rule still catches what it claims, and
   its own tests say so; caching cannot mask a failure; permissions and secrets
   minimal.
