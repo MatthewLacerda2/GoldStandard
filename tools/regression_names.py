@@ -13,10 +13,12 @@ inside it: a Python test function with its decorators, or a vitest `it` /
     vitest    the full name, `outer > inner > test`, as `-t` matches it
 
 A changed line outside every test (an import, a fixture, a helper, a
-`beforeEach`) is not a test of its own: the tests around it are judged. A file
-whose change touches no test, only those, is judged whole, as is one with a
-changed test that has no fixed name (`it.each`, a name built at run time) or
-that cannot be read; `changed_tests` says which.
+`beforeEach`) names no test. Beside a changed test it is that test's support,
+and only the test is judged; a change of nothing but such lines (a fixture
+that makes the older tests show the bug, say) judges the whole file, as the
+check did before it judged by test. So does a changed test with no fixed name
+(`it.each`, a name built at run time), and a file that cannot be read;
+`changed_tests` says which.
 
 The vitest side is a scanner, not a parser: it skips comments, strings,
 template literals and regular expressions, and gives up (the whole file) on
