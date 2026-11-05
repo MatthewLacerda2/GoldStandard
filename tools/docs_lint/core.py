@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import re
+import tokenize
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import PurePosixPath
 
-from tools.docs_lint import comments
+from tools.comments import comments as read_comments
 
 SKILLS_DIR = (".claude", "skills")
 DOCS_DIR = PurePosixPath("docs")
 CODE_SUFFIXES = frozenset({".py", ".sh", ".ts", ".tsx", ".mts", ".cts", ".js", ".mjs", ".cjs"})
+# The files whose comments open with `//` (`tools/comments.py`); any other
+# code file but Python's takes `#`.
+_SLASH_SUFFIXES = frozenset({".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"})
 
 _HTML_COMMENT = re.compile(r"<!--((?:(?!-->).)*)-->")
 # A fence opens with three or more backticks or tildes, indented at most three
@@ -135,7 +139,13 @@ class Doc:
                 if i not in self.fenced
             }
             return {i: texts for i, texts in found.items() if texts}
-        return comments.of_code(self.path.suffix, self.text)
+        suffix = self.path.suffix
+        syntax = "python" if suffix == ".py" else "slash" if suffix in _SLASH_SUFFIXES else "hash"
+        try:
+            found = read_comments(syntax, self.text)
+        except tokenize.TokenError, SyntaxError:
+            found = read_comments("hash", self.text)  # not valid Python: read it by line
+        return {line - 1: texts for line, texts in found.items()}
 
 
 @dataclass(frozen=True)

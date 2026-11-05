@@ -68,8 +68,17 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
   300 lines, a skill's Markdown 500 and its code 400; a skill's frontmatter
   carries the `name` and `description` it needs to load; a long reference page
   opens with a `Contents` heading; and neither a `CLAUDE.md` nor a skill cites
-  an issue, a pull request or a date (`tools/docs_lint/`, `make docs-lint`). An
-  exception is an inline `<!-- lint: allow(<rule>) <why> -->`.
+  an issue, a pull request or a date (`tools/docs_lint/`, `make docs-lint`).
+- **What a doc points at exists (docs lint, `named-path`):** a repository path
+  or a `` `make <target>` `` must exist where it is named: in the Markdown
+  under `docs/` and `.claude/`, in every `CLAUDE.md` and `README.md`, and in
+  the comments (never the strings) of `.py`, `.ts`/`.tsx`, `.sh`, the `.yml`
+  under `.github/`, the git hooks and the `Makefile`. A move that leaves a
+  pointer behind fails the gate instead of misleading the next reader.
+- **A docs lint exception is inline, with its reason:**
+  `<!-- lint: allow(<rule>) <why> -->` in Markdown, and
+  `# lint: allow(<rule>) <why>` or `// lint: allow(<rule>) <why>` in a code
+  comment.
 - **A fix proves itself.** A pull request closing an issue labelled `fix` must
   change a test that fails on its base: CI's `regression` job runs the changed
   tests there (`make regression PR=N` does it locally, `tools/regression.py`).

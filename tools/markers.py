@@ -9,21 +9,10 @@ take none, or are prose and generated files (`NOT_READ`), and
 `tools/tests/test_markers.py` fails on a tracked file none of the three names.
 
 Only comment text is read, for the marker and the allow alike, each comment
-on its own and without its delimiters. In a `#` file, a `#` at the start of a
-line or after whitespace, outside quotes and not escaped with a backslash,
-starts a comment, so `echo "a # b"`, `$#` and `${#x}` are not comments. The
-readers are line-based approximations, not parsers, and they can be wrong both
-ways:
-
-- they miss a comment: one behind a stray apostrophe (quotes are tracked
-  within a line only), or a `#` straight after code (`x := 1#c` in Make);
-- they invent one: a `#` line inside a multi-line string, a `#` that is part
-  of a `.gitignore` pattern (`build/ #x`), a `/*` or `<!--` inside a quoted
-  string in CSS or HTML.
-
-An invented comment fails closed: the finding is answered by rewording the
-line or by an allow. HTML is read for `<!-- -->` only, not the `//` comments of
-an inline `<script>`.
+on its own, by `tools/comments.py`, which says how
+each syntax is read and where its line-based readers go wrong. A comment one
+of them invents fails closed: the finding is answered by rewording the line or
+by an allow.
 
 The rare comment that must carry the word says why, inline:
 `lint: allow(marker) <why>` in a comment on the line or on the line directly
@@ -31,17 +20,18 @@ above it, the spelling the other two lints read. An allow excuses nothing
 without a reason: something after it besides separators and markers, so
 `# lint: allow(marker) # TODO` is no reason, while a reason may quote the word.
 
-    python3.14 tools/markers.py   # scans the tracked files; exit 1 on a finding
+    python3.14 -m tools.markers   # from the root: scans the tracked files; exit 1 on a finding
 """
 
 from __future__ import annotations
 
-import io
 import re
 import subprocess
 import sys
 import tokenize
 from pathlib import Path, PurePosixPath
+
+from tools.comments import comments
 
 MARKERS = ("TODO", "FIXME", "XXX", "HACK")
 ADVICE = "do it now, or file an issue and delete the comment"
@@ -51,7 +41,7 @@ LAYER_LINTED = ("backend/**/*.py", "frontend/**/*.ts", "frontend/**/*.tsx")
 
 # The comment syntax of every other tracked file that takes comments. Patterns
 # that match nothing today still name a kind a project grows: shell scripts,
-# and git hooks under `.githooks/`.
+# and git hooks under `.githooks/`.  lint: allow(named-path) not grown yet
 FILES = {
     "python": ("**/*.py",),
     "hash": (
@@ -94,53 +84,7 @@ _ALLOW = re.compile(r"lint: allow\(marker\)(.*)")
 # A reason is any character that is not a separator, so it may open with a
 # backtick, quote or bracket.
 _REASON = re.compile(r"[^\s:—#*/-]")
-# The group is the comment's text inside its delimiters.
-_BLOCKS = {
-    "css": re.compile(r"/\*(.*?)\*/", re.DOTALL),
-    "html": re.compile(r"<!--(.*?)-->", re.DOTALL),
-}
 ROOT = Path(__file__).resolve().parent.parent
-
-
-def comment_of(line: str) -> str | None:
-    """The `#` comment on `line`, from its `#` to the end, or None if it has none."""
-    quote, escaped = None, False
-    for at, char in enumerate(line):
-        if escaped:
-            escaped = False
-        elif char == "\\" and quote != "'":
-            escaped = True
-        elif quote:
-            quote = None if char == quote else quote
-        elif char in "'\"":
-            quote = char
-        elif char == "#" and (at == 0 or line[at - 1].isspace()):
-            return line[at:]
-    return None
-
-
-def _python_comments(text: str) -> dict[int, list[str]]:
-    tokens = tokenize.generate_tokens(io.StringIO(text).readline)
-    return {t.start[0]: [t.string] for t in tokens if t.type == tokenize.COMMENT}
-
-
-def _block_comments(text: str, pattern: re.Pattern[str]) -> dict[int, list[str]]:
-    comments: dict[int, list[str]] = {}
-    for match in pattern.finditer(text):
-        first = text.count("\n", 0, match.start()) + 1
-        for offset, part in enumerate(match[1].split("\n")):
-            comments.setdefault(first + offset, []).append(part)
-    return comments
-
-
-def comments(syntax: str, text: str) -> dict[int, list[str]]:
-    """The comments on each 1-based line of `text`, in the file's `syntax`."""
-    if syntax == "python":
-        return _python_comments(text)
-    if syntax in _BLOCKS:
-        return _block_comments(text, _BLOCKS[syntax])
-    found = {at: comment_of(line) for at, line in enumerate(text.split("\n"), 1)}
-    return {at: [comment] for at, comment in found.items() if comment is not None}
 
 
 def grants(comment: str) -> bool:

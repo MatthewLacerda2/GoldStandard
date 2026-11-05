@@ -44,9 +44,9 @@ from tools.docs_lint.core import Doc, Violation, allowed_line, violation
 
 RULE = "named-path"
 
-# The top-level folders a named path may start with: this template's, and the
-# ones it names before they exist (`docs/`, `.githooks/`). A project made from
-# it adds its own.
+# The top-level folders a named path may start with: this template's, with
+# `docs` and `.githooks`, which its docs name before either exists. A project
+# made from it adds its own.
 ROOTS = frozenset(
     {"backend", "frontend", "tools", "docs", "docker", ".github", ".claude", ".githooks"}
 )
