@@ -54,12 +54,17 @@ class Scratch(unittest.TestCase):
             ("core.hooksPath", ".githooks"),
         ]:
             self.git("config", key, value)
-        for name in ("Makefile", ".gitignore", ".githooks", "tools/docs_lint"):
+        for name in ("Makefile", ".gitignore", ".githooks", "tools/docs_lint", "tools/comments.py"):
             copy = shutil.copytree if (ROOT / name).is_dir() else shutil.copy
             copy(ROOT / name, self.repo / name)
         for layer in ("backend", "frontend"):
             (self.repo / layer).mkdir()
             (self.repo / layer / "a.txt").write_text("one\n")
+        # The files the Makefile reads or its comments name: the hook's docs
+        # lint fails on a named path that does not exist.
+        for name in ("backend/requirements-dev.txt", "backend/pyproject.toml"):
+            shutil.copy(ROOT / name, self.repo / name)
+        (self.repo / "frontend/openapi.json").write_text("{}\n")
 
     def run_in(self, cmd: list[str], cwd: Path | None, **env: str):
         return subprocess.run(

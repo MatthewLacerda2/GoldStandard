@@ -8,8 +8,9 @@ scanned for what it names, and each name is looked up:
 - **What is read** (`reads`): every line outside a code fence of the Markdown
   under `docs/` or `.claude/` and of every `CLAUDE.md` and `README.md`; and
   only the comments, never the strings, of `.py`, `.ts`/`.tsx` and `.sh`
-  files, of the `.yml` under `.github/`, and of the `Makefile` (its `#`
-  comments, its `## ` help text among them). A test's made-up fixture lives in
+  files, of the `.yml` under `.github/`, of the git hooks under `.githooks/`
+  (shell scripts with no extension), and of the `Makefile` (its `#` comments,
+  its `## ` help text among them). A test's made-up fixture lives in
   a string, so it is never read.
 - **What is a path** (`named_in`): a token that starts with one of the `ROOTS`
   and ends in a file extension or a `/`. Markdown's wrapping around it
@@ -45,8 +46,8 @@ from tools.docs_lint.core import Doc, Violation, allowed_line, violation
 RULE = "named-path"
 
 # The top-level folders a named path may start with: this template's, with
-# `docs` and `.githooks`, which its docs name before either exists. A project
-# made from it adds its own.
+# `docs`, which its docs name before it exists. A project made from it adds its
+# own.
 ROOTS = frozenset(
     {"backend", "frontend", "tools", "docs", "docker", ".github", ".claude", ".githooks"}
 )
@@ -77,7 +78,7 @@ def reads(path: str) -> bool:
         return at.name in MARKDOWN_NAMES or at.parts[0] == "docs" or ".claude" in at.parts
     if at.suffix in (".yml", ".yaml"):
         return at.parts[0] == ".github"
-    return at.suffix in CODE_SUFFIXES or path == "Makefile"
+    return at.suffix in CODE_SUFFIXES or path == "Makefile" or at.parts[0] == ".githooks"
 
 
 def _texts(doc: Doc) -> list[tuple[int, str]]:

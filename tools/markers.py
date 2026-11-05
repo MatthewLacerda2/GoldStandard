@@ -41,7 +41,7 @@ LAYER_LINTED = ("backend/**/*.py", "frontend/**/*.ts", "frontend/**/*.tsx")
 
 # The comment syntax of every other tracked file that takes comments. Patterns
 # that match nothing today still name a kind a project grows: shell scripts,
-# and git hooks under `.githooks/`.  lint: allow(named-path) not grown yet
+# and git hooks under `.githooks/`.
 FILES = {
     "python": ("**/*.py",),
     "hash": (

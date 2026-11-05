@@ -32,6 +32,7 @@ class EachSourceKind(unittest.TestCase):
         "frontend/src/a.ts": "const a = 1; // see {}\n",
         "frontend/src/b.tsx": "/**\n * see {}\n */\nexport {{}};\n",
         "tools/x.sh": 'echo "#"  # see {}\n',
+        ".githooks/pre-push": "#!/bin/sh\n# see {}\n",
         ".github/workflows/ci.yml": "on: push  # see {}\n",
         "Makefile": "x: ## see {}\n\techo\n",
     }
