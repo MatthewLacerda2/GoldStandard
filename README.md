@@ -55,12 +55,18 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
 ## The practices (what is enforced)
 
 - **`make check` is the law.** `make backend` and `make frontend` each run their
-  layer's lint + build + test, and `make tools` tests the repository's own
-  tooling; CI calls the same targets. Gates must be green before pushing.
+  layer's lint + build + test, and `make tools` lints and tests the repository's
+  own tooling and runs the docs lint; CI calls the same targets. Gates must be green before pushing.
 - **One check says CI passed.** `.github/workflows/ci.yml` runs on every ready
   pull request and every push to `main`, skips the layers a change did not
   touch (`tools/ci_paths.py` holds the list), and ends in a `CI ok` job that
   passes only when every other job passed or was skipped by design.
+- **What an agent loads stays small (docs lint):** a `CLAUDE.md` is at most
+  300 lines, a skill's Markdown 500 and its code 400; a skill's frontmatter
+  carries the `name` and `description` it needs to load; a long reference page
+  opens with a `Contents` heading; and neither a `CLAUDE.md` nor a skill cites
+  an issue, a pull request or a date (`tools/docs_lint/`, `make docs-lint`). An
+  exception is an inline `<!-- lint: allow(<rule>) <why> -->`.
 - **Length discipline (backend):** files ≤ 350 lines of code, endpoint
   handlers ≤ 50, tests ≤ 50 (blank lines, comments and docstrings don't
   count) — enforced by a custom AST linter (`backend/tools/house_lint.py`), not by
@@ -86,7 +92,7 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
 backend/    FastAPI · SQLAlchemy 2.0 async · Pydantic v2 · pytest · Ruff
 frontend/   React 19 · Vite · TanStack Router/Query · Tailwind v4 · ShadCN · Vitest
 docker/     postgres (pgvector/pgvector:pg16)
-tools/      repository tooling: stdlib-only Python, tested by `make tools`
+tools/      repository tooling: stdlib-only Python, linted and tested by `make tools`
 Makefile    the single task runner; CI invokes these targets
 CLAUDE.md   the operating contract
 ```

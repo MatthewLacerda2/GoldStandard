@@ -7,6 +7,11 @@ BUN    ?= bun
 # tools/ is stdlib-only and needs no venv, so it has an interpreter of its own:
 # PYTHON may be a path relative to backend/.
 TOOLS_PYTHON ?= python3.14
+# ruff for tools/ is the backend's: the version pinned in
+# backend/requirements-dev.txt and the rules in backend/pyproject.toml, so the
+# two cannot disagree. Locally it is the backend venv's (`make back-install`);
+# CI installs that same pin and passes RUFF=ruff.
+RUFF ?= backend/.venv/bin/ruff
 
 .DEFAULT_GOAL := check
 
@@ -23,10 +28,19 @@ frontend: front-lint front-build front-test front-contract
 # Repository tools  (tools/: stdlib-only Python serving the whole repo)
 # ---------------------------------------------------------------------------
 # CI runs this on every change, Markdown-only ones included, so a check that
-# reads the docs belongs here: add its command below its tests.
-.PHONY: tools
-tools:
+# reads the docs belongs here, as a target `tools` lists beside `docs-lint`.
+.PHONY: tools tools-lint docs-lint
+tools: tools-lint docs-lint
 	$(TOOLS_PYTHON) -m unittest discover --start-directory tools/tests --top-level-directory .
+
+tools-lint:
+	@command -v $(RUFF) >/dev/null || { echo "tools-lint: no ruff at $(RUFF); run make back-install"; exit 1; }
+	$(RUFF) check --config backend/pyproject.toml tools
+	$(RUFF) format --check --config backend/pyproject.toml tools
+
+# The size and shape of what an agent loads: CLAUDE.md files and skills.
+docs-lint:
+	$(TOOLS_PYTHON) -m tools.docs_lint
 
 # ---------------------------------------------------------------------------
 # Backend gates  (run from backend/, driven by $(PYTHON))

@@ -102,12 +102,9 @@ class EveryTrackedFileIsClassified(unittest.TestCase):
         stray = [
             path
             for path in tracked
-            if not counts(UNGATED, path)
-            and not any(counts(p, path) for p in LAYERS.values())
+            if not counts(UNGATED, path) and not any(counts(p, path) for p in LAYERS.values())
         ]
-        self.assertEqual(
-            stray, [], "add these to a layer or to UNGATED in tools/ci_paths.py"
-        )
+        self.assertEqual(stray, [], "add these to a layer or to UNGATED in tools/ci_paths.py")
 
     def test_every_ungated_pattern_still_matches_something(self) -> None:
         tracked = tracked_files()

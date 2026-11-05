@@ -226,7 +226,7 @@ check that only runs in CI, or only locally.
 
 ```
 make check      # everything
-make tools      # the repository's own tools (tools/), stdlib-only
+make tools      # tools/: ruff + tests; docs-lint (CLAUDE.md and skill limits)
 make backend    # back-lint + back-build + back-test
 make frontend   # front-lint + front-build + front-test + front-contract
 ```
