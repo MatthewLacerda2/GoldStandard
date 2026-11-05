@@ -10,7 +10,7 @@ import inspect
 from typing import Any, NamedTuple
 
 import asyncpg
-from sqlalchemy import exists, insert, make_url, select, text
+from sqlalchemy import exists, func, insert, make_url, select, text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncSession,
@@ -142,7 +142,7 @@ async def init_db() -> None:
     import models  # noqa: F401
 
     async with engine.begin() as conn:
-        await conn.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _BOOTSTRAP_LOCK})
+        await conn.execute(select(func.pg_advisory_xact_lock(_BOOTSTRAP_LOCK)))
         # pragma: no mutate start - equivalent: SQL reads an unquoted word in any case
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         # pragma: no mutate end

@@ -98,7 +98,8 @@ def test_a_url_setting_a_key_under_both_names_is_refused(query, keys):
     "url", ["postgresql+psycopg://u:p@db/app?sslmode=require", "sqlite:///x.db"]
 )
 def test_a_url_naming_another_driver_is_left_alone(url):
-    assert database.normalize_database_url(url) == url
+    """Its driver takes libpq's names, and arguments meant for asyncpg would break it."""
+    assert database.database_target(url) == (url, {})
 
 
 async def test_a_neon_style_url_connects(engine):
