@@ -29,6 +29,8 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 // Type-only: the package is loaded on demand, so a missing node_modules fails one
 // route-tree merge (which falls back to a line merge), not the locale driver too.
+// merge-driver.sh runs bun with --no-install, so bun cannot fetch a generator
+// of its own choosing instead of the one bun.lock pins.
 import type { Config } from "@tanstack/router-plugin";
 
 const ROUTE_IMPORT = /['"]\.\/routes\/([^'"]+)['"]/g;

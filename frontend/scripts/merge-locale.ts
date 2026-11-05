@@ -10,8 +10,12 @@
 // conflict still reaches a person, with git's markers around just that key.
 //
 // Key order is ours, with each key theirs added placed after the key that
-// precedes it on their side; the text is written exactly as Prettier writes
-// these files (merge-locale.test.ts holds it to every real locale file).
+// precedes it on their side. The text is written as JSON.stringify writes it
+// with two spaces, which is Prettier's output for objects of strings
+// (merge-locale.test.ts holds it to every real locale file); merge-driver.ts
+// passes it through the repo's Prettier as well, which collapses a short
+// array onto one line. A string's escapes are JSON.stringify's (`\u00e9`
+// comes out as `é`): the same text, and Prettier accepts either.
 
 /** An absent key — a side that does not have it (never added, or deleted). */
 const ABSENT = Symbol("absent");
@@ -252,8 +256,9 @@ export function mergeLocale(
   ours: string,
   theirs: string,
 ): LocaleMerge {
+  // Both sides adding the same new file: git passes an empty base.
   const merged = mergeValue(
-    parseOrdered(base),
+    parseOrdered(base.trim() === "" ? "{}" : base),
     parseOrdered(ours),
     parseOrdered(theirs),
   );

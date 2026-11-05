@@ -6,8 +6,9 @@ frontend/src/i18n/locales/*.json merge=frontend-locale
 frontend/src/routeTree.gen.ts merge=frontend-route-tree
 # The house-rule registries: every new rule adds its import, its `rules`
 # entry, its severity and its exemptions at the same spots. Two insertions at
-# one spot keep both when each is a balanced block and the result still parses
-# with no name or key twice; anything else is git's own conflict
+# one spot keep both when each is a balanced block, the two set no rule in
+# common, and the result still parses with no name or key twice; anything
+# else is git's own conflict
 # (frontend/scripts/merge-append.ts). Only TypeScript files that are lists of
 # independent entries belong here: never generated code, JSON, prose, or a
 # file whose order or adjacency carries meaning.

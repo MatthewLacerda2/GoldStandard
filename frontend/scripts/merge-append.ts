@@ -18,8 +18,9 @@
 // conflict, edits included, and checks nothing. Even so, "both" is right only
 // where the file is a list of independent entries, so each insertion must
 // stand alone (`insertionRefusal`: a bracket-balanced block, and the two not
-// configuring the same quoted key), and the merged file is checked before it
-// is taken (`refusal`): it must still parse, and must not hold the same
+// opening or closing with the same line), and the merged file is checked
+// before it is taken (`refusal`): it must still parse, the two insertions must
+// not set the same key of a `rules` object, and it must not hold the same
 // import, top-level name or object key twice (two branches adding the same
 // entry beside different ones).
 //
@@ -38,7 +39,10 @@
 /** Markers wide enough that no line of these files can be mistaken for one. */
 export const PARSE_MARKER_SIZE = 64;
 
-export type AppendMerge = { text: string } | { refused: string };
+/** Where one conflict's two insertions landed: 0-based line ranges, end excluded. */
+export type Seam = { ours: [number, number]; theirs: [number, number] };
+
+export type AppendMerge = { text: string; seams: Seam[] } | { refused: string };
 
 const blank = (line: string | undefined) =>
   line !== undefined && line.trim() === "";
@@ -49,15 +53,32 @@ const blank = (line: string | undefined) =>
  * lines equal to its own edges. So each side's block must be bracket-balanced,
  * never closing what it did not open; a block xdiff slid into a neighbouring
  * one whose first lines match it is not, and the other side's lines would end
- * up inside it. Two blocks configuring the same quoted key are refused too.
+ * up inside it.
+ *
+ * Two insertions that open (or close) with the same line, one with a word in
+ * it (a comment, an entry), both wrote it: "both" would keep it twice.
+ * Shared brackets alone are two blocks' own edges, and fine.
  */
 function insertionRefusal(ours: string[], theirs: string[]): string | null {
   if (!balanced(ours) || !balanced(theirs))
     return "an insertion is not a balanced block";
-  const ourKeys = new Set(quotedKeys(ours));
-  const shared = quotedKeys(theirs).find((key) => ourKeys.has(key));
-  if (shared !== undefined)
-    return `both insertions configure ${JSON.stringify(shared)}`;
+  const edges = (lines: string[]) => {
+    const filled = lines.filter((line) => !blank(line));
+    return [filled[0], filled.at(-1)];
+  };
+  const [ourEdges, theirEdges] = [edges(ours), edges(theirs)];
+  for (const [at, where] of [
+    [0, "open"],
+    [1, "close"],
+  ] as const) {
+    const line = ourEdges[at];
+    if (
+      line !== undefined &&
+      line === theirEdges[at] &&
+      /[\p{L}\p{N}]/u.test(line)
+    )
+      return `both insertions ${where} with the line ${JSON.stringify(line.trim())}`;
+  }
   return null;
 }
 
@@ -84,12 +105,6 @@ function balanced(lines: string[]): boolean {
     if (quote && quote !== "`") return false; // a string cannot span lines
   }
   return open.length === 0 && !comment;
-}
-
-function quotedKeys(lines: string[]): string[] {
-  return lines.flatMap((line) =>
-    [...line.matchAll(/["']([^"']+)["']\s*:/g)].map((m) => m[1]),
-  );
 }
 
 /**
@@ -119,6 +134,7 @@ export function resolveInsertions(
     line === mark || line.startsWith(`${mark} `);
 
   const out: string[] = [];
+  const seams: Seam[] = [];
   const lines = diff3.split("\n");
   let i = 0;
   while (i < lines.length) {
@@ -148,20 +164,27 @@ export function resolveInsertions(
     }
     const why = insertionRefusal(sides.ours, sides.theirs);
     if (why !== null) return { refused: `line ${at}: ${why}` };
-    out.push(...joined(sides.ours, sides.theirs));
+    const start = out.length;
+    const both = joined(sides.ours, sides.theirs);
+    const seam = start + sides.ours.length;
+    seams.push({ ours: [start, seam], theirs: [seam, start + both.length] });
+    out.push(...both);
     i += 1;
   }
-  return { text: out.join("\n") };
+  return { text: out.join("\n"), seams };
 }
 
 /**
  * Why `text`, the merged TypeScript file `path`, must not be taken as is, or
- * `null` when it may: it no longer parses, or it holds the same import,
- * top-level name or object key twice.
+ * `null` when it may: it no longer parses; the two insertions of one of the
+ * `seams` set the same key of a `rules` object (in a last-wins list like the
+ * ESLint config, a rebase and a merge would order them oppositely); or it
+ * holds the same import, top-level name or object key twice.
  */
 export async function refusal(
   path: string,
   text: string,
+  seams: Seam[] = [],
 ): Promise<string | null> {
   const ts = (await import("typescript")).default;
   const parsed = ts.transpileModule(text, {
@@ -193,7 +216,22 @@ export async function refusal(
     return [];
   });
   let duplicateKey: string | null = null;
+  // Each key set in a `rules` object, quoted or not, with its 0-based line.
+  const ruleKeys: { key: string; line: number }[] = [];
   const visit = (node: import("typescript").Node) => {
+    if (
+      ts.isPropertyAssignment(node) &&
+      propertyKey(ts, node.name) === "rules" &&
+      ts.isObjectLiteralExpression(node.initializer)
+    ) {
+      for (const p of node.initializer.properties) {
+        const named =
+          ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p);
+        const key = named ? propertyKey(ts, p.name) : null;
+        const { line } = source.getLineAndCharacterOfPosition(p.getStart());
+        if (key !== null) ruleKeys.push({ key, line });
+      }
+    }
     if (ts.isImportDeclaration(node) && node.importClause) {
       const { name, namedBindings } = node.importClause;
       if (name) names.push(name.text);
@@ -217,6 +255,18 @@ export async function refusal(
     ts.forEachChild(node, visit);
   };
   visit(source);
+  const setIn = ([start, end]: [number, number]) =>
+    new Set(
+      ruleKeys
+        .filter(({ line }) => line >= start && line < end)
+        .map(({ key }) => key),
+    );
+  for (const seam of seams) {
+    const theirs = setIn(seam.theirs);
+    const shared = [...setIn(seam.ours)].find((key) => theirs.has(key));
+    if (shared !== undefined)
+      return `both insertions configure ${JSON.stringify(shared)}`;
+  }
   return repeated(names, "name") ?? duplicateKey;
 }
 

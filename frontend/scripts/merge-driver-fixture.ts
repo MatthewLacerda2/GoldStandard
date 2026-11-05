@@ -140,3 +140,10 @@ export async function prettierAccepts(
   const options = await prettier.resolveConfig(filepath);
   return prettier.check(text, { ...options, filepath });
 }
+
+/** `text` as the repo's Prettier writes `path`. */
+export async function prettierFormat(text: string, path: string) {
+  const filepath = join(ROOT, path);
+  const options = await prettier.resolveConfig(filepath);
+  return prettier.format(text, { ...options, filepath });
+}

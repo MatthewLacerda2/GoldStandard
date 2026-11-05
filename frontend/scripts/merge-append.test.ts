@@ -22,7 +22,9 @@ describe("resolveInsertions", () => {
     const diff3 = ["a", ...conflict(["x1", "x2"], [], ["y"]), "b", ""].join(
       "\n",
     );
-    expect(resolveInsertions(diff3, M)).toEqual({ text: "a\nx1\nx2\ny\nb\n" });
+    expect(resolveInsertions(diff3, M)).toMatchObject({
+      text: "a\nx1\nx2\ny\nb\n",
+    });
   });
 
   it("resolves every such conflict in the file", () => {
@@ -32,7 +34,7 @@ describe("resolveInsertions", () => {
       ...conflict(["p"], [], ["q"]),
       "",
     ];
-    expect(resolveInsertions(diff3.join("\n"), M)).toEqual({
+    expect(resolveInsertions(diff3.join("\n"), M)).toMatchObject({
       text: "x\ny\nmid\np\nq\n",
     });
   });
@@ -69,7 +71,9 @@ describe("resolveInsertions", () => {
     const diff3 = ["a", ...conflict(["x", ""], [], ["", "y"]), "b", ""].join(
       "\n",
     );
-    expect(resolveInsertions(diff3, M)).toEqual({ text: "a\nx\n\ny\nb\n" });
+    expect(resolveInsertions(diff3, M)).toMatchObject({
+      text: "a\nx\n\ny\nb\n",
+    });
   });
 
   it("refuses a block xdiff slid into its neighbour", () => {
@@ -107,24 +111,70 @@ describe("resolveInsertions", () => {
     expect(resolveInsertions(diff3.join("\n"), M)).toHaveProperty("text");
   });
 
-  it("refuses two insertions that configure the same key", () => {
-    // In a last-wins list a rebase and a merge would order them oppositely.
-    const off = (file: string) => [
-      `  { files: ["${file}"], rules: { "local/a": "off" } },`,
+  it("refuses two insertions that open or close with the same worded line", () => {
+    const comment = "  // Rules for the new pages.";
+    const opening = [
+      "[",
+      ...conflict([comment, "  a,"], [], [comment, "  b,"]),
+      "];",
+      "",
     ];
-    const diff3 = ["[", ...conflict(off("x.tsx"), [], off("y.tsx")), "];", ""];
-    expect(resolveInsertions(diff3.join("\n"), M)).toEqual({
-      refused: 'line 2: both insertions configure "local/a"',
+    expect(resolveInsertions(opening.join("\n"), M)).toEqual({
+      refused: `line 2: both insertions open with the line "${comment.trim()}"`,
+    });
+    const closing = [
+      "[",
+      ...conflict(["  a,", "  c,"], [], ["  b,", "  c,"]),
+      "",
+    ];
+    expect(resolveInsertions(closing.join("\n"), M)).toEqual({
+      refused: 'line 2: both insertions close with the line "c,"',
+    });
+  });
+
+  it("records where each side's insertion landed", () => {
+    const diff3 = ["a", ...conflict(["x1", "x2"], [], ["y"]), "b", ""];
+    expect(resolveInsertions(diff3.join("\n"), M)).toMatchObject({
+      seams: [{ ours: [1, 3], theirs: [3, 4] }],
     });
   });
 
   it("does not take a shorter run of marker characters for a marker", () => {
     const diff3 = ["=======", ...conflict(["x"], [], ["y"]), ""].join("\n");
-    expect(resolveInsertions(diff3, 9)).toEqual({ text: diff3 });
+    expect(resolveInsertions(diff3, 9)).toMatchObject({ text: diff3 });
   });
 });
 
 describe("refusal", () => {
+  /** Two insertions at one spot, resolved, then judged. */
+  async function judged(ours: string[], theirs: string[]) {
+    const diff3 = ["export default [", ...conflict(ours, [], theirs), "];", ""];
+    const merge = resolveInsertions(diff3.join("\n"), M);
+    if ("refused" in merge) throw new Error(merge.refused);
+    return refusal("frontend/eslint.config.ts", merge.text, merge.seams);
+  }
+  const block = (file: string, rule: string) => [
+    `  { files: ["${file}"], rules: { ${rule}: "off" } },`,
+  ];
+
+  it("refuses two insertions that set the same rule, quoted or not", async () => {
+    // In a last-wins list a rebase and a merge would order them oppositely.
+    for (const [rule, key] of [
+      ['"local/a"', "local/a"],
+      ["complexity", "complexity"],
+    ]) {
+      expect(await judged(block("x.tsx", rule), block("y.tsx", rule))).toBe(
+        `both insertions configure ${JSON.stringify(key)}`,
+      );
+    }
+  });
+
+  it("takes two insertions that set different rules", async () => {
+    expect(
+      await judged(block("x.tsx", "complexity"), block("y.tsx", "eqeqeq")),
+    ).toBeNull();
+  });
+
   it("takes two appended config blocks as valid TypeScript", async () => {
     const merged = [
       "export default [",

@@ -43,6 +43,12 @@ describe("parseOrdered", () => {
     );
     expect(() => parseOrdered('{"a": "b"} trailing')).toThrow(SyntaxError);
   });
+
+  it("refuses a key written twice rather than keep one of them", () => {
+    expect(() => parseOrdered('{\n  "a": "1",\n  "a": "2"\n}\n')).toThrow(
+      /duplicate key "a"/,
+    );
+  });
 });
 
 describe("mergeLocale — what merges", () => {
@@ -104,6 +110,15 @@ describe("mergeLocale — what merges", () => {
       { a: "new", b: "both" },
     );
     expect(text).toBe(json({ a: "new", b: "both" }));
+  });
+});
+
+describe("mergeLocale — a file both sides added", () => {
+  it("merges two new copies of one file, whose base git passes empty", () => {
+    expect(mergeLocale("", json({ a: "A" }), json({ b: "B" }))).toEqual({
+      clean: true,
+      text: json({ a: "A", b: "B" }),
+    });
   });
 });
 
