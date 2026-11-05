@@ -3,3 +3,6 @@ node_modules
 bun.lockb
 bun.lock
 src/routeTree.gen.ts
+# The backend's contract, written by `make openapi` in its own stable form
+# (backend/tools/openapi_contract.py); `make back-build` compares it as JSON.
+openapi.json

@@ -20,6 +20,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
-    include: ["src/**/*.test.{ts,tsx}", "eslint-rules/**/*.test.ts"],
+    include: [
+      "src/**/*.test.{ts,tsx}",
+      "eslint-rules/**/*.test.ts",
+      "scripts/**/*.test.ts",
+    ],
   },
 });

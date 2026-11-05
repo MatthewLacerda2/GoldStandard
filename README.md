@@ -142,5 +142,6 @@ The skeleton deliberately stops short in a few places so the upgrade is a known
 step rather than a rewrite: schema changes use additive `create_all` (add
 Alembic when you need ordered/destructive migrations); auth is single-tenant
 (reintroduce a `tenant_id` FK + a `get_tenant` dependency for multi-tenancy);
-and the frontend schemas are hand-mirrored (generate them from the backend
-OpenAPI spec when the surface grows).
+and the frontend schemas are hand-mirrored, held by field name and kind to the
+committed `frontend/openapi.json` (generate them from the backend OpenAPI spec
+when the surface grows).

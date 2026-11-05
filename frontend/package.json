@@ -7,9 +7,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "check": "tsc --noEmit && eslint . && prettier --check .",
+    "check": "tsc --noEmit && tsc --noEmit -p scripts && eslint . && prettier --check .",
     "fix": "eslint --fix . && prettier --write .",
     "test": "vitest run",
+    "contract": "bun scripts/check-contract.ts",
     "prepare": "husky"
   },
   "dependencies": {

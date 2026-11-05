@@ -1,0 +1,14 @@
+# The contract gate's baseline (frontend/scripts/check-contract.ts): the
+# findings that stood on the day the gate was born. It only shrinks — a line
+# the gate no longer finds is reported, and one the base branch did not have
+# is refused. Fix a line by reading the field, declaring it, or removing it
+# from the backend's answer (then `make openapi`) and the frontend's type;
+# then delete the line.
+#
+# A rename (of a type, a file, a schema) turns its lines into new ones: say so
+# on each, `unread New.field  # was unread Old.field` — same kind, same field —
+# and the old line it replaces does not count as growth. A different field is
+# never a rename. `--write-baseline` keeps those notes.
+unread lib/schemas/items.ts#Item.created_at
+unread lib/schemas/items.ts#Item.owner_id
+unread lib/schemas/items.ts#Item.updated_at

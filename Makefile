@@ -17,7 +17,7 @@ TOOLS_PYTHON ?= python3.14
 check: tools backend frontend
 
 backend: back-lint back-build back-test
-frontend: front-lint front-build front-test
+frontend: front-lint front-build front-test front-contract
 
 # ---------------------------------------------------------------------------
 # Repository tools  (tools/: stdlib-only Python serving the whole repo)
@@ -31,14 +31,20 @@ tools:
 # ---------------------------------------------------------------------------
 # Backend gates  (run from backend/, driven by $(PYTHON))
 # ---------------------------------------------------------------------------
-.PHONY: back-lint back-build back-test back-install
+.PHONY: back-lint back-build back-test back-install openapi
 back-lint:
 	cd backend && $(PYTHON) -m ruff check .
 	cd backend && $(PYTHON) -m ruff format --check .
 	cd backend && $(PYTHON) tools/house_lint.py
 
+# Imports the app (the build) and checks frontend/openapi.json, the contract
+# the frontend's types are held to, against what its endpoints answer.
 back-build:
-	cd backend && $(PYTHON) -c "import main"
+	cd backend && $(PYTHON) -m tools.openapi_contract --check
+
+# Regenerate frontend/openapi.json after a response model changes.
+openapi:
+	cd backend && $(PYTHON) -m tools.openapi_contract --write
 
 back-test:
 	cd backend && $(PYTHON) -m pytest
@@ -50,7 +56,7 @@ back-install:
 # ---------------------------------------------------------------------------
 # Frontend gates  (run from frontend/, driven by $(BUN))
 # ---------------------------------------------------------------------------
-.PHONY: front-lint front-build front-test front-install
+.PHONY: front-lint front-build front-test front-contract front-install
 front-lint:
 	cd frontend && $(BUN) run check
 
@@ -59,6 +65,11 @@ front-build:
 
 front-test:
 	cd frontend && $(BUN) run test
+
+# The frontend's types against frontend/openapi.json: fields unread,
+# undeclared or phantom, and requests it cannot pair with an endpoint.
+front-contract:
+	cd frontend && $(BUN) run contract
 
 front-install:
 	cd frontend && $(BUN) install
