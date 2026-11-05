@@ -12,19 +12,22 @@ name: CI
 # so a Markdown-only change runs `changes`, `tools` and `CI ok` and nothing
 # heavy. `tools` runs on every change: it is seconds of stdlib Python and
 # ruff, and it is where checks that read the docs belong (the docs lint).
+# `regression` runs on every pull request and decides for itself: it reads
+# the description, and is seconds when no regression test is owed.
 #
 # A job added to this file is gated only once it is listed under `CI ok`'s
 # `needs:`. `tools/tests/test_ci_workflow.py` fails until it is.
 #
-# Drafts run nothing: every job is skipped (`changes` and `tools` carry the
-# draft condition, the layer jobs skip with `changes`, `CI ok` carries it
-# too). A draft cannot merge, so there is nothing to check yet.
+# Drafts run nothing: every job is skipped (`changes`, `tools` and
+# `regression` carry the draft condition, the layer jobs skip with `changes`,
+# `CI ok` carries it too). A draft cannot merge, so there is nothing to check
+# yet.
 # `ready_for_review` in `types:` is what brings the run that counts, and
 # leaving it out fails open: a draft marked ready with no new push would never
 # get a run, and its skipped checks would read as passing. `edited` is left
 # out, since every title or body edit would re-run CI. The cost is that
-# retargeting a pull request's base brings no new run; push a commit, or close
-# and reopen it, to get one.
+# retargeting a pull request's base, or editing a description `regression`
+# reads, brings no new run; push a commit, or close and reopen it, to get one.
 on:
   push:
     branches: [main]
@@ -163,6 +166,83 @@ jobs:
       - name: Run frontend gates
         run: make frontend
 
+  # Whether a bug fix carries a test that fails without it: `plan` reads the
+  # pull request's description, and when it closes an issue labelled `fix`,
+  # `run` lays the changed tests over the base (`HEAD^1`) and needs one to fail
+  # there (`tools/regression.py`; `make regression PR=N` is its local twin).
+  # Only the layers whose tests it runs are set up, and nothing when no test
+  # is owed. The description is read over REST when the job runs, not from the
+  # event: editing it starts no run, but re-running this job, a push, or
+  # closing and reopening the pull request reads the edit. Pushes to `main`
+  # skip it: they have no description to read, and the pull request that
+  # brought them was checked.
+  regression:
+    if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Does this pull request owe a regression test?
+        id: plan
+        run: python tools/regression.py plan --pr "$PR" --base HEAD^1
+
+      # The backend job's setup, for a backend test.
+      - name: Start postgres (pgvector)
+        if: steps.plan.outputs.backend == 'true'
+        run: docker compose up -d --build --wait postgres
+
+      - uses: actions/setup-python@v7
+        if: steps.plan.outputs.backend == 'true'
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install backend dependencies
+        if: steps.plan.outputs.backend == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      # The frontend job's setup, for a frontend test; `run` installs the
+      # base's own packages from this cache.
+      - uses: oven-sh/setup-bun@v2
+        if: steps.plan.outputs.frontend == 'true'
+        with:
+          bun-version-file: frontend/package.json
+
+      - name: Cache bun dependencies
+        if: steps.plan.outputs.frontend == 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Run the changed tests on the base
+        if: steps.plan.outputs.owed == 'true'
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/app
+          JWT_SECRET: ci-secret-not-for-production-use-only
+        run: python tools/regression.py run --base HEAD^1 --python python
+
   # The one check the ruleset requires: its `name:` is the context string the
   # ruleset names, so renaming it unguards `main`. `always()` so it reports
   # when a job it needs failed or was cancelled; a skipped required check reads
@@ -171,7 +251,7 @@ jobs:
   # on a failure, which fails this on its own).
   ok:
     name: CI ok
-    needs: [changes, tools, backend, frontend]
+    needs: [changes, tools, backend, frontend, regression]
     if: ${{ always() && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     steps:

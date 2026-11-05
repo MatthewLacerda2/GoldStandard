@@ -16,6 +16,7 @@ import unittest
 from pathlib import Path
 
 from tools.ci_paths import LAYERS, decide
+from tools.regression import OUTPUTS
 
 GITHUB = Path(__file__).resolve().parents[2] / ".github"
 WORKFLOW = GITHUB / "workflows" / "ci.yml"
@@ -73,6 +74,18 @@ class CiOk(unittest.TestCase):
     def test_every_change_prints_what_the_workflow_reads(self) -> None:
         for key in decide([]):
             self.assertIn(f"steps.diff.outputs.{key}", self.jobs["changes"], key)
+
+    def test_regression_runs_on_ready_pull_requests_only(self) -> None:
+        # A push to `main` has no description to read; a draft checks nothing.
+        condition = re.search(r"^    if: (.+)$", self.jobs["regression"], flags=re.MULTILINE)
+        self.assertIn("github.event_name == 'pull_request'", condition.group(1))
+        self.assertIn("!github.event.pull_request.draft", condition.group(1))
+
+    def test_regression_reads_only_what_plan_writes(self) -> None:
+        # A misspelt output is never `true`, so its step would never run.
+        read = set(re.findall(r"steps\.plan\.outputs\.(\w+)", self.jobs["regression"]))
+        self.assertTrue(read)
+        self.assertLessEqual(read, set(OUTPUTS))
 
 
 class EveryReadyPullRequestGetsARun(unittest.TestCase):

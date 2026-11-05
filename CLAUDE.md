@@ -151,7 +151,7 @@ finds it.
 Run the gates locally first (see the no-drift meta-pattern) — green before you
 push. A PR need not address an issue; when it closes one, its description says
 `Closes #N` — check the number, because a wrong one closes the wrong issue
-silently.
+silently. **A fix carries a test that fails without it.**
 
 **Nobody reads the code line by line.** With good infrastructure around it, and a
 problem that isn't too complex, the code comes out good. A person's review then
