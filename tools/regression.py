@@ -29,8 +29,15 @@ ends, however it ends.
 `REV` is the base: in CI the merge commit's first parent, `HEAD^1`. `check`
 without one takes where the branch left the pull request's base branch.
 
+Backend tests run with `--python`, which the Makefile passes only when
+`PYTHON` is set: a path relative to backend/, as the backend gates take it.
+Without one they run with backend/'s venv, else `python3.14`. Before any
+runs, `run` checks that interpreter against the head commit's pins, as
+`make back-pins` does on the files the Makefile passes (`--requirement`), and
+refuses the whole run, naming the interpreter, when it fails.
+
 Pure but for `git`, `gh`, `narrowed`, `shown`, `lay_over`, `base_worktree`,
-`on_base`, `plan`, `run` and `main`.
+`backend_ready`, `on_base`, `plan`, `run` and `main`.
 """
 
 from __future__ import annotations
@@ -89,6 +96,9 @@ RUNNERS = {
     "frontend": ("vitest", "frontend"),
     "tools": ("unittest", "."),
 }
+# The interpreter backend tests run with when `--python` names none.
+VENV = "backend/.venv/bin/python"
+DEFAULT_PYTHON = "python3.14"
 # What `plan` tells the job: whether to run, and which layers to set up.
 OUTPUT_LAYERS = ("backend", "frontend")
 OUTPUTS = ("owed", *OUTPUT_LAYERS)
@@ -331,10 +341,16 @@ def on_base(
     return results
 
 
-def run(head: Path, base: str, python: str, bun: str) -> int:
-    """0 when a changed test fails on the base, 1 when none does."""
+def run(head: Path, base: str, python: str, bun: str, requirements: list[str] | None = None) -> int:
+    """0 when a changed test fails on the base, 1 when none does. An
+    interpreter that cannot run a backend target refuses the whole run, before
+    the base has a worktree or a database."""
     paths = changed(head, base)
     found = [narrowed(head, base, t) for t in targets(paths, committed(head).__contains__)]
+    backend = any(t.runner == "pytest" for t in found)
+    if backend and (unready := backend_ready(head, python, requirements or [])):
+        print("\n".join(["Refused:", *unready]))
+        return 1
     results = on_base(head, base, paths, found, python, bun) if found else {}
     refused = verdict(results)
     print("\n".join(["Refused:", *refused]) if refused else "a changed test fails on the base.")
@@ -360,11 +376,61 @@ def local_base(head: Path, pull: dict) -> str:
     return git("merge-base", f"origin/{ref}", "HEAD", cwd=head).strip()
 
 
-def interpreter(head: Path, python: str) -> str:
-    """`--python` as the Makefile's `PYTHON`: a relative path is backend/'s."""
+def interpreter(head: Path, python: str | None) -> str:
+    """`--python` as the backend gates take `PYTHON`: a relative path is
+    backend/'s, and `~` is the home folder. Without one (or an empty one), the
+    venv `make back-install` makes, as the pre-commit hook does, or else the
+    Makefile's default."""
+    if not python:
+        return str(head / VENV) if (head / VENV).is_file() else DEFAULT_PYTHON
+    python = os.path.expanduser(python)
     return (
         str(head / "backend" / python) if "/" in python and not python.startswith("/") else python
     )
+
+
+def backend_ready(head: Path, python: str, requirements: list[str]) -> list[str]:
+    """`run`'s refusal when `python` cannot run the backend's tests: it is not
+    there, or its packages are not the pins of `requirements` (backend/'s
+    files `make back-pins` checks, which the Makefile passes). Each backend
+    test would otherwise "not import" on the base, which blames the test for
+    the interpreter."""
+    why = (
+        pins_problem(head, python, requirements)
+        if requirements
+        else "no requirement file to check it against: pass --requirement, as the Makefile does."
+    )
+    if why is None:
+        return []
+    return [
+        f"the backend's tests cannot run with {python}, so none was run on the base.",
+        why,
+        "Run `make back-install`, or pass the PYTHON the backend gates take"
+        " (relative to backend/, such as PYTHON=.venv/bin/python).",
+    ]
+
+
+def pins_problem(head: Path, python: str, requirements: list[str]) -> str | None:
+    """What `make back-pins` finds wrong with `python`, run on the head
+    commit's pins.py and requirement files, which is what is judged; `None`
+    when nothing is."""
+    with tempfile.TemporaryDirectory() as scratch:
+        for name in ("tools/pins.py", *requirements):
+            text = shown(head, "HEAD", f"backend/{name}")
+            if text is None:
+                return f"the head commit has no backend/{name}."
+            (Path(scratch) / name).parent.mkdir(parents=True, exist_ok=True)
+            (Path(scratch) / name).write_bytes(text)
+        argv = (python, "tools/pins.py", *requirements)
+        try:
+            done = subprocess.run(argv, cwd=scratch, text=True, capture_output=True)
+        except FileNotFoundError:
+            return f"there is no interpreter at {python}."
+        except PermissionError:
+            return f"{python} is not executable."
+        except OSError as error:
+            return f"{python} cannot be started ({error.strerror})."
+    return (done.stdout + done.stderr).strip() if done.returncode else None
 
 
 def main(argv: list[str]) -> int:
@@ -372,7 +438,15 @@ def main(argv: list[str]) -> int:
     parser.add_argument("step", choices=("plan", "run", "check"))
     parser.add_argument("--pr", type=int, help="the pull request (plan, check)")
     parser.add_argument("--base", help="the base commit (default for check: the merge-base)")
-    parser.add_argument("--python", default="python3.14", help="Python with backend/'s deps")
+    parser.add_argument(
+        "--python", help=f"Python with backend/'s deps (default: {VENV}, else {DEFAULT_PYTHON})"
+    )
+    parser.add_argument(
+        "--requirement",
+        action="append",
+        default=[],
+        help="a backend/ requirement file the interpreter must match (as `make back-pins`)",
+    )
     parser.add_argument("--bun", default="bun")
     args = parser.parse_args(argv)
     # A cancelled CI job is sent SIGTERM: exit through the `finally`s, so the
@@ -387,14 +461,14 @@ def main(argv: list[str]) -> int:
     if git("status", "--porcelain", "--untracked-files=no", cwd=head).strip():
         print("note: uncommitted changes are not judged; the head commit is.")
     if args.step == "run" or not args.pr:
-        return run(head, args.base, python, args.bun)
+        return run(head, args.base, python, args.bun, args.requirement)
     repo = os.environ.get("GITHUB_REPOSITORY") or gh("repos/{owner}/{repo}")["full_name"]
     pull = pull_request(head, repo, args.pr)
     base = args.base or local_base(head, pull)
     code, found = plan(head, pull, repo, base)
     if args.step == "plan" or code or not found:
         return code
-    return run(head, base, python, args.bun)
+    return run(head, base, python, args.bun, args.requirement)
 
 
 if __name__ == "__main__":

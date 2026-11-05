@@ -65,8 +65,10 @@ docs-lint:
 # Every backend gate starts by checking that PYTHON's packages are the ones
 # requirements*.txt pins: a venv made before a pin moved judges nothing. Once
 # per make run, in well under a second.
+# The requirement files back-pins checks, which make regression checks too.
+BACK_REQUIREMENTS := requirements.txt requirements-dev.txt
 back-pins:
-	cd backend && $(PYTHON) tools/pins.py requirements.txt requirements-dev.txt
+	cd backend && $(PYTHON) tools/pins.py $(BACK_REQUIREMENTS)
 
 back-lint back-deadcode back-build back-test: back-pins
 
@@ -262,13 +264,17 @@ tools-fix: tools-ruff
 # PR=N reads what its description owes and takes the base this branch left;
 # BASE=<sha> names the base, and alone runs the changed tests on it whatever
 # they fix. It judges the head commit, so commit first. Backend tests run with
-# $(PYTHON) against the database `make back-test` reaches (DATABASE_URL, or
-# backend/.env, which is copied over); frontend tests install the base's
-# packages. CI runs the two steps apart, setting up only what `plan` asks for
-# in between: `regression-plan PR=N BASE=<sha>`, then `regression-run BASE=<sha>`.
+# $(PYTHON) as the backend gates take it (relative to backend/), or, left unset
+# or empty, backend/'s venv, else python3.14; an interpreter off the pins
+# (back-pins) refuses the run. They reach the database `make back-test` does
+# (DATABASE_URL, or backend/.env, which is copied over); frontend tests install
+# the base's packages. CI runs the two steps apart, setting up only what `plan`
+# asks for in between: `regression-plan PR=N BASE=<sha>`, then
+# `regression-run BASE=<sha>`.
 .PHONY: regression regression-plan regression-run
 REGRESSION := $(TOOLS_PYTHON) tools/regression.py
-REGRESSION_TOOLS := --python $(PYTHON) --bun $(BUN)
+REGRESSION_TOOLS := $(if $(and $(filter-out file,$(origin PYTHON)),$(strip $(PYTHON))),--python $(PYTHON)) \
+	$(foreach file,$(BACK_REQUIREMENTS),--requirement $(file)) --bun $(BUN)
 regression:
 	$(REGRESSION) check $(if $(PR),--pr $(PR)) $(if $(BASE),--base $(BASE)) $(REGRESSION_TOOLS)
 

@@ -36,6 +36,9 @@ def alive(pid: int) -> bool:
 class BaseWorktree(ScratchRepository):
     def backend_fix(self) -> None:
         self.commit("backend/tests/test_items.py", "def test_x():\n    assert False\n")
+        # The scratch repository has no pins to check the interpreter against:
+        # test_regression_python checks that step.
+        self.enterContext(mock.patch.object(regression, "backend_ready", return_value=[]))
 
     def test_each_run_has_a_worktree_of_its_own(self) -> None:
         # Two runs at once must not share a worktree, or its test database.
