@@ -1,0 +1,52 @@
+#!/bin/sh
+# Runs before every commit: `make pre-commit`, the lint gate of each layer the
+# commit touches. No tests and no build: an agent commits many times per task,
+# deliberate break-and-restore cycles included, and the full gates are
+# `make check`, before a push.
+#
+# This folder is committed, and `make setup` (once per clone) points git at it
+# with `core.hooksPath`. Worktrees share the repository config, so one setup
+# covers every worktree of the clone.
+
+set -e
+
+cd "$(git rev-parse --show-toplevel)"
+
+# Read what the commit lands before git's environment is cleared below:
+# `git commit -a` and `git commit <path>` stage into a temporary index that
+# only GIT_INDEX_FILE points at, so the plain index would show nothing staged.
+STAGED_LAYERS=""
+for layer in backend frontend; do
+	git diff --cached --quiet -- "$layer" || STAGED_LAYERS="$STAGED_LAYERS $layer"
+done
+
+# Git exports these to a hook. Nothing below needs them, and any command that
+# runs `git` in a scratch folder would otherwise act on this repository.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_PREFIX
+
+# The backend gates run from backend/, so a PYTHON relative to it is fine.
+# Prefer the venv `make back-install` creates over the Makefile's default.
+if [ -z "${PYTHON:-}" ] && [ -x backend/.venv/bin/python ]; then
+	PYTHON=.venv/bin/python
+	export PYTHON
+fi
+
+if ! command -v make >/dev/null 2>&1; then
+	echo "pre-commit: make is not installed, so the lint gates cannot run." >&2
+	echo "            Install make, or commit with 'git commit --no-verify'." >&2
+	exit 1
+fi
+
+if make --no-print-directory pre-commit STAGED_LAYERS="$STAGED_LAYERS"; then
+	exit 0
+fi
+
+cat >&2 <<'EOF'
+
+pre-commit: a lint gate failed, so nothing was committed.
+  fix the backend:         make back-fix PYTHON=.venv/bin/python
+  fix the frontend:        make front-fix
+  (file and test length, and type errors, are fixed by hand)
+  commit anyway (WIP):     git commit --no-verify
+EOF
+exit 1

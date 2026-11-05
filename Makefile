@@ -96,6 +96,52 @@ front-install:
 	cd frontend && $(BUN) install
 
 # ---------------------------------------------------------------------------
+# Clone setup and the pre-commit hook  (`make setup` once per clone)
+# ---------------------------------------------------------------------------
+# Worktrees share the repository config, so this covers every worktree of the
+# clone, and it overwrites any hooks path set before.
+.PHONY: setup pre-commit pre-commit-back pre-commit-front back-fix front-fix
+setup:
+	git config core.hooksPath .githooks
+	@echo "setup: each commit now runs 'make pre-commit' (.githooks/pre-commit)."
+	@echo "setup: to commit work in progress anyway, use 'git commit --no-verify'."
+
+# The layers the commit touches. The hook passes them in, read from the index
+# being committed; run by hand, this is what `git add` has staged.
+STAGED_LAYERS ?= $(shell git diff --cached --name-only -- backend frontend | cut -d/ -f1 | sort -u)
+
+# What .githooks/pre-commit runs: each touched layer's lint gate, never its
+# tests or build. A layer the commit does not touch is skipped and says so; a
+# touched one whose tools are not installed fails rather than passing unchecked.
+# A fast check that reads the whole repository joins the prerequisites here.
+pre-commit: pre-commit-back pre-commit-front
+	@echo "pre-commit: ok"
+
+pre-commit-back:
+	@if [ -z "$(filter backend,$(STAGED_LAYERS))" ]; then \
+		echo "pre-commit: backend skipped, nothing staged under backend/."; \
+	elif ! (cd backend && $(PYTHON) -m ruff --version) >/dev/null 2>&1; then \
+		echo "pre-commit: no ruff for PYTHON=$(PYTHON) (run from backend/): run 'make back-install'."; \
+		exit 1; \
+	else $(MAKE) --no-print-directory back-lint; fi
+
+pre-commit-front:
+	@if [ -z "$(filter frontend,$(STAGED_LAYERS))" ]; then \
+		echo "pre-commit: frontend skipped, nothing staged under frontend/."; \
+	elif [ ! -x frontend/node_modules/.bin/eslint ]; then \
+		echo "pre-commit: frontend/node_modules is not installed: run 'make front-install'."; \
+		exit 1; \
+	else $(MAKE) --no-print-directory front-lint; fi
+
+# What the hook points at when a lint gate fails.
+back-fix:
+	cd backend && $(PYTHON) -m ruff check --fix .
+	cd backend && $(PYTHON) -m ruff format .
+
+front-fix:
+	cd frontend && $(BUN) run fix
+
+# ---------------------------------------------------------------------------
 # Repository setup  (run once in a repo made from this template; needs `gh`)
 # ---------------------------------------------------------------------------
 # The issue labels CLAUDE.md's rules are written against. `--force` updates a
