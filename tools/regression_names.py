@@ -2,9 +2,11 @@
 
 `tools/regression.py` judges only these on the base, so an older test of the
 same file failing there, for whatever reason, proves nothing for the change.
-A test is changed when a line the diff adds or edits, or a deletion, falls
-inside it: a Python test function with its decorators, or a vitest `it` /
-`test` call from its name to its closing parenthesis. The names:
+A test is a Python test function with its decorators, or a vitest `it` /
+`test` call from its name to its closing parenthesis. It is changed when the
+head file has it and the base's version has no test of the same name with the
+same source: no diff is read, so how `git diff` is configured changes nothing,
+and dropping a decorator changes its test. The names:
 
     pytest    node ids, `tests/x.py::TestA::test_b`: one names every case of
               a parametrized test
@@ -16,13 +18,21 @@ A changed line outside every test (an import, a fixture, a helper, a
 `beforeEach`) names no test. Beside a changed test it is that test's support,
 and only the test is judged; a change of nothing but such lines (a fixture
 that makes the older tests show the bug, say) judges the whole file, as the
-check did before it judged by test. So does a changed test with no fixed name
-(`it.each`, a name built at run time), and a file that cannot be read;
-`changed_tests` says which.
+check did before it judged by test. A changed test that cannot be selected
+alone (no fixed name: `it.each`, a name built at run time; or a name another
+test of the file shares) is not judged, and is said so; when no changed test
+can be, the whole file is, as it is for a file that cannot be read.
 
-The vitest side is a scanner, not a parser: it skips comments, strings,
-template literals and regular expressions, and gives up (the whole file) on
-brackets that do not balance.
+Limits:
+- The vitest side is a scanner, not a parser: it skips comments, strings,
+  template literals and regular expressions. JSX text it misreads (a `//`
+  that is not after `scheme:`, a lone `/` or quote) can unbalance brackets or
+  move a test's span; unbalanced brackets judge the whole file.
+- Tests made by `test.extend` (a fixture-carrying `test` of another name) are
+  not found.
+- unittest matches a method by its `__qualname__`: a decorator that does not
+  keep it (no `functools.wraps`) hides the test. When no named test matches,
+  the runner runs the whole file and says so.
 
 Pure.
 """
@@ -31,58 +41,55 @@ from __future__ import annotations
 
 import ast
 import re
+from collections import Counter
 from typing import NamedTuple
 
-HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", re.MULTILINE)
 # A vitest suite or test call: `describe(`, `it.skip(`, `test.each(`.
 CALL = re.compile(r"(?<![\w$.])(describe|suite|it|test)((?:\s*\.\s*\w+)*)\s*\(")
 SUITES = {"describe", "suite"}
 # Modifiers whose call returns the function the name and body go to.
 LATER = {"each", "for", "skipIf", "runIf", "extend", "scoped"}
-# What a `/` after these starts is a regular expression, not a division.
-REGEX_AFTER = set("(,=:[!&|?{};+-*%~^")
+# What a `/` after these starts is a regular expression, not a division. Not
+# after `}`: in JSX it ends an attribute (`<Icon name={x} />`).
+REGEX_AFTER = set("(,=:[!&|?{;+-*%~^")
 REGEX_WORDS = {"return", "typeof", "case", "in", "of", "new", "delete", "void", "throw", "await"}
 CLOSE = {")": "(", "]": "[", "}": "{"}
 SPACE = re.compile(r"\s*")
+# `//` after a URL's scheme (`https://`) is JSX text, not a comment.
+SCHEME = re.compile(r"[A-Za-z]:$")
 
 
 class Test(NamedTuple):
     """One test: its name's parts (`None` when it has no fixed name) and the
-    lines it spans in the head file."""
+    lines it spans."""
 
     parts: tuple[str, ...] | None
     first: int
     last: int
 
 
-def hunks(diff: str) -> list[tuple[int, int]]:
-    """The head side of each hunk of a `-U0` diff: (first line, line count).
-    A count of 0 is a deletion, after line `first`."""
-    return [(int(first), int(count or 1)) for first, count in HUNK.findall(diff)]
-
-
-def touches(test: Test, hunk: tuple[int, int]) -> bool:
-    first, count = hunk
-    if count == 0:
-        return test.first <= first < test.last
-    return first <= test.last and first + count - 1 >= test.first
-
-
 def python_tests(text: str, runner: str) -> list[Test] | None:
-    """pytest's tests: `test*` functions and the methods of `Test*` classes
-    (nested too) or of `TestCase` subclasses. unittest's: the `test*`
-    methods of the module's classes. `None` when the file does not parse."""
+    """pytest's tests: `test*` functions and the methods of the classes it
+    collects (nested too). unittest's: the `test*` methods of the module's
+    classes that may hold tests. `None` when the file does not parse."""
     try:
         module = ast.parse(text)
     except SyntaxError:
         return None
 
+    # A class pytest collects: `Test*` with no `__init__`, or a `TestCase`.
+    # One unittest runs tests of: a subclass, or another class's base here.
+    bases = {
+        ast.unparse(b) for n in ast.walk(module) if isinstance(n, ast.ClassDef) for b in n.bases
+    }
+
     def collected(node: ast.ClassDef) -> bool:
         if runner == "unittest":
+            return bool(node.bases) or node.name in bases
+        if any(ast.unparse(b).endswith("TestCase") for b in node.bases):
             return True
-        return node.name.startswith("Test") or any(
-            ast.unparse(b).endswith("TestCase") for b in node.bases
-        )
+        init = any(isinstance(n, ast.FunctionDef) and n.name == "__init__" for n in node.body)
+        return node.name.startswith("Test") and not init
 
     def walk(body: list[ast.stmt], prefix: tuple[str, ...]) -> list[Test]:
         found = []
@@ -176,7 +183,7 @@ class _Scan:
         depth, text = 0, self.text
         while i < len(text):
             c, end = text[i], None
-            if text.startswith("//", i):
+            if text.startswith("//", i) and not SCHEME.search(text, max(i - 2, 0), i):
                 end = _until(text, "\n", i)
             elif text.startswith("/*", i):
                 end = _until(text, "*/", i + 2)
@@ -286,15 +293,37 @@ def selector(runner: str, path: str, parts: tuple[str, ...]) -> str:
     return " > ".join(parts) if runner == "vitest" else ".".join(parts)
 
 
-def changed_tests(runner: str, path: str, text: str, diff: str) -> tuple[tuple[str, ...], str]:
-    """The tests of `path` (its head `text`) the `-U0` `diff` adds or
-    changes, by selector; none, with the reason, when it is judged whole."""
+class Chosen(NamedTuple):
+    """What of a file runs: `tests` by selector, every test when empty; `why`
+    says why it runs whole, or which changed tests are not judged."""
+
+    tests: tuple[str, ...]
+    why: str
+
+
+def _found(runner: str, text: str) -> list[tuple[Test, str]] | None:
+    """Each test of `text`, with its source."""
     tests = vitest_tests(text) if runner == "vitest" else python_tests(text, runner)
-    if tests is None:
-        return (), "the file cannot be read for its tests"
-    changed = [t for t in tests if any(touches(t, h) for h in hunks(diff))]
+    lines = text.splitlines()
+    return None if tests is None else [(t, "\n".join(lines[t.first - 1 : t.last])) for t in tests]
+
+
+def changed_tests(runner: str, path: str, head: str, base: str | None) -> Chosen:
+    """The tests of `path` the change adds or changes, from its `head` text
+    and its `base` one (`None` when the base has no such file)."""
+    now, before = _found(runner, head), [] if base is None else _found(runner, base)
+    if now is None or before is None:
+        side = "head's" if now is None else "base's"
+        return Chosen((), f"the {side} version of the file cannot be read for its tests")
+    old = {(t.parts, source) for t, source in before}
+    changed = [t for t, source in now if (t.parts, source) not in old]
     if not changed:
-        return (), "no test the change adds or changes is found, only code around them"
-    if any(t.parts is None for t in changed):
-        return (), "a test the change adds or changes has no fixed name"
-    return tuple(sorted({selector(runner, path, t.parts) for t in changed if t.parts})), ""
+        return Chosen((), "no test the change adds or changes is found, only code around them")
+    shared = Counter(t.parts for t, _ in now if t.parts)
+    alone = [t for t in changed if t.parts and shared[t.parts] == 1]
+    rest = ", ".join(f"lines {t.first}-{t.last}" for t in changed if t not in alone)
+    why = rest and f"the changed tests at {rest} have no name of their own to be run by"
+    if not alone:
+        return Chosen((), why)
+    tests = tuple(sorted({selector(runner, path, t.parts) for t in alone}))
+    return Chosen(tests, why and f"not judged: {why}")

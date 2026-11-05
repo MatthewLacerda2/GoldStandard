@@ -29,8 +29,8 @@ ends, however it ends.
 `REV` is the base: in CI the merge commit's first parent, `HEAD^1`. `check`
 without one takes where the branch left the pull request's base branch.
 
-Pure but for `git`, `gh`, `narrowed`, `lay_over`, `base_worktree`, `on_base`,
-`plan`, `run` and `main`.
+Pure but for `git`, `gh`, `narrowed`, `shown`, `lay_over`, `base_worktree`,
+`on_base`, `plan`, `run` and `main`.
 """
 
 from __future__ import annotations
@@ -218,15 +218,26 @@ def narrowed(head: Path, base: str, t: Target) -> Target:
     """`t` cut down to the tests the change adds or changes, saying which, or
     left whole, saying why."""
     path = str(PurePosixPath(t.layer, t.path))
-    diff = git(
-        *("-c", "core.quotePath=false", "diff", "--no-color", "--no-ext-diff", "-U0"),
-        *("--no-renames", base, "HEAD", "--", path),
-        cwd=head,
-    )
-    tests, why = changed_tests(t.runner, t.path, git("show", f"HEAD:{path}", cwd=head), diff)
-    judging = f"the whole file: {why}." if why else "the tests the change adds or changes:"
-    print(f"{t}: judging {judging}", *tests, sep="\n  ", flush=True)
+    head_text = shown(head, "HEAD", path) or ""
+    tests, why = changed_tests(t.runner, t.path, head_text, shown(head, base, path))
+    lines = [f"{t}: judging the whole file: {why}."]
+    if tests:
+        lines = [f"{t}: judging the tests the change adds or changes:", *(f"  {n}" for n in tests)]
+        lines += [f"  {why}."] if why else []
+    print("\n".join(lines), flush=True)
     return t._replace(tests=tests)
+
+
+def shown(head: Path, rev: str, path: str) -> str | None:
+    """`path` as commit `rev` has it, or `None` when it has no such file."""
+    done = subprocess.run(
+        ("git", "show", f"{rev}:{path}"),
+        cwd=head,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    return None if done.returncode else done.stdout
 
 
 def lay_over(head: Path, worktree: Path, paths: list[str], present: set[str]) -> None:

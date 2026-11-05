@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from tools.regression_names import changed_tests, hunks, vitest_tests
+from tools.regression_names import Chosen, changed_tests, vitest_tests
 from tools.regression_runners import Target, command
 
 PYTEST = """import pytest
@@ -27,20 +27,29 @@ class TestGroup:
 class Helpers:
     def test_not_collected(self):
         pass
+
+class TestBuilt:
+    def __init__(self):
+        pass
+
+    def test_not_collected_either(self):
+        pass
 """
 UNITTEST = """import unittest
 
-def test_not_a_method():
-    pass
+class FakeRemote:
+    def test_connection(self):
+        return True
 
 class Base(unittest.TestCase):
-    def setUp(self):
-        self.x = 1
-
     def test_inherited(self):
         pass
 
-class Case(Base):
+class Mixin:
+    def test_mixed(self):
+        pass
+
+class Case(Mixin, Base):
     def test_own(self):
         pass
 """
@@ -52,7 +61,7 @@ describe("outer (a)", () => {
   beforeEach(() => setUp(`it("x")`));
   describe('inner', () => {
     it("renders", () => {
-      render(<p>Don't (stop)</p>);
+      render(<p>Don't (stop) <Icon name={x} />, see https://x.y (here)</p>);
     });
   });
   test.skip(`plain`, () => {
@@ -62,65 +71,89 @@ describe("outer (a)", () => {
     expect(n).toBeTruthy();
   });
 });
+it("works", () => {});
 """
+WHOLE = "no test the change adds or changes is found, only code around them"
 
 
-def lines(*spans: tuple[int, int]) -> str:
-    """A `-U0` diff changing `count` head lines from `first`, per span."""
-    return "\n".join(f"@@ -1,1 +{first},{count} @@" for first, count in spans)
+def edit(text: str, old: str, new: str) -> str:
+    assert text.count(old) == 1, old
+    return text.replace(old, new)
 
 
 class PythonTests(unittest.TestCase):
     def test_pytest_names_node_ids_one_per_parametrized_test(self) -> None:
-        # The parametrize decorator is part of its test.
-        names, why = changed_tests("pytest", "tests/t.py", PYTEST, lines((6, 1), (14, 2)))
-        self.assertEqual(why, "")
+        head = edit(edit(PYTEST, "[1, 2]", "[1, 2, 3]"), "assert True", "assert 1")
         self.assertEqual(
-            names, ("tests/t.py::TestGroup::TestInner::test_two", "tests/t.py::test_cases")
+            changed_tests("pytest", "tests/t.py", head, PYTEST),
+            Chosen(("tests/t.py::TestGroup::TestInner::test_two", "tests/t.py::test_cases"), ""),
         )
 
     def test_a_changed_helper_beside_a_changed_test_is_not_judged(self) -> None:
-        names, _ = changed_tests("pytest", "t.py", PYTEST, lines((3, 2), (11, 1)))
-        self.assertEqual(names, ("t.py::TestGroup::test_one",))
+        head = edit(edit(PYTEST, "return 1", "return 2"), "assert helper()", "assert helper() == 2")
+        self.assertEqual(
+            changed_tests("pytest", "t.py", head, PYTEST).tests, ("t.py::TestGroup::test_one",)
+        )
+
+    def test_dropping_a_decorator_changes_its_test(self) -> None:
+        base = edit(
+            PYTEST, "    def test_one", "    @pytest.mark.xfail(reason='bug')\n    def test_one"
+        )
+        self.assertEqual(
+            changed_tests("pytest", "t.py", PYTEST, base).tests, ("t.py::TestGroup::test_one",)
+        )
 
     def test_only_a_helper_changed_judges_the_whole_file(self) -> None:
-        # A class pytest does not collect is a helper too.
-        names, why = changed_tests("pytest", "t.py", PYTEST, lines((1, 4), (19, 1)))
-        self.assertEqual(names, ())
-        self.assertIn("no test", why)
+        # Classes pytest does not collect (no `Test*`, or an `__init__`) are helpers too.
+        head = PYTEST.replace("pass", "return").replace("return 1", "return 2")
+        self.assertEqual(changed_tests("pytest", "t.py", head, PYTEST), Chosen((), WHOLE))
 
-    def test_a_deletion_inside_a_test_changes_it(self) -> None:
-        self.assertEqual(hunks("@@ -9,2 +8,0 @@\n@@ -1 +1 @@"), [(8, 0), (1, 1)])
-        names, _ = changed_tests("pytest", "t.py", PYTEST, lines((7, 0)))
-        self.assertEqual(names, ("t.py::test_cases",))
-        # A deletion between two tests is in neither.
-        self.assertEqual(changed_tests("pytest", "t.py", PYTEST, lines((9, 0)))[0], ())
+    def test_a_new_file_changes_every_test(self) -> None:
+        self.assertEqual(len(changed_tests("pytest", "t.py", PYTEST, None).tests), 3)
 
     def test_unittest_names_methods_by_qualified_name(self) -> None:
-        names, _ = changed_tests("unittest", "t.py", UNITTEST, lines((1, 15)))
-        self.assertEqual(names, ("Base.test_inherited", "Case.test_own"))
+        names = changed_tests("unittest", "t.py", UNITTEST, None).tests
+        self.assertEqual(names, ("Base.test_inherited", "Case.test_own", "Mixin.test_mixed"))
+
+    def test_a_class_nothing_runs_holds_no_unittest_test(self) -> None:
+        head = edit(UNITTEST, "return True", "return False")
+        self.assertEqual(changed_tests("unittest", "t.py", head, UNITTEST), Chosen((), WHOLE))
 
     def test_a_file_that_does_not_parse_is_judged_whole(self) -> None:
-        names, why = changed_tests("unittest", "t.py", "def test_(:\n", lines((1, 1)))
-        self.assertEqual((names, why), ((), "the file cannot be read for its tests"))
+        why = changed_tests("unittest", "t.py", "def test_(:\n", UNITTEST).why
+        self.assertEqual(why, "the head's version of the file cannot be read for its tests")
+        self.assertIn("base's version", changed_tests("unittest", "t.py", UNITTEST, "(").why)
 
 
 class VitestTests(unittest.TestCase):
     def test_nested_describes_name_the_full_name(self) -> None:
-        names, why = changed_tests("vitest", "x.test.tsx", VITEST, lines((9, 1), (13, 1)))
-        self.assertEqual(why, "")
-        self.assertEqual(names, ("outer (a) > inner > renders", "outer (a) > plain"))
+        head = edit(edit(VITEST, "(stop)", "(go)"), "toBe(true)", "toBe(false)")
+        self.assertEqual(
+            changed_tests("vitest", "x.test.tsx", head, VITEST),
+            Chosen(("outer (a) > inner > renders", "outer (a) > plain"), ""),
+        )
 
-    def test_comments_strings_and_regexes_hold_no_call(self) -> None:
+    def test_comments_strings_regexes_and_jsx_hold_no_call(self) -> None:
         found = vitest_tests(VITEST) or []
-        self.assertEqual([(t.first, t.last) for t in found], [(8, 10), (12, 14), (15, 17)])
+        spans = [(t.first, t.last) for t in found]
+        self.assertEqual(spans, [(8, 10), (12, 14), (15, 17), (19, 19)])
 
-    def test_a_test_with_no_fixed_name_judges_the_whole_file(self) -> None:
-        names, why = changed_tests("vitest", "x.test.ts", VITEST, lines((16, 1)))
-        self.assertEqual((names, why), ((), "a test the change adds or changes has no fixed name"))
+    def test_a_test_with_no_fixed_name_is_not_judged_beside_one_with(self) -> None:
+        head = edit(edit(VITEST, "toBeTruthy()", "toBe(1)"), "toBe(true)", "toBe(false)")
+        chosen = changed_tests("vitest", "x.test.tsx", head, VITEST)
+        self.assertEqual(chosen.tests, ("outer (a) > plain",))
+        self.assertIn("not judged: the changed tests at lines 15-17 have no name", chosen.why)
+
+    def test_only_tests_with_no_name_of_their_own_judge_the_whole_file(self) -> None:
+        # The second `works` would run the older one too.
+        head = edit(VITEST, "toBeTruthy()", "toBe(1)") + 'it("works", () => expect(1).toBe(2));\n'
+        chosen = changed_tests("vitest", "x.test.tsx", head, VITEST)
+        self.assertEqual(chosen.tests, ())
+        self.assertIn("lines 15-17, lines 20-20 have no name of their own", chosen.why)
 
     def test_a_change_in_a_hook_judges_the_whole_file(self) -> None:
-        self.assertEqual(changed_tests("vitest", "x.test.ts", VITEST, lines((6, 1)))[0], ())
+        head = edit(VITEST, "setUp(", "setUpAgain(")
+        self.assertEqual(changed_tests("vitest", "x.test.ts", head, VITEST), Chosen((), WHOLE))
 
     def test_brackets_that_do_not_balance_judge_the_whole_file(self) -> None:
         self.assertIsNone(vitest_tests('it("a", () => {\n'))

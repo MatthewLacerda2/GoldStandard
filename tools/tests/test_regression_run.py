@@ -116,9 +116,11 @@ class PerTest(ScratchRepository):
         super().setUp()
         self.base = self.commit("tools/tests/test_thing.py", OLD.format(cls=CASE))
 
-    def fix_with(self, call: str, cls: str = CASE, tail: str = "") -> str:
+    def fix_with(self, call: str, tail: str = "") -> str:
         self.write("tools/thing.py", FIXED)
-        self.commit("tools/tests/test_thing.py", OLD.format(cls=cls) + NEW.format(call=call) + tail)
+        self.commit(
+            "tools/tests/test_thing.py", OLD.format(cls=CASE) + NEW.format(call=call) + tail
+        )
         return self.run_step()[1]
 
     def test_an_older_failing_test_cannot_pass_a_new_one(self) -> None:
@@ -131,10 +133,12 @@ class PerTest(ScratchRepository):
         self.assertIn("a changed test fails on the base", self.fix_with(call="double(3)"))
 
     def test_an_inherited_test_runs_in_the_case_that_inherits_it(self) -> None:
-        tail = "class T(Mixin, unittest.TestCase):\n    pass\n"
-        out = self.fix_with(call="double(2) + 2", cls="Mixin", tail=tail)
-        self.assertIn("  Mixin.test_new\n", out)
-        self.assertIn("Ran 1 test", out)
+        mixed = NEW.format(call="double(2) + 2").replace("test_new", "test_mixed")
+        tail = f"class Mixin:\n{mixed}class U(Mixin, unittest.TestCase):\n    pass\n"
+        out = self.fix_with(call="double(2) + 2", tail=tail)
+        self.assertIn("  Mixin.test_mixed\n  T.test_new\n", out)
+        self.assertIn("Ran 2 tests", out)
+        self.assertIn("Refused:", out)
 
     def test_a_change_to_no_test_judges_the_whole_file(self) -> None:
         self.write("tools/thing.py", FIXED)

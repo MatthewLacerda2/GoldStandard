@@ -102,13 +102,17 @@ def judged(failures: list[str], missing: Callable[[str], bool]) -> str:
 def pytest_outcome(code: int, junit: str) -> str:
     """From pytest's exit code and JUnit XML report. A test body's failure is
     a `<failure>`; a setup or collection one is an `<error>`, and an exit code
-    past 1 means the file did not import or ran nothing."""
-    if code == 0:
-        return PASSED
-    if code != 1 or not junit:
+    past 1 means the file did not import or ran nothing. A pass needs a test
+    that ran, not one skipped."""
+    if not junit:
         return BROKEN
-    failures = ElementTree.fromstring(junit).iter("failure")
-    return judged([f.get("message") or "" for f in failures], py_missing)
+    report = ElementTree.fromstring(junit)
+    if code == 0:
+        ran = any(case.find("skipped") is None for case in report.iter("testcase"))
+        return PASSED if ran else BROKEN
+    if code != 1:
+        return BROKEN
+    return judged([f.get("message") or "" for f in report.iter("failure")], py_missing)
 
 
 def vitest_outcome(code: int, report: str) -> str:
@@ -129,20 +133,23 @@ def vitest_outcome(code: int, report: str) -> str:
 
 
 def unittest_outcome(code: int, report: str) -> str:
-    """From `UNITTEST`'s exit code and report."""
-    if code == 0:
-        return PASSED
+    """From `UNITTEST`'s exit code and report: a pass needs a test that ran."""
     try:
         done = json.loads(report)
     except ValueError:
         return BROKEN
-    return judged(done["failures"], py_missing) if done.get("loaded") else BROKEN
+    if not done.get("loaded"):
+        return BROKEN
+    if code == 0:
+        return PASSED if done.get("ran") else BROKEN
+    return judged(done["failures"], py_missing)
 
 
 # One unittest file, run in a fresh interpreter from the base worktree so
 # nothing of the head is imported: the tests named after it, if any, by the
-# qualified name of the method each runs. It reports each failure as
-# `Type: message`, for `unittest_outcome` to judge the way pytest's are.
+# qualified name of the method each runs (the whole file when none matches).
+# It reports each failure as `Type: message`, and how many tests ran and were
+# not skipped, for `unittest_outcome` to judge the way pytest's are.
 UNITTEST = """
 import json, sys, unittest
 from pathlib import Path
@@ -169,13 +176,17 @@ def cases(suite):
         yield from cases(test) if isinstance(test, unittest.TestSuite) else [test]
 def qualname(test):
     return getattr(getattr(type(test), test._testMethodName, None), "__qualname__", "")
-if names:
-    suite = unittest.TestSuite(t for t in cases(suite) if qualname(t) in names)
+chosen = [t for t in cases(suite) if qualname(t) in names]
+if chosen:
+    suite = unittest.TestSuite(chosen)
+elif names:
+    print("no test here is one of those named: running the whole file")
 loaded = not loader.errors and suite.countTestCases() > 0
 print("\\n".join(loader.errors))
-ok = loaded and unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite).wasSuccessful()
-Path(report).write_text(json.dumps({"loaded": loaded, "failures": failures}))
-sys.exit(0 if ok else 1)
+run = loaded and unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
+ran = run.testsRun - len(run.skipped) if run else 0
+Path(report).write_text(json.dumps({"loaded": loaded, "ran": ran, "failures": failures}))
+sys.exit(0 if run and run.wasSuccessful() else 1)
 """
 
 OUTCOMES = {"pytest": pytest_outcome, "vitest": vitest_outcome, "unittest": unittest_outcome}
