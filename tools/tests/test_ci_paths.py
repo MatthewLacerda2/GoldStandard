@@ -59,6 +59,13 @@ class WhatAChangeRuns(unittest.TestCase):
             {"backend": True, "frontend": True, "code": True},
         )
 
+    def test_the_merge_drivers_attributes_run_the_frontend(self) -> None:
+        # The frontend's merge-driver tests merge with the real .gitattributes.
+        self.assertEqual(
+            runs(".gitattributes"),
+            {"backend": False, "frontend": True, "code": True},
+        )
+
     def test_the_makefile_and_the_workflow_run_both_layers(self) -> None:
         for path in ("Makefile", ".github/workflows/ci.yml"):
             answer = runs(path)

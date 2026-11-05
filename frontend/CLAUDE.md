@@ -74,3 +74,11 @@ reason. Vendored `components/ui/` primitives keep their whole API.
 (`scripts/check-contract.ts`). Green before you push. Once `make setup` has
 run, each commit touching `frontend/` runs `front-lint` first; `make front-fix`
 fixes what eslint and prettier can.
+
+## Merge drivers
+
+Once `make setup` has run, a merge or rebase settles the locale files (key by
+key), `routeTree.gen.ts` (regenerated) and the house-rule registries
+(`eslint-rules/index.ts`, `eslint.config.ts`: both insertions kept) itself:
+`scripts/merge-driver.ts`, named per file in the root `.gitattributes`. A
+conflict left in one of them is a real one, with markers; resolve it by hand.

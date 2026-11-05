@@ -57,6 +57,7 @@ FILES = {
         "**/*.toml",
         "**/*.ini",
         "**/requirements*.txt",
+        "**/.gitattributes",
         "**/.gitignore",
         "**/.dockerignore",
         "**/.prettierignore",

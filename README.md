@@ -126,6 +126,7 @@ docker/     postgres (pgvector/pgvector:pg16)
 tools/      repository tooling: stdlib-only Python, linted and tested by `make tools`
 Makefile    the single task runner; CI invokes these targets
 .githooks/  the pre-commit hook (`make pre-commit`), installed by `make setup`
+.gitattributes  the merge drivers `make setup` registers (`frontend/scripts/merge-driver.sh`)
 CLAUDE.md   the operating contract
 ```
 
@@ -135,7 +136,8 @@ CLAUDE.md   the operating contract
 cp .env.example .env
 
 # Once per clone: each commit then runs `make pre-commit`, the lint gate of
-# every layer it touches (`git commit --no-verify` skips it for a WIP commit)
+# every layer it touches (`git commit --no-verify` skips it for a WIP commit),
+# and merges and rebases settle the files `.gitattributes` names
 make setup
 
 # Backend gates (creates backend/.venv, installs, then lints/builds/tests)
@@ -163,6 +165,20 @@ runs no hook. A commit that touches a layer needs that layer installed in its
 worktree (`make back-install` / `make front-install`; `tools/` uses the
 backend's ruff), and the layer's working tree must match what is staged,
 since lint reads the files on disk.
+
+About the merge drivers `make setup` registers. Nearly every frontend branch
+touches the locale files, `routeTree.gen.ts` and the house-rule registries
+(`frontend/eslint-rules/index.ts`, `frontend/eslint.config.ts`), and git's
+line merge calls two additions at one spot a conflict. `.gitattributes` routes
+those files to `frontend/scripts/merge-driver.ts`: a locale file merges key by
+key, the route tree is regenerated from both sides' routes, and a registry
+keeps both insertions when each stands alone. A real conflict (one key given
+two values, a line both sides changed) still stops the merge, with markers.
+Git runs a driver only once the clone's config defines it, so a clone without
+`make setup` gets the plain line merge; so does a merge where `bun` cannot run
+(not on a GUI client's PATH, say), never a silent pick of one side. A GitHub
+"conflicting" badge does not run the drivers: rebase locally before calling a
+branch conflicting.
 
 ## Protecting `main` (one-time setup)
 
