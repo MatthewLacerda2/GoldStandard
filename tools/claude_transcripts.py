@@ -191,7 +191,7 @@ def read_meta(path: Path) -> dict:
     """The `.meta.json` beside a subagent transcript, or nothing."""
     try:
         meta = json.loads(path.with_suffix(".meta.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return {}
     return meta if isinstance(meta, dict) else {}
 

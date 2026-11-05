@@ -37,6 +37,7 @@ frontend: front-lint front-build front-test front-contract
 .PHONY: tools tools-lint docs-lint
 tools: docs-lint tools-lint
 	$(TOOLS_PYTHON) -m unittest discover --start-directory tools/tests --top-level-directory .
+	$(TOOLS_PYTHON) tools/markers.py
 
 tools-lint:
 	@found="$$($(RUFF) --version 2>/dev/null)"; [ "$$found" = "ruff $(RUFF_PIN)" ] || { \

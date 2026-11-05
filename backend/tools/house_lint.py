@@ -18,6 +18,16 @@ documenting a file never pushes it over; any other string still counts):
      Only ``router`` counts here — the unversioned ``@app.get`` baseline routes
      are outside the versioned API contract. Rules 2 and 3 stay broader and
      still cover them.
+  5. ``marker``: no comment carries one of the ``MARKERS``, as a whole
+     upper-case word. A comment promising to come back later is work nobody is
+     assigned to: do it now, or file an issue and delete the comment. Only
+     comments are read — a string holding the word is data. The rare comment
+     that must carry the word is excused inline, with a reason:
+     ``lint: allow(marker) <why>`` in the comment on the line or in the one
+     directly above it. Only comment text is read for the allow too, and a
+     reason is something besides separators and markers, so
+     ``# lint: allow(marker) # FIXME`` gives none while a reason may quote
+     the word.
 
 Rule 4 is structural only — that a body is a declared model, not that its
 fields carry the right constraints. A template cannot know what its users will
@@ -39,6 +49,7 @@ from __future__ import annotations
 
 import ast
 import io
+import re
 import sys
 import tokenize
 from pathlib import Path
@@ -51,6 +62,14 @@ _HTTP_METHODS = frozenset({"get", "post", "put", "patch", "delete"})
 _MARKER_SCAN_LINES = 15
 _SCHEMA_PACKAGE = "schemas"
 _ROUTER_OBJECT = "router"
+
+MARKERS = ("TODO", "FIXME", "XXX", "HACK")
+_MARKER_WORD = re.compile(rf"(?<![A-Za-z0-9_])(?:{'|'.join(MARKERS)})(?![A-Za-z0-9_])")
+# The reason after an allow starts at its first character that is not a
+# separator, so a reason may open with a backtick, quote or bracket.
+_MARKER_ALLOW = re.compile(r"lint: allow\(marker\)(.*)")
+_MARKER_REASON = re.compile(r"[^\s:—#*/-]")
+MARKER_ADVICE = "do it now, or file an issue and delete the comment"
 
 # FastAPI's parameter markers. A parameter carrying one is injected by the
 # framework, so it is not a request body.
@@ -334,11 +353,37 @@ def check_router_io(path: Path, tree: ast.Module) -> list[str]:
     return violations
 
 
+def _allowed(comments: dict[int, str], line: int) -> bool:
+    """True if the comment on ``line``, or on the line directly above, allows a
+    marker: ``lint: allow(marker)`` followed by a reason."""
+    for at in (line, line - 1):
+        allow = _MARKER_ALLOW.search(comments.get(at, ""))
+        if allow and _MARKER_REASON.search(_MARKER_WORD.sub("", allow[1])):
+            return True
+    return False
+
+
+def check_markers(path: Path, source: str) -> list[str]:
+    """Rule 5: no comment carries a marker, unless an allow excuses it."""
+    comments = {
+        tok.start[0]: tok.string
+        for tok in tokenize.generate_tokens(io.StringIO(source).readline)
+        if tok.type == tokenize.COMMENT
+    }
+    violations: list[str] = []
+    for line, comment in comments.items():
+        match = _MARKER_WORD.search(comment)
+        if match and not _allowed(comments, line):
+            violations.append(f"{path}:{line}: '{match[0]}' comment: {MARKER_ADVICE}")
+    return violations
+
+
 def check_source(path: Path, source: str) -> list[str]:
     """Run every rule against a single file's source text.
 
-    The file is parsed and tokenized once here; a syntax error is the only
-    violation reported for a file that does not parse.
+    The file is parsed once here; a syntax error is the only violation reported
+    for a file that does not parse. It is tokenized twice, once for the lines
+    of code and once for the comments the ``marker`` rule reads.
     """
     try:
         tree = ast.parse(source, filename=str(path))
@@ -349,6 +394,7 @@ def check_source(path: Path, source: str) -> list[str]:
         check_file_length(path, source, code)
         + check_function_lengths(path, tree, code)
         + check_router_io(path, tree)
+        + check_markers(path, source)
     )
 
 

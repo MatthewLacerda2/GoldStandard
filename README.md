@@ -56,7 +56,8 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
 
 - **`make check` is the law.** `make backend` and `make frontend` each run their
   layer's lint + build + test, and `make tools` lints and tests the repository's
-  own tooling and runs the docs lint; CI calls the same targets. Gates must be green before pushing.
+  own tooling and runs the docs lint and the marker check; CI calls the same
+  targets. Gates must be green before pushing.
 - **One check says CI passed.** `.github/workflows/ci.yml` runs on every ready
   pull request and every push to `main`, skips the layers a change did not
   touch (`tools/ci_paths.py` holds the list), and ends in a `CI ok` job that
@@ -76,6 +77,15 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
   with path/query scalars and injected dependencies exempt. That is a
   structural check only: what the fields inside a model must contain is yours
   to decide.
+- **No promises in comments:** a comment carrying `TODO`, `FIXME`, `XXX` or
+  `HACK` fails — do the work now, or file an issue and delete the comment.
+  `house_lint.py` reads the backend's Python, `local/no-marker-comment` the
+  frontend's TypeScript, and `tools/markers.py` every other tracked file that
+  takes comments (scripts, hooks, workflows, the `Makefile`, Dockerfiles,
+  config files, CSS `/* */` and HTML `<!-- -->` comments, the root tools'
+  Python). Only Markdown, JSON and generated files go unread, and a test fails
+  on a file kind none of them names. The rare comment that must carry the word
+  says why: `lint: allow(marker) <why>`.
 - **A tested local ESLint plugin (frontend):** the design-system rules above are
   real rules with their own colocated test suites, run by Vitest alongside the
   app tests. `max-lines: 550` per file.
