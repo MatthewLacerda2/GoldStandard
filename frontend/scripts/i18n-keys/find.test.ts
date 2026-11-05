@@ -56,6 +56,12 @@ describe("judge", () => {
     expect(unusedIn(tree, text).unused).toEqual([]);
   });
 
+  it("reads a key written with the default namespace", () => {
+    const tree = { a: { title: "x", status: { on: "1" } } };
+    const text = 't("translation:a.title"); t(`translation:a.status.${s}`);';
+    expect(unusedIn(tree, text).unused).toEqual([]);
+  });
+
   it("does not count a one-segment template head as a namespace", () => {
     const tree = { form: { name: "x" } };
     expect(unusedIn(tree, "id={`form.${name}`}").unused).toEqual([

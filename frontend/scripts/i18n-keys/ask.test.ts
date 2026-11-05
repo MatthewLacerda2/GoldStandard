@@ -32,6 +32,23 @@ describe("asksIn", () => {
     expect(asked(text)).toEqual(["a.busy", "a.idle", "a.status.…"]);
   });
 
+  it("sees through a type, a fallback and a quoted i18nKey, and drops the default namespace", () => {
+    const text = [
+      `t("a.const" as const); t("a.sat" satisfies string); t(key! ?? "a.nn");`,
+      `t(error ?? "a.fallback"); t(label || "a.or");`,
+      `const props = { "i18nKey": "a.quoted" }; t("translation:a.ns");`,
+    ].join("\n");
+    expect(asked(text)).toEqual([
+      "a.const",
+      "a.sat",
+      "a.nn",
+      "a.fallback",
+      "a.or",
+      "a.quoted",
+      "a.ns",
+    ]);
+  });
+
   it("names each file asking once", () => {
     const asks = asksIn([
       { file: "a.tsx", text: `t("a.x"); t("a.x");` },

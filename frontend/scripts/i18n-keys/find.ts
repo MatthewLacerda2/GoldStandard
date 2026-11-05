@@ -12,6 +12,8 @@
 //   4. a dotted ancestor of two segments or more is a string literal:
 //      `items.form` kept in a constant and completed later, or a subtree read
 //      whole.
+// A literal may carry the default namespace, `"translation:items.heading"`,
+// as i18next accepts it; it reads the same key.
 // One segment is never enough, for an ancestor or a template head: "items"
 // or `form.${name}` is as likely a query key or a DOM id as a namespace, and
 // would keep a whole dead subtree alive.
@@ -52,7 +54,18 @@ export interface Unused {
 /** The suffix i18next adds to a key for a count (`_one`, `_other`, ...;
  *  `_ordinal_one` with `ordinal: true`): every CLDR category, so it holds for
  *  any language a locale is added in. */
-export const PLURAL_SUFFIX = /_(?:ordinal_)?(?:zero|one|two|few|many|other)$/;
+const PLURAL_SUFFIX = /_(?:ordinal_)?(?:zero|one|two|few|many|other)$/;
+/** i18next's default namespace, the only one `src/i18n/index.ts` registers:
+ *  `t("translation:a.b")` is `t("a.b")`. */
+const NAMESPACE = "translation:";
+
+/** The key a plural variant is of: `a.count_one` -> `a.count`. Any other key
+ *  is its own. */
+export const pluralBase = (key: string) => key.replace(PLURAL_SUFFIX, "");
+
+/** A key without the namespace it may be written with. */
+export const withoutNamespace = (text: string) =>
+  text.startsWith(NAMESPACE) ? text.slice(NAMESPACE.length) : text;
 // Two segments or more, optionally ending in the separator before the
 // interpolation: `a.b.`, `a.b_`, `a.b`.
 const KEY_HEAD = /^[\w-]+(?:\.[\w-]+)+\.?$/;
@@ -92,9 +105,11 @@ export function walk(
 export function readsIn(sources: Source[]): Reads {
   const reads: Reads = { literals: new Set(), heads: [] };
   walk(sources, (node) => {
-    if (ts.isStringLiteralLike(node)) reads.literals.add(node.text);
-    else if (ts.isTemplateExpression(node) && KEY_HEAD.test(node.head.text)) {
-      reads.heads.push(node.head.text);
+    if (ts.isStringLiteralLike(node)) {
+      reads.literals.add(withoutNamespace(node.text));
+    } else if (ts.isTemplateExpression(node)) {
+      const head = withoutNamespace(node.head.text);
+      if (KEY_HEAD.test(head)) reads.heads.push(head);
     }
   });
   return reads;
@@ -103,7 +118,7 @@ export function readsIn(sources: Source[]): Reads {
 /** Whether `key` is read, by rules 1-4 above. */
 export function isRead(key: string, reads: Reads): boolean {
   const { literals, heads } = reads;
-  if (literals.has(key) || literals.has(key.replace(PLURAL_SUFFIX, ""))) {
+  if (literals.has(key) || literals.has(pluralBase(key))) {
     return true;
   }
   if (heads.some((head) => key.startsWith(head))) return true;

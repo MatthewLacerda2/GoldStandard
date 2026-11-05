@@ -65,7 +65,8 @@ missing key to each locale named. An export that stays on purpose says why on
 itself, once, `/** @keep <why> */`; a keep tag spelled any other way, without
 a reason or on an export something imports fails, and so does `@public`,
 `@beta` or `@alias`, which knip always skips. A key or namespace read in a way
-the check cannot see goes in its `KEPT`, with the reason. Vendored `components/ui/` primitives keep their whole API.
+the check cannot see goes in its `KEPT`, with the reason. Vendored
+`components/ui/` primitives keep their whole API.
 
 ## Gate before pushing
 
