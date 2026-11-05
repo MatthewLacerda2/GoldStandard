@@ -218,9 +218,11 @@ to be read cold (`CLAUDE.md`, *Issues*). Beyond that:
   hand back the engineering call rather than a simplified version of it — name the
   options and what each costs. The ones that are always theirs: a change to a
   request or response shape, a route or token name people will type, a layer
-  boundary, a lint rule, and anything that moves what the **template teaches** —
-  an upgrade path taken early, a convention the downstream reader will inherit.
-  Anything a `planning` label would have carried belongs here too.
+  boundary, what a lint rule allows, and anything that moves what the
+  **template teaches** — an upgrade path taken early, a convention the
+  downstream reader will inherit — or changes stored data, how the user sees
+  their existing data, or needs a migration (`CLAUDE.md`, *Issues*). A check
+  for a convention already written down is not on this list.
 - The mechanics, per `CLAUDE.md`: push what you have, leave the pull request
   **draft**, comment the bottleneck, tag the user, and stop. Do not thrash.
 
@@ -242,29 +244,35 @@ file and fix, not a reason the batch waited.
 
 A batch is trial by fire: it finds the traps, gaps and bugs in the tooling and in
 the template faster than anything else. A lesson that only reaches the chat is
-lost, because the next session starts without it. So every lesson ends as exactly
-one of:
+lost, because the next session starts without it, and one kept in Claude's local
+memory reaches only this developer's sessions (`CLAUDE.md`, *Memory is the
+developer's*). So every lesson ends as exactly one of:
 
 - **fixed** — a pull request that removes the cause;
-- **enforced** — a lint rule, gate or test that makes it impossible to repeat
-  (`CLAUDE.md`'s *prefer expression over description* says this is the best of
-  the four);
-- **documented** — this skill or a `CLAUDE.md`, for what the repo
-  cannot change (a platform behaviour, a procedure);
+- **enforced** — a lint rule, gate or test that makes it impossible to repeat,
+  the first choice whenever a machine can tell (`CLAUDE.md`, *A convention a
+  machine can check is a gate*);
+- **documented** — this skill or a `CLAUDE.md`, for what the repo cannot change
+  and no check can hold (a platform behaviour, a procedure);
 - **tracked** — an issue with the evidence (run ids, pull request numbers, the
   failing output) and a proposed fix, never just the symptom.
+
+A note with no signal — it has not bitten, will not, and costs nothing left
+alone — is not a lesson, and is dropped (`CLAUDE.md`, *File an issue only on a
+signal*).
 
 **Mid-batch, fix what blocks or bites twice.** When a lesson costs the running
 batch time — a gate that misleads, a brief that makes every agent re-solve the same
 trap — fix it now. It is infrastructure, so it outranks whatever was next.
 Correcting a stale description — a skill, a `CLAUDE.md`, a README — is part of
-that and needs no one's approval; changing a **rule** is changing a decision, so
-it is filed with `planning` and raised at the next check-in (*Take the
-initiative*).
+that and needs no one's approval; changing a **rule** is changing a decision,
+which needs the user's approval, so it is filed with `planning` and raised at the
+next check-in (`CLAUDE.md`, *Issues*, the stage labels).
 
 **Otherwise, file it and keep going.** File an agent's "follow-up, not in this
 pull request" notes and a pull request's open decisions the moment you read them,
-not at the end. Every issue you file on your own carries `agent`.
+not at the end — each one that carries a signal; the rest are dropped. Every
+issue you file on your own carries `agent`.
 
 **At the end, run a retro before reporting back:**
 
@@ -272,8 +280,8 @@ not at the end. Every issue you file on your own carries `agent`.
    own notes, each pull request's decisions, the issues the agents filed. Ask the
    question the user would otherwise have to: what would have made this batch
    faster, or less work? Each answer is a lesson like the rest.
-2. Map each one to fixed, enforced, documented or tracked. Anything unmapped gets
-   an issue now.
+2. Map each one to fixed, enforced, documented or tracked. Anything unmapped
+   that carries a signal gets an issue now.
 3. **Refresh the unstarted issues whose ground moved.** Add a short *Context
    update* comment to the issues next in line: what merged that they build on, and
    what changed under them. Re-scope or close any the batch made moot. Never touch
