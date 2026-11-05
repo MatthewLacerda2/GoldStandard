@@ -228,9 +228,9 @@ issue, `CLAUDE.md` or the worked `items` example points to; the pull request say
 what was chosen and why. **A human check is never a hold either.** Some proof only
 a person can give: the page in a real browser, how it looks, a flow clicked
 through. Agents do not start the app (`CLAUDE.md`, *Server-start guardrails*), so
-put the check in the pull request as a checklist for the user to run later, and
-carry on. If it turns out broken, that is a bug to file and fix, not a reason the
-batch waited.
+put the check in the pull request as a `- [ ]` checklist under `## For a human`
+for the user to run later, and carry on. If it turns out broken, that is a bug to
+file and fix, not a reason the batch waited.
 
 ## Learn from the batch: every lesson ends as a change
 
@@ -280,11 +280,15 @@ not at the end. Every issue you file on your own carries `agent`.
 The user is not reading the transcript of a batch. They take long — often hours,
 usually overnight — and the transcript is, if anything, notes for Claude itself.
 
+**The report opens with what is left for the user to do.** `make checks
+SINCE=<when the batch started>` prints every human check still unticked in what
+merged, ready to paste, then the open issues carrying both `planning` and
+`human`, put to the user as a question: which label stays.
+
 **When things go well, say what the result was.** When things did not go as one
 would expect, say what the surprise was. That does not necessarily mean things went
 badly; we write it down because the more we can predict, the better we improve.
-Include the retro's lesson → change mapping, and list every human check left
-unrun in what merged.
+Include the retro's lesson → change mapping.
 
 Two things still interrupt, because they are the ones the user would want to
 overrule and overruling is only possible while the batch is still running: **a

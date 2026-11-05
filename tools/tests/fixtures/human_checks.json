@@ -1,0 +1,68 @@
+{
+  "repo": "example-owner/example-repo",
+  "pulls": [
+    {
+      "number": 14,
+      "title": "Add a dark-mode toggle",
+      "html_url": "https://github.com/example-owner/example-repo/pull/14",
+      "merged_at": "2026-03-02T10:00:00Z",
+      "updated_at": "2026-03-02T10:00:05Z",
+      "body": "Closes #7\n\n## Test plan\n- [ ] not a human check: a plan under another heading\n\n## For a human\n- [x] Already looked at the toggle on a phone.\n- [ ] Open the settings page in a real browser and flip the toggle;\n  the page should not flash white.\n  - [ ] Do it again with the system theme set to dark.\n- [ ] Nothing overlaps on a 320px-wide phone.\n- [ ] Nothing else.\n\n## Gates\n- [ ] a gate list is not a human check\n"
+    },
+    {
+      "number": 9,
+      "title": "Merged long ago, commented on today",
+      "html_url": "https://github.com/example-owner/example-repo/pull/9",
+      "merged_at": "2026-02-20T08:00:00Z",
+      "updated_at": "2026-03-02T09:30:00Z",
+      "body": "## For a human\n- [ ] merged before SINCE, so never listed\n"
+    },
+    {
+      "number": 13,
+      "title": "An abandoned attempt",
+      "html_url": "https://github.com/example-owner/example-repo/pull/13",
+      "merged_at": null,
+      "updated_at": "2026-03-02T09:00:00Z",
+      "body": "## For a human\n- [ ] closed without merging, so never listed\n"
+    },
+    {
+      "number": 12,
+      "title": "Translate the empty state",
+      "html_url": "https://github.com/example-owner/example-repo/pull/12",
+      "merged_at": "2026-03-01T12:00:00Z",
+      "updated_at": "2026-03-01T12:00:03Z",
+      "body": "Some prose.\n\n### human CHECKS (not a merge hold)\n- [ ] Read the Portuguese empty state aloud; does it sound natural?\n\n```markdown\n- [ ] an example inside a fence\n```\n\n<!-- the template's prompt:\n- [ ] an item inside a comment\n-->\n\n#### Still inside the section\n- [ ] Check the Spanish one too.\n"
+    },
+    {
+      "number": 11,
+      "title": "Tidy the README",
+      "html_url": "https://github.com/example-owner/example-repo/pull/11",
+      "merged_at": "2026-03-01T11:00:00Z",
+      "updated_at": "2026-03-01T11:00:02Z",
+      "body": "# Needs a human\n- [x] Every check here is ticked.\n"
+    },
+    {
+      "number": 10,
+      "title": "Merged before the batch",
+      "html_url": "https://github.com/example-owner/example-repo/pull/10",
+      "merged_at": "2026-02-27T08:00:00Z",
+      "updated_at": "2026-02-28T08:00:00Z",
+      "body": "## For the human\n- [ ] merged before SINCE, so never listed\n"
+    }
+  ],
+  "issues": [
+    {
+      "number": 8,
+      "title": "Pick a charting library",
+      "html_url": "https://github.com/example-owner/example-repo/issues/8"
+    },
+    {
+      "number": 15,
+      "title": "A pull request the issues endpoint lists too",
+      "html_url": "https://github.com/example-owner/example-repo/pull/15",
+      "pull_request": {
+        "url": "https://api.github.com/repos/example-owner/example-repo/pulls/15"
+      }
+    }
+  ]
+}

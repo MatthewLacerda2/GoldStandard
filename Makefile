@@ -207,3 +207,14 @@ labels:
 .PHONY: claude-usage
 claude-usage:
 	$(TOOLS_PYTHON) -m tools.claude_usage $(if $(SINCE),--since $(SINCE)) $(ARGS)
+
+# ---------------------------------------------------------------------------
+# Batch reports  (run by hand; read-only, not a gate, so not in `make check`)
+# ---------------------------------------------------------------------------
+# Every unticked item under a `## For a human` heading on a pull request
+# merged since SINCE (ISO 8601, UTC), as Markdown to paste into a report, then
+# the open issues carrying both `planning` and `human`. REST only, through `gh`.
+.PHONY: checks
+checks:
+	@test -n "$(SINCE)" || { echo "checks: since when? e.g. make checks SINCE=2026-01-31T18:00:00Z (UTC)" >&2; exit 1; }
+	@$(TOOLS_PYTHON) -m tools.human_checks --since "$(SINCE)"
