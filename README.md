@@ -57,7 +57,9 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
 - **`make check` is the law.** `make backend` and `make frontend` each run their
   layer's lint + build + test, and `make tools` lints and tests the repository's
   own tooling and runs the docs lint and the marker check; CI calls the same
-  targets. Gates must be green before pushing.
+  targets. Gates must be green before pushing. Once `make setup` has run, each
+  commit runs the fast half, `make pre-commit`: the lint gate of every layer it
+  touches, no tests and no build.
 - **One check says CI passed.** `.github/workflows/ci.yml` runs on every ready
   pull request and every push to `main`, skips the layers a change did not
   touch (`tools/ci_paths.py` holds the list), and ends in a `CI ok` job that
@@ -104,6 +106,7 @@ frontend/   React 19 · Vite · TanStack Router/Query · Tailwind v4 · ShadCN �
 docker/     postgres (pgvector/pgvector:pg16)
 tools/      repository tooling: stdlib-only Python, linted and tested by `make tools`
 Makefile    the single task runner; CI invokes these targets
+.githooks/  the pre-commit hook (`make pre-commit`), installed by `make setup`
 CLAUDE.md   the operating contract
 ```
 
@@ -111,6 +114,10 @@ CLAUDE.md   the operating contract
 
 ```sh
 cp .env.example .env
+
+# Once per clone: each commit then runs `make pre-commit`, the lint gate of
+# every layer it touches (`git commit --no-verify` skips it for a WIP commit)
+make setup
 
 # Backend gates (creates backend/.venv, installs, then lints/builds/tests)
 make back-install

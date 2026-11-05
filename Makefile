@@ -1,6 +1,6 @@
 # Single task runner. CI invokes these exact targets so local and CI never drift.
 # Override the interpreter in CI with: make backend PYTHON=python
-# Locally a venv is used: make backend PYTHON=.venv/bin/python (see backend/README note).
+# Locally a venv is used: make backend PYTHON=.venv/bin/python (README, Getting started).
 
 PYTHON ?= python3.14
 BUN    ?= bun
