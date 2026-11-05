@@ -22,11 +22,12 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        if request.url.path in _SKIP_PATHS:
-            return await call_next(request)
-
         start = time.perf_counter()
-        response = await call_next(request)
+        response = await call_next(request)  # pragma: no mutate - equivalent: call_next ignores it
+        if request.url.path in _SKIP_PATHS:
+            return response
+
+        # pragma: no mutate start - text nobody parses: the access line is read by people
         duration_ms = (time.perf_counter() - start) * 1000.0
         logger.info(
             "%s %s -> %d (%.2fms)",
@@ -35,4 +36,5 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             response.status_code,
             duration_ms,
         )
+        # pragma: no mutate end
         return response

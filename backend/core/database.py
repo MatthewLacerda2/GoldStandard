@@ -6,7 +6,7 @@ admin seed). Schema upgrades beyond additive `create_all` should go through
 Alembic; this skeleton intentionally ships no migrations.
 """
 
-from sqlalchemy import select, text
+from sqlalchemy import exists, make_url, select, text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -16,21 +16,31 @@ from sqlalchemy.ext.asyncio import (
 from core.config import get_settings
 from models.base import Base
 
+_ASYNCPG = "postgresql+asyncpg://"
+
 
 def normalize_database_url(url: str) -> str:
     """Coerce a plain Postgres URL to the asyncpg driver form.
 
     Accepts `postgres://` and `postgresql://` (as emitted by many hosting
-    providers) and rewrites them to `postgresql+asyncpg://`. URLs that already
-    specify a driver are returned unchanged.
+    providers) and rewrites them to `postgresql+asyncpg://`. Any other URL,
+    one that already names a driver (`postgresql+psycopg://`) included, keeps
+    its scheme. Those providers also append libpq's `sslmode`, which asyncpg
+    refuses: on an asyncpg URL it becomes `ssl`, asyncpg's name for it.
     """
-    if url.startswith("postgresql+"):
+    for scheme in ("postgresql://", "postgres://"):
+        if url.startswith(scheme):
+            url = _ASYNCPG + url.removeprefix(scheme)
+            break
+    if not url.startswith(_ASYNCPG):
         return url
-    if url.startswith("postgresql://"):
-        return "postgresql+asyncpg://" + url[len("postgresql://") :]
-    if url.startswith("postgres://"):
-        return "postgresql+asyncpg://" + url[len("postgres://") :]
-    return url
+    parsed = make_url(url)
+    if "sslmode" not in parsed.query:
+        return url
+    query = {("ssl" if key == "sslmode" else key): value for key, value in parsed.query.items()}
+    # pragma: no mutate start - equivalent: hide_password=None hides nothing either
+    return parsed.set(query=query).render_as_string(hide_password=False)
+    # pragma: no mutate end
 
 
 _settings = get_settings()
@@ -50,7 +60,9 @@ async def init_db() -> None:
     import models  # noqa: F401
 
     async with engine.begin() as conn:
+        # pragma: no mutate start - equivalent: SQL reads an unquoted word in any case
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        # pragma: no mutate end
         # Additive only. Alembic is the upgrade path for non-additive changes.
         await conn.run_sync(Base.metadata.create_all)
 
@@ -64,13 +76,11 @@ async def _seed_default_admin() -> None:
 
     settings = get_settings()
     async with SessionLocal() as session:
-        existing = await session.scalar(select(User).limit(1))
-        if existing is not None:
+        if await session.scalar(select(exists().select_from(User))):
             return
         admin = User(
             email=settings.DEFAULT_ADMIN_EMAIL,
             password_hash=hash_password(settings.DEFAULT_ADMIN_PASSWORD),
-            is_active=True,
         )
         session.add(admin)
         await session.commit()
