@@ -185,6 +185,8 @@ to be read cold (`CLAUDE.md`, *Issues*). Beyond that:
 
 - Name the **base commit** and what has landed recently that it must respect.
 - Name the **siblings** and which files they are touching.
+- Start it with a **description that names its issue** (`#<n> <what it does>`):
+  `make claude-usage` ties an agent's tokens to a pull request by that number.
 - Tell it which gate to run — the layer target while working, `make check` before
   the pull request goes ready — and point it at `ci-merge` for the rest.
 - Tell it **not** to merge — merging belongs to the session running the batch.

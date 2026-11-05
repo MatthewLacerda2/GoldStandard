@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-03-02T09:03:00Z","gitBranch":"main","message":{"role":"user","content":"Review PR #9 of this repository. The coder never briefs you."}}
+{"type":"assistant","timestamp":"2026-03-02T09:03:01Z","gitBranch":"main","message":{"id":"r1","model":"model-a","usage":{"input_tokens":400,"output_tokens":20}}}

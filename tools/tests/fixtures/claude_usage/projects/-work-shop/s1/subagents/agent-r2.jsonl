@@ -1,0 +1,2 @@
+{"type":"user","isMeta":true,"timestamp":"2026-03-02T09:04:00Z","gitBranch":"main","message":{"role":"user","content":"Review target: `9`"}}
+{"type":"assistant","timestamp":"2026-03-02T09:04:01Z","gitBranch":"main","message":{"id":"r2","model":"model-a","usage":{"input_tokens":500,"output_tokens":30}}}

@@ -1,0 +1,4 @@
+{"type":"user","timestamp":"2026-03-02T09:01:00Z","gitBranch":"main","message":{"role":"user","content":[{"type":"text","text":"<system-reminder>Some context.</system-reminder>"}]}}
+{"type":"user","timestamp":"2026-03-02T09:01:00Z","gitBranch":"main","message":{"role":"user","content":"You are a coder in a batch. Your issue: #7. The independent review comes later."}}
+{"type":"assistant","timestamp":"2026-03-02T09:00:06Z","gitBranch":"main","message":{"id":"m1","model":"model-a","usage":{"input_tokens":10,"cache_creation_input_tokens":100,"cache_read_input_tokens":890,"output_tokens":40}}}
+{"type":"assistant","timestamp":"2026-03-02T09:01:05Z","gitBranch":"main","message":{"id":"c1","model":"model-b","usage":{"input_tokens":2000,"output_tokens":100}}}
