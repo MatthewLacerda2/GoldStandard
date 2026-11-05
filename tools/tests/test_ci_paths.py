@@ -79,6 +79,13 @@ class WhatAChangeRuns(unittest.TestCase):
             {"backend": False, "frontend": False, "code": True},
         )
 
+    def test_the_marker_scope_runs_the_frontend(self) -> None:
+        # The frontend's ESLint scope test reads tools/markers.py.
+        self.assertEqual(
+            runs("tools/markers.py"),
+            {"backend": False, "frontend": True, "code": True},
+        )
+
     def test_an_empty_diff_runs_everything(self) -> None:
         self.assertEqual(runs(), {"backend": True, "frontend": True, "code": True})
 

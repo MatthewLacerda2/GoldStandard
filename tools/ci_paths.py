@@ -57,13 +57,17 @@ LAYERS: dict[str, tuple[str, ...]] = {
     ),
     # No `!**/*.md`: Prettier checks frontend/'s Markdown too. .gitattributes
     # names the frontend's merge drivers, and their tests merge with it.
-    "frontend": ("frontend/**", ".gitattributes", *_SHARED),
+    # tools/markers.py says which files ESLint must read, and
+    # eslint-rules/marker-scope.test.ts reads it.
+    "frontend": ("frontend/**", ".gitattributes", "tools/markers.py", *_SHARED),
 }
 
 # Tracked files no layer's gates read. A change to only these runs just the
 # jobs that run on every change (`changes`, `tools`, `CI ok`). `tools/` is
-# here because the `tools` job runs `make tools` on every change anyway, and
-# `.githooks/` because its tests are in `tools/tests/`.
+# here because the `tools` job runs `make tools` on every change anyway (a
+# file a layer's gates also read is claimed by that layer as well, as
+# `tools/markers.py` is by the frontend), and `.githooks/` because its tests
+# are in `tools/tests/`.
 UNGATED = (
     "**/*.md",
     ".githooks/**",

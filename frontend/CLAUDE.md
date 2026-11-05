@@ -51,8 +51,15 @@ container — `{t("items.heading")}` and `{item.name}` alike — are untouched.
 the comment. Strings are data and never trip it. The rare comment that must
 carry the word says why, inline: `// lint: allow(marker) <why>` in the comment
 on that line or on the line directly above it — the same spelling the
-backend's `house_lint.py` reads. ESLint's own `eslint-disable` comments still
-silence it, as they do any rule, and nothing yet asks them for a reason.
+backend's `house_lint.py` reads. ESLint's own inline comments
+(`eslint-disable`, `/* eslint <rule>: off */`) still silence it, as they do any
+rule, and nothing yet asks them for a reason.
+The root's marker check (`tools/markers.py`) leaves every tracked `.ts`/`.tsx`
+file to this rule, so `eslint-rules/marker-scope.test.ts` fails when
+`eslint.config.ts` ignores one, runs the rule below error on it or gives it a
+processor, and when `bun run check` runs ESLint as anything but `eslint .`.
+The files `tools/markers.py`'s `NOT_READ` names (the generated route tree)
+are the exception.
 
 ## Dead code (`make front-deadcode`)
 
