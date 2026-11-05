@@ -35,6 +35,13 @@ def test_a_hosts_sslmode_reaches_asyncpg_under_its_name():
     assert dict(result.query) == {"ssl": "require", "application_name": "web"}
 
 
+@pytest.mark.parametrize("query", ["sslmode=require&ssl=disable", "ssl=disable&sslmode=require"])
+def test_a_url_setting_both_ssl_keys_is_refused(query):
+    """Either one winning silently could connect without TLS."""
+    with pytest.raises(ValueError, match="both `sslmode` and `ssl`"):
+        database.normalize_database_url(f"postgres://u:p@db/app?{query}")
+
+
 @pytest.mark.parametrize(
     "url", ["postgresql+psycopg://u:p@db/app?sslmode=require", "sqlite:///x.db"]
 )

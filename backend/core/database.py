@@ -26,7 +26,8 @@ def normalize_database_url(url: str) -> str:
     providers) and rewrites them to `postgresql+asyncpg://`. Any other URL,
     one that already names a driver (`postgresql+psycopg://`) included, keeps
     its scheme. Those providers also append libpq's `sslmode`, which asyncpg
-    refuses: on an asyncpg URL it becomes `ssl`, asyncpg's name for it.
+    refuses: on an asyncpg URL it becomes `ssl`, asyncpg's name for it, and a
+    URL that sets both is refused rather than one silently winning.
     """
     for scheme in ("postgresql://", "postgres://"):
         if url.startswith(scheme):
@@ -37,9 +38,14 @@ def normalize_database_url(url: str) -> str:
     parsed = make_url(url)
     if "sslmode" not in parsed.query:
         return url
+    if "ssl" in parsed.query:
+        # pragma: no mutate start - text nobody parses: the message is read by people
+        raise ValueError("DATABASE_URL sets both `sslmode` and `ssl`: keep one")
+        # pragma: no mutate end
     query = {("ssl" if key == "sslmode" else key): value for key, value in parsed.query.items()}
+    renamed = parsed.set(query=query)
     # pragma: no mutate start - equivalent: hide_password=None hides nothing either
-    return parsed.set(query=query).render_as_string(hide_password=False)
+    return renamed.render_as_string(hide_password=False)
     # pragma: no mutate end
 
 

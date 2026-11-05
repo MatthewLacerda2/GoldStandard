@@ -27,14 +27,12 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         if request.url.path in _SKIP_PATHS:
             return response
 
-        # pragma: no mutate start - text nobody parses: the access line is read by people
-        duration_ms = (time.perf_counter() - start) * 1000.0
+        duration_ms = (time.perf_counter() - start) * 1000.0  # pragma: no mutate - log text
         logger.info(
-            "%s %s -> %d (%.2fms)",
+            "%s %s -> %d (%.2fms)",  # pragma: no mutate - log text
             request.method,
             request.url.path,
             response.status_code,
             duration_ms,
         )
-        # pragma: no mutate end
         return response

@@ -1,6 +1,7 @@
-"""The access log (``core/logging_middleware.py``): every request leaves one
-line on ``app.access`` except a health probe, and the response goes through
-untouched. What the line says is read by people, not asserted."""
+"""The access log (``core/logging_middleware.py``): every request but a health
+probe leaves one line on ``app.access`` naming its method, path and status,
+and the response goes through untouched. The line's wording and duration are
+read by people, not asserted; only that it formats."""
 
 import logging
 
@@ -16,5 +17,6 @@ async def test_a_request_is_logged_once_and_a_health_probe_never(caplog):
         root = await client.get("/")
     assert probe.json() == {"status": "healthy"}
     assert root.json()["status"] == "ok"
-    lines = [r.getMessage() for r in caplog.records if r.name == "app.access"]
-    assert len(lines) == 1 and lines[0].startswith("GET / ")
+    records = [r for r in caplog.records if r.name == "app.access"]
+    assert [r.args[:3] for r in records] == [("GET", "/", 200)]
+    records[0].getMessage()  # a line that cannot format is lost to a logging error
