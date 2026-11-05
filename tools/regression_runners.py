@@ -9,14 +9,26 @@ of three outcomes:
     broken   nothing could be judged: the file does not import or compile,
              no test ran, or every failure is a name the base lacks
 
-A name the base lacks is Python's `ImportError`, `NameError` or
-`AttributeError` (but not on `None`, which is how a bug usually shows), and
-JavaScript's `ReferenceError` or `… is not a function` / `constructor`. A test
-calling the fix's new function fails that way on any base, so it proves
-nothing. Only a test body's failure counts: pytest's setup errors (no
-database) are broken, not failed. A run past `TIMEOUT` has failed.
+A name the base lacks is what a test calling only the fix's new API fails
+with on any base, so it proves nothing:
 
-Pure but for `run_target` and `install`.
+    Python      `ImportError`, `NameError`, `AttributeError` (but not on
+                `None`, which is how a bug usually shows), and a `TypeError`
+                for a signature the base lacks: an unexpected keyword
+                argument, too many positional ones, or a missing one
+    JavaScript  `ReferenceError: … is not defined`, `TypeError: … is not a
+                function` / `constructor`, and React's `Element type is
+                invalid … got: undefined` (a component the module lacks)
+
+What a pattern cannot see still counts as a failure: a test of a route the
+fix adds gets the base's 404, and a new constant reads as `undefined`. The
+judging is per file, so a changed file's older test failing counts too.
+
+Only a test body's failure counts: pytest's setup errors (no database) are
+broken, not failed. A run past `TIMEOUT` has failed: a hung test is the bug
+showing, and its whole process group is killed.
+
+Pure but for `call`, `install`, `run_target` and `drop_database`.
 """
 
 from __future__ import annotations
@@ -25,6 +37,7 @@ import hashlib
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import xml.etree.ElementTree as ElementTree
@@ -39,8 +52,15 @@ _PY_MISSING = re.compile(
     r"^(?:\w+\.)*(?:ImportError|ModuleNotFoundError|NameError|AttributeError)\b"
 )
 _PY_NONE = re.compile(r"^AttributeError: 'NoneType' object")
+_PY_SIGNATURE = re.compile(
+    r"^TypeError: .*(?:got an unexpected keyword argument"
+    r"|takes .* positional arguments? but \d+ (?:was|were) given"
+    r"|missing \d+ required (?:positional|keyword-only) arguments?)"
+)
 _JS_MISSING = re.compile(
-    r"^(?:ReferenceError: .* is not defined|TypeError: .* is not a (?:function|constructor))"
+    r"^(?:ReferenceError: .* is not defined"
+    r"|TypeError: .* is not a (?:function|constructor)"
+    r"|(?:\w*Error: )?Element type is invalid.* but got: undefined)"
 )
 
 
@@ -57,6 +77,8 @@ class Target(NamedTuple):
 
 
 def py_missing(failure: str) -> bool:
+    if _PY_SIGNATURE.match(failure):
+        return True
     return bool(_PY_MISSING.match(failure)) and not _PY_NONE.match(failure)
 
 
@@ -166,24 +188,27 @@ def command(t: Target, report: Path, python: str, bun: str) -> list[str]:
 
 
 def call(argv: list[str], cwd: Path, env: dict[str, str]) -> int | None:
-    """Run `argv`, then print its output; `None` when it timed out."""
+    """Run `argv`, then print its output; `None` when it timed out. It runs in
+    a session of its own, so a timeout kills what it started too (vitest's
+    workers under bun, say), not just the process itself."""
+    proc = subprocess.Popen(
+        argv,
+        cwd=cwd,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
     try:
-        done = subprocess.run(
-            argv,
-            cwd=cwd,
-            env=env,
-            timeout=TIMEOUT,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-    except subprocess.TimeoutExpired as hung:
-        out = hung.output or ""
-        out = out.decode(errors="replace") if isinstance(out, bytes) else out
+        out, _ = proc.communicate(timeout=TIMEOUT)
+    except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, signal.SIGKILL)
+        out, _ = proc.communicate()
         print(out, f"timed out after {TIMEOUT}s", sep="\n", flush=True)
         return None
-    print(done.stdout, flush=True)
-    return done.returncode
+    print(out, flush=True)
+    return proc.returncode
 
 
 def install(base: Path, bun: str) -> bool:
@@ -203,3 +228,29 @@ def run_target(t: Target, base: Path, scratch: Path, python: str, bun: str) -> s
         return FAILED
     text = report.read_text(encoding="utf-8") if report.is_file() else ""
     return OUTCOMES[t.runner](code, text)
+
+
+# Drops the test database the base's own conftest made for the base worktree,
+# by the conftest's own naming, so the name is never guessed here. Run from
+# the worktree's backend/ while it exists.
+DROP_DATABASE = """
+import asyncio, asyncpg
+from tests.conftest import _base_url, _split_url, _test_db_name
+async def drop():
+    head, _ = _split_url(_base_url())
+    conn = await asyncpg.connect(head.replace("postgresql+asyncpg://", "postgresql://") + "/postgres")
+    try:
+        await conn.execute(f'DROP DATABASE IF EXISTS "{_test_db_name()}" WITH (FORCE)')
+    finally:
+        await conn.close()
+    print("dropped", _test_db_name())
+asyncio.run(drop())
+"""
+
+
+def drop_database(base: Path, python: str) -> None:
+    """Drop the base worktree's test database. Each run's worktree has a path
+    of its own, so a database is never shared with another base; failing to
+    drop it only leaves it behind, so it warns and goes on."""
+    if call([python, "-c", DROP_DATABASE], base / "backend", dict(os.environ)) != 0:
+        print("warning: the base's test database was not dropped.", flush=True)

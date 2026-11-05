@@ -27,17 +27,18 @@ ends, however it ends.
 `REV` is the base: in CI the merge commit's first parent, `HEAD^1`. `check`
 without one takes where the branch left the pull request's base branch.
 
-Pure but for `git`, `gh`, `lay_over`, `base_worktree`, `plan`, `run` and `main`.
+Pure but for `git`, `gh`, `lay_over`, `base_worktree`, `on_base`, `plan`, `run`
+and `main`.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -46,9 +47,25 @@ from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
 if __package__:
-    from tools.regression_runners import BROKEN, FAILED, PASSED, Target, install, run_target
+    from tools.regression_runners import (
+        BROKEN,
+        FAILED,
+        PASSED,
+        Target,
+        drop_database,
+        install,
+        run_target,
+    )
 else:  # run as a script: its own folder is on the path
-    from regression_runners import BROKEN, FAILED, PASSED, Target, install, run_target
+    from regression_runners import (
+        BROKEN,
+        FAILED,
+        PASSED,
+        Target,
+        drop_database,
+        install,
+        run_target,
+    )
 
 FIX = "fix"
 EXCEPTION = re.compile(
@@ -168,9 +185,12 @@ def git(*argv: str, cwd: Path) -> str:
 
 
 def gh(path: str) -> dict:
-    """One GitHub REST answer (`gh api`, never GraphQL)."""
-    out = subprocess.run(("gh", "api", path), check=True, text=True, stdout=subprocess.PIPE)
-    return json.loads(out.stdout)
+    """One GitHub REST answer (`gh api`, never GraphQL); `LookupError` when
+    there is none, such as an issue number that does not exist."""
+    done = subprocess.run(("gh", "api", path), text=True, capture_output=True)
+    if done.returncode:
+        raise LookupError(f"`gh api {path}`: {done.stderr.strip() or done.stdout.strip()}")
+    return json.loads(done.stdout)
 
 
 def changed(head: Path, base: str) -> list[str]:
@@ -207,12 +227,14 @@ def lay_over(head: Path, worktree: Path, paths: list[str], present: set[str]) ->
 
 @contextmanager
 def base_worktree(head: Path, base: str) -> Iterator[Path]:
-    """A worktree of `base`, removed on the way out. Its path is fixed per
-    checkout, so the per-worktree test database it gets is reused run to run."""
-    digest = hashlib.sha1(str(head).encode()).hexdigest()[:12]
-    path = Path(tempfile.gettempdir()) / f"regression-base-{digest}"
-
-    def remove() -> None:
+    """A worktree of `base` at a path of its own, removed on the way out. Its
+    own path means its own test database, and no other run's worktree."""
+    git("worktree", "prune", cwd=head)  # registrations a killed run left behind
+    path = Path(tempfile.mkdtemp(prefix="regression-base-"))
+    try:
+        git("worktree", "add", "--quiet", "--detach", str(path), base, cwd=head)
+        yield path
+    finally:
         subprocess.run(
             ("git", "worktree", "remove", "--force", str(path)),
             cwd=head,
@@ -221,13 +243,6 @@ def base_worktree(head: Path, base: str) -> Iterator[Path]:
         )
         shutil.rmtree(path, ignore_errors=True)
         git("worktree", "prune", cwd=head)
-
-    remove()  # one a killed run left behind
-    git("worktree", "add", "--quiet", "--detach", str(path), base, cwd=head)
-    try:
-        yield path
-    finally:
-        remove()
 
 
 def write_output(**values: bool) -> None:
@@ -240,7 +255,12 @@ def write_output(**values: bool) -> None:
 def plan(head: Path, pull: dict, repo: str, base: str) -> tuple[int, list[Target]]:
     """Exit code and the targets to run: none when nothing is owed."""
     body = pull.get("body") or ""
-    fixed = fixes({n: gh(f"repos/{repo}/issues/{n}") for n in closes(body, repo)})
+    try:
+        fixed = fixes({n: gh(f"repos/{repo}/issues/{n}") for n in closes(body, repo)})
+    except LookupError as unread:
+        why = f"an issue it closes cannot be read ({unread}): check each closing keyword's number."
+        print("\n".join(["Refused:", why, HOW]))
+        return 1, []
     present = committed(head)
     found = targets(changed(head, base), present.__contains__)
     refused = owed(fixed, body, found)
@@ -262,19 +282,34 @@ def plan(head: Path, pull: dict, repo: str, base: str) -> tuple[int, list[Target
     return 0, found
 
 
-def run(head: Path, base: str, python: str, bun: str) -> int:
-    """0 when a changed test fails on the base, 1 when none does."""
-    paths, present = changed(head, base), committed(head)
-    found = targets(paths, present.__contains__)
+def on_base(
+    head: Path, base: str, paths: list[str], found: list[Target], python: str, bun: str
+) -> dict[Target, str]:
+    """Each target's outcome in a worktree of the base, the change's test
+    files laid over it. The head's backend/.env goes too (it is not tracked),
+    so the base's tests reach the same database the head's do."""
     results: dict[Target, str] = {}
-    if found:
-        with base_worktree(head, base) as tree, tempfile.TemporaryDirectory() as scratch:
-            lay_over(head, tree, [p for p in paths if laid(p)], present)
-            installed = not any(t.runner == "vitest" for t in found) or install(tree, bun)
+    with base_worktree(head, base) as tree, tempfile.TemporaryDirectory() as scratch:
+        lay_over(head, tree, [p for p in paths if laid(p)], committed(head))
+        if (head / "backend" / ".env").is_file():
+            shutil.copy2(head / "backend" / ".env", tree / "backend" / ".env")
+        installed = not any(t.runner == "vitest" for t in found) or install(tree, bun)
+        try:
             for t in found:
                 ran = installed or t.runner != "vitest"
                 results[t] = run_target(t, tree, Path(scratch), python, bun) if ran else BROKEN
                 print(f"{t}: {results[t]} on the base", flush=True)
+        finally:
+            if any(t.runner == "pytest" for t in found):
+                drop_database(tree, python)
+    return results
+
+
+def run(head: Path, base: str, python: str, bun: str) -> int:
+    """0 when a changed test fails on the base, 1 when none does."""
+    paths = changed(head, base)
+    found = targets(paths, committed(head).__contains__)
+    results = on_base(head, base, paths, found, python, bun) if found else {}
     refused = verdict(results)
     print("\n".join(["Refused:", *refused]) if refused else "a changed test fails on the base.")
     return 1 if refused else 0
@@ -314,6 +349,9 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--python", default="python3.14", help="Python with backend/'s deps")
     parser.add_argument("--bun", default="bun")
     args = parser.parse_args(argv)
+    # A cancelled CI job is sent SIGTERM: exit through the `finally`s, so the
+    # base worktree and its database go too.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     if args.step == "plan" and not (args.pr and args.base) or args.step == "run" and not args.base:
         parser.error("plan needs --pr and --base, run needs --base")
     if args.step == "check" and not (args.pr or args.base):

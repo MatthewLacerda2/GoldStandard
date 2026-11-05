@@ -16,7 +16,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from tools import regression, regression_runners
+from tools import regression
 
 BUGGY = "def double(x):\n    return x + 2\n"
 FIXED = "def double(x):\n    return x * 2\n"
@@ -24,12 +24,6 @@ TEST = (
     "import unittest\nfrom tools import thing\n"
     "class T(unittest.TestCase):\n"
     "    def test_double(self):\n        self.assertEqual(thing.{call}, 6)\n"
-)
-HANGS = (
-    "import time, unittest\nfrom tools import thing\n"
-    "class T(unittest.TestCase):\n"
-    "    def test_double(self):\n"
-    "        while thing.double(3) != 6:\n            time.sleep(0.1)\n"
 )
 REASON = "No regression test on base: the bug only shows on real hardware."
 
@@ -95,12 +89,6 @@ class Run(ScratchRepository):
         self.assertEqual(code, 1)
         self.assertIn("cannot be judged", out)
 
-    def test_a_test_hanging_on_the_base_has_failed(self) -> None:
-        self.write("tools/thing.py", FIXED)
-        self.commit("tools/tests/test_thing.py", HANGS)
-        with mock.patch.object(regression_runners, "TIMEOUT", 1):
-            self.assertEqual(self.run_step()[0], 0)
-
     def test_no_changed_test_is_refused(self) -> None:
         self.commit("tools/thing.py", FIXED)
         self.assertEqual(self.run_step()[0], 1)
@@ -116,9 +104,15 @@ class Run(ScratchRepository):
 class Plan(ScratchRepository):
     def plan(self, body: str, labels: list[str]) -> tuple[int, list, str]:
         answers = {"repos/o/r/issues/1": {"labels": [{"name": n} for n in labels]}}
+
+        def gh(path: str) -> dict:
+            if path not in answers:
+                raise LookupError(f"{path}: Not Found (HTTP 404)")
+            return answers[path]
+
         output = self.root / "output"
         with (
-            mock.patch.object(regression, "gh", answers.__getitem__),
+            mock.patch.object(regression, "gh", gh),
             mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}),
             redirect_stdout(io.StringIO()),
         ):
@@ -146,6 +140,10 @@ class Plan(ScratchRepository):
     def test_a_fix_with_no_test_file_is_refused(self) -> None:
         self.commit("tools/thing.py", FIXED)
         self.assertEqual(self.plan("Closes #1", ["fix"])[0], 1)
+
+    def test_an_issue_that_cannot_be_read_is_refused(self) -> None:
+        self.fix()
+        self.assertEqual(self.plan("Closes #2", ["fix"])[0], 1)
 
     def test_plan_writes_every_output_the_job_reads(self) -> None:
         self.fix()

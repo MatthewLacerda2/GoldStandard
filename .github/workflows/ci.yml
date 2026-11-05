@@ -184,13 +184,12 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
-    env:
-      GH_TOKEN: ${{ github.token }}
-      PR: ${{ github.event.pull_request.number }}
     steps:
+      # No token left in .git/config for the pull request's test code to read.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2
+          persist-credentials: false
 
       - uses: actions/setup-python@v7
         with:
@@ -198,7 +197,12 @@ jobs:
 
       - name: Does this pull request owe a regression test?
         id: plan
-        run: python tools/regression.py plan --pr "$PR" --base HEAD^1
+        # The token reads the description and the issues; the later step,
+        # which runs the pull request's test code, gets none.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: make regression-plan PR="$PR" BASE=HEAD^1 TOOLS_PYTHON=python
 
       # The backend job's setup, for a backend test.
       - name: Start postgres (pgvector)
@@ -241,7 +245,7 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/app
           JWT_SECRET: ci-secret-not-for-production-use-only
-        run: python tools/regression.py run --base HEAD^1 --python python
+        run: make regression-run BASE=HEAD^1 TOOLS_PYTHON=python PYTHON=python
 
   # The one check the ruleset requires: its `name:` is the context string the
   # ruleset names, so renaming it unguards `main`. `always()` so it reports

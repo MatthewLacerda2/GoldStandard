@@ -109,6 +109,18 @@ class HowItIsJudged(unittest.TestCase):
         self.assertEqual(pytest_outcome(1, junit(*missing, "assert 0")), FAILED)
         self.assertTrue(verdict({PYTEST: BROKEN}))
 
+    def test_a_signature_the_base_lacks_does_not_count(self) -> None:
+        # Calling the fix's new parameter fails on any base.
+        for message in (
+            "TypeError: decide() got an unexpected keyword argument 'strict'",
+            "TypeError: f() takes 1 positional argument but 2 were given",
+            "TypeError: f() takes from 1 to 2 positional arguments but 3 were given",
+            "TypeError: f() missing 1 required positional argument: 'x'",
+        ):
+            self.assertEqual(pytest_outcome(1, junit(message)), BROKEN, message)
+        other = "TypeError: unsupported operand type(s) for +: 'int' and 'str'"
+        self.assertEqual(pytest_outcome(1, junit(other)), FAILED)
+
     def test_an_attribute_error_on_none_is_the_bug(self) -> None:
         none = "AttributeError: 'NoneType' object has no attribute 'id'"
         self.assertEqual(pytest_outcome(1, junit(none)), FAILED)
@@ -124,6 +136,17 @@ class HowItIsJudged(unittest.TestCase):
         )
         self.assertEqual(vitest_outcome(1, vitest("ReferenceError: f is not defined")), BROKEN)
         self.assertEqual(vitest_outcome(1, vitest("AssertionError: expected 1 to be 2")), FAILED)
+
+    def test_vitest_names_a_missing_component(self) -> None:
+        # React's error for rendering `undefined`: an export the base lacks.
+        react = (
+            "Error: Element type is invalid: expected a string (for built-in components)"
+            " or a class/function (for composite components) but got: undefined. You"
+            " likely forgot to export your component from the file it's defined in"
+        )
+        self.assertEqual(vitest_outcome(1, vitest(react)), BROKEN)
+        rendered = "Error: Element type is invalid: expected a string but got: object."
+        self.assertEqual(vitest_outcome(1, vitest(rendered)), FAILED)
         self.assertEqual(vitest_outcome(1, json.dumps({"testResults": [{}]})), BROKEN)
         self.assertEqual(vitest_outcome(0, ""), PASSED)
 
