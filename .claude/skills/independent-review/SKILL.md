@@ -61,7 +61,11 @@ already merged (*Catching up on a merged PR*, below).
   `make claude-usage` can tie the review's tokens to it.
 - **Read-only.** It may read the PR, the repository and the issue, and run
   read-only commands (`gh pr view`, `gh pr diff`, `gh issue view`, `git show`).
-  It makes no edits, commits, pushes, PR comments or issue comments.
+  It makes no edits, commits, pushes, PR comments or issue comments, and probes
+  in a throwaway clone under the scratchpad that it deletes afterwards. The
+  `code-review` skill fetches the PR into a local `pr<n>` branch of whatever
+  checkout it runs in; the reviewer deletes that ref before it finishes, so the
+  shared checkout gains nothing.
 - **The prompt carries only what an outsider would get:** the PR number, the
   issue it closes, the steering for the PR's nature, and the template below.
   **Not** a summary of the change, the coder's rationale, what was already
@@ -123,13 +127,19 @@ Paste every list whose trigger the PR hits.
   `CI ok` still `needs:` every job; `make` locally and Actions still run the
   same target (the no-drift rule); a lint rule still catches what it claims, and
   its own tests say so; caching cannot mask a failure; permissions and secrets
-  minimal.
+  minimal; a test that reads a file outside its own layer has that file in its
+  layer's paths in `tools/ci_paths.py`, or a change to the file alone skips the
+  test in CI.
 
 ## Answering the findings
 
 The coder answers: resumed with `SendMessage` when it is a subagent, or this
-session when it wrote the PR. The reviewer can be wrong, so every finding is
-checked against the code first. Then:
+session when it wrote the PR. Relay each finding whole — the place, the defect,
+the scenario — never a one-line label the coder has to ask about. The relay
+adds no scope of its own: before asking for more than the finding, re-read what
+the issue leaves behind, since an owner's "port only the core" outranks a
+reviewer's idea. The reviewer can be wrong, so every finding is checked against
+the code first. Then:
 
 1. **Must-fix** findings are fixed on the PR's branch. Anything declined gets its
    reason. A finding that needs a decision that is genuinely the user's (see
@@ -150,7 +160,9 @@ checked against the code first. Then:
    the new commits and a new record naming the new head.
    Post it from the PR's author or an assignee: nobody else's counts.
 4. When the fixes rework a query, a contract or the logic substantially, one more
-   reviewer reads the new diff. Otherwise one round is the review.
+   reviewer reads the new diff. Otherwise one round is the review. When two
+   rounds have each found a hole in the same mechanism, the third replaces the
+   mechanism rather than patching it again.
 
 Then the PR carries on along `ci-merge` to merged. The review runs alongside the
 gates and CI; it never replaces them.
