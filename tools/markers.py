@@ -59,6 +59,7 @@ FILES = {
         "**/.dockerignore",
         "**/.prettierignore",
         "**/nginx.conf",
+        "**/baseline.txt",
     ),
     "css": ("**/*.css",),
     "html": ("**/*.html",),

@@ -91,6 +91,7 @@ class WhichFiles(unittest.TestCase):
             "docker/postgres/Dockerfile": "hash",
             "backend/pyproject.toml": "hash",
             "backend/requirements-dev.txt": "hash",
+            "frontend/scripts/contract/baseline.txt": "hash",
             "tools/markers.py": "python",
             "frontend/src/styles.css": "css",
             "frontend/index.html": "html",
