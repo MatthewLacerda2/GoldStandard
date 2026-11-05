@@ -116,14 +116,18 @@ STAGED_LAYERS ?= $(shell $(staged_layers))
 
 # The hook runs this while git's environment still points at the index being
 # committed, and passes what it prints to `pre-commit`. The lint gates read the
-# working tree, so a touched layer whose working tree is not what is staged (an
-# unstaged edit, an untracked file) is refused: lint would judge something
-# other than the commit.
+# working tree, so a touched layer whose files on disk are not what the commit
+# lands is refused: lint would judge something other than the commit. That is
+# an unstaged edit, an untracked file, or, under `git commit <path>`, a staged
+# file the pathspec leaves out.
 pre-commit-scope:
 	@layers="$(STAGED_LAYERS)"; for l in $$layers; do \
 		if ! git diff --quiet -- $$l || [ -n "$$(git ls-files --others --exclude-standard -- $$l)" ]; then \
-			echo "pre-commit: $$l/ has changes that are not staged, and lint reads the working tree." >&2; \
-			echo "pre-commit: stage them, or set them aside: git stash push --keep-index --include-untracked" >&2; \
+			echo "pre-commit: $$l/ has changes that are not part of this commit, and lint reads the files on disk." >&2; \
+			git diff --name-only -- $$l | sed 's/^/pre-commit:   /' >&2; \
+			git ls-files --others --exclude-standard -- $$l | sed 's/^/pre-commit:   /' >&2; \
+			echo "pre-commit: stage what belongs and commit without a path, or unstage the rest and set it" >&2; \
+			echo "pre-commit: aside: git stash push --keep-index --include-untracked" >&2; \
 			exit 1; \
 		fi; \
 	done; echo $$layers
@@ -158,7 +162,8 @@ pre-commit-front:
 	fi
 
 # What a failed lint points at. Every fixer runs even when one leaves errors
-# behind, the formatter last, and the target still fails if any are left.
+# behind, the formatter last, and the target fails if a fixer left errors.
+# House-lint findings and type errors are not theirs: those are fixed by hand.
 back-fix:
 	cd backend && { $(PYTHON) -m ruff check --fix .; s=$$?; $(PYTHON) -m ruff format . && exit $$s; }
 

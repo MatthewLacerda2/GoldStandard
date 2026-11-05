@@ -82,7 +82,7 @@ class Scratch(unittest.TestCase):
         path = self.out / "calls.txt"
         return path.read_text() if path.exists() else ""
 
-    def fail(self) -> None:
+    def make_tools_fail(self) -> None:
         (self.out / "fail").write_text("")
 
 
@@ -117,7 +117,7 @@ class TheHook(Scratch):
         self.assertNotIn("run check", self.calls())
 
     def test_a_lint_failure_blocks_the_commit_and_names_the_fix(self) -> None:
-        self.fail()
+        self.make_tools_fail()
         for layer, fix in [("backend", "make back-fix PYTHON="), ("frontend", "make front-fix")]:
             (self.repo / layer / "a.txt").write_text(f"{layer}\n")
             done = self.commit("-a")
@@ -127,23 +127,48 @@ class TheHook(Scratch):
             self.git("checkout", "--", layer)
         self.assertEqual(self.commits(), 1)
 
-    def test_an_unstaged_change_to_a_touched_layer_is_refused(self) -> None:
-        (self.repo / "backend/a.txt").write_text("staged\n")
-        self.git("add", "backend")
-        (self.repo / "backend/a.txt").write_text("not staged\n")
-        done = self.commit()
-        self.assertNotEqual(done.returncode, 0)
-        self.assertIn("backend/ has changes that are not staged", done.stderr)
-        self.assertEqual(self.calls(), "")
+    def test_what_the_commit_leaves_out_of_a_touched_layer_is_refused(self) -> None:
+        a, b = self.repo / "backend/a.txt", self.repo / "backend/b.txt"
+        cases = {
+            "an unstaged edit": (lambda: a.write_text("on disk\n"), "a.txt", ()),
+            "an untracked file": (lambda: b.write_text("new\n"), "b.txt", ()),
+            "a staged file the path leaves out": (
+                lambda: (b.write_text("new\n"), self.git("add", str(b))),
+                "b.txt",
+                ("backend/a.txt",),
+            ),
+        }
+        for case, (leave_out, listed, path) in cases.items():
+            with self.subTest(case):
+                a.write_text("staged\n")
+                self.git("add", str(a))
+                leave_out()
+                done = self.commit(*path)
+                self.assertNotEqual(done.returncode, 0)
+                self.assertIn("backend/ has changes that are not part of this commit", done.stderr)
+                self.assertIn(f"backend/{listed}", done.stderr)
+                self.assertEqual(self.calls(), "")
+                self.git("reset", "-q", "--hard")
+                b.unlink(missing_ok=True)
+
+    def test_the_backend_venv_is_preferred(self) -> None:
+        venv = self.repo / "backend/.venv/bin/python"
+        venv.parent.mkdir(parents=True)
+        shutil.copy(self.stub, venv)
+        (self.repo / "backend/a.txt").write_text("two\n")
+        done = self.git("commit", "-q", "-a", "-m", "x")  # no PYTHON given
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("-m ruff check .", self.calls())
 
     def test_a_merge_is_checked_too(self) -> None:
         self.git("checkout", "-q", "-b", "side")
         (self.repo / "backend/a.txt").write_text("side\n")
         self.assertEqual(self.commit("-a").returncode, 0)
         self.git("checkout", "-q", "-")
-        self.fail()
+        self.make_tools_fail()
         done = self.git("merge", "-q", "--no-ff", "-m", "m", "side", **self.tools)
         self.assertNotEqual(done.returncode, 0)
+        self.assertIn("backend lint failed", done.stdout + done.stderr)
         self.assertEqual(self.commits(), 1)
 
 
@@ -167,7 +192,7 @@ class TheMakeTarget(Scratch):
         self.assertIn("make front-install", front.stdout)
 
     def test_back_fix_formats_even_when_errors_are_left(self) -> None:
-        self.fail()
+        self.make_tools_fail()
         done = self.make("back-fix", f"PYTHON={self.stub}")
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("-m ruff format .", self.calls())
