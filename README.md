@@ -159,8 +159,8 @@ gh api repos/{owner}/{repo}/rulesets --method POST --input .github/rulesets/main
 ```
 
 Or by hand: *Settings → Rules → Rulesets → New branch ruleset*, target the
-default branch, add *Require status checks to pass* with `CI ok` from GitHub
-Actions.
+default branch, add *Require status checks to pass* with `CI ok` and
+`mutation gate` from GitHub Actions.
 
 A workflow that cannot sit under `CI ok`'s `needs:` (one triggered by
 `pull_request_target`, say, which runs from the base branch for access a pull
@@ -168,7 +168,9 @@ request's own run does not get) is added to the ruleset as a **second required
 check**, by its job's name, in `main.json` and on GitHub. It must then keep the
 promise `CI ok` keeps, or it leaves pull requests pending forever: no `paths:`
 filter, `ready_for_review` in its `types:`, and a final job that reports on
-every run, skipping inside when there is nothing to check.
+every run, skipping inside when there is nothing to check. `mutation gate`
+(`.github/workflows/mutation-gate.yml`) is that second check: it passes a pull
+request that touches no sensitive code in seconds.
 
 ## Where the Claude tokens go
 

@@ -52,3 +52,66 @@ for new resources rather than inventing a new one.
 matches what the endpoints answer: run `make openapi` and commit it) ·
 `back-test` (pytest). Green before you push. Once `make setup` has run, each
 commit touching `backend/` runs `back-lint` first; `make back-fix` fixes what ruff can.
+
+## Mutation testing (mutmut)
+
+Coverage says a line *ran*; mutation testing says whether a test would
+*notice* if it were wrong. mutmut rewrites a function one small change at a
+time (`<` to `<=`, `and` to `or`, a constant nudged, a `return` dropped) and
+runs the tests that reach it. A mutant no test fails on **survived**: the
+behaviour it changed is unasserted.
+
+**A signal, not a gate, except in sensitive code.** Claude runs it only where
+it pays: a delicate rule, a new mechanism or a rewrite, or when asked, scoped
+to the functions in question. No score, no sweep, never in `make backend`,
+`make check` or CI. The exception is the paths in `mutation-sensitive.txt`
+(the auth surface): a PR that changes one must carry a run on the functions it
+touched, with every mutant not killed answered in writing, and the `mutation
+gate` check stays red until it does. Never a threshold: a survivor may stay
+if someone wrote down why.
+
+```bash
+make back-mutate ONLY="utils.security.x_verify_password__mutmut_*"  # one function
+make back-mutate ONLY="utils.security*"                              # one module
+make back-mutate-diff PR=<n>        # sensitive code: run, and write the block into PR #n
+make back-mutate-diff NO_RUN=1      # rewrite the block from the results already there
+cd backend && .venv/bin/python -m mutmut show <mutant>              # one mutant's diff
+```
+
+A method is `<module>.xǁ<Class>ǁ<method>__mutmut_*`. A bare `make
+back-mutate` refuses; the whole scope takes `ALL=1`. Postgres must be up, as
+for the tests: each test process gets a database of its own
+(`tools/mutation_db.py`). `back-mutate-diff` works on committed, pushed
+content only: commit the killing test before the run.
+
+**On Windows it runs under WSL, and a refusal never means "skip it".** mutmut
+cannot run on native Windows; the driver says so and how to move (a checkout
+inside the WSL filesystem, not `/mnt/c`).
+
+**Triage: every survivor ends in a decision.**
+
+- **A real gap**: a test that kills it, written about the case the mutant
+  hides (a malformed hash is refused), not about the mutated line.
+- **A mutant nobody can observe**: `# pragma: no mutate` with the reason on
+  that line, for exactly three cases and never to spare a test: *equivalent*
+  (the same result for every input the code can receive), *unreachable* (a
+  guard every caller already satisfies), *text nobody parses* (a log line).
+  An exact boundary or a rare branch is a gap, not a pragma. mutmut hides
+  every mutant that starts on the pragma's line, so in sensitive code the gate
+  refuses one that hides more than one. Never keep a list of accepted
+  survivors outside the code: mutant ids renumber on every edit.
+- **A bug the new test reveals**: fixed in the same PR when small, otherwise
+  filed, and the test marked `xfail` naming the issue.
+- **A decision written in the block** is for what the code cannot carry: a
+  `no mutant` line (a decorated function, such as a route handler, which
+  mutmut never mutates), a `module-level` line (a constant or an import), a
+  mutant that times out even alone. Name the test that covers it.
+- Don't chase 100%: a test that exists only to kill an irrelevant mutant is
+  worse than the pragma.
+
+**Verdicts that lie.** A timeout can be an import failure or machine load, and
+a kill can be a one-off: rerun a mutant alone (`ONLY="<exact name>"`) before it
+decides anything. "no tests" means untested, not safe. `backend/mutants/`
+goes stale (mutmut copies files in and never removes one): delete it after
+pulling, after changing `[tool.mutmut]`, or when results look odd. The tools'
+docstrings hold the rest.

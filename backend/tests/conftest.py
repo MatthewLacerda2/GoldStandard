@@ -4,8 +4,13 @@ The test database name is derived from the repository path so parallel git
 worktrees never collide. The database is created on first use (via the
 maintenance ``postgres`` database). Each test runs inside an outer transaction
 that is rolled back on teardown, so nothing persists between tests.
+
+Under mutation testing (``make back-mutate``) many pytest processes run at
+once, so each takes a database of its own, named by its pid when a test first
+asks for one and dropped when its session ends (``tools/mutation_db.py``).
 """
 
+import asyncio
 import hashlib
 import os
 import subprocess
@@ -21,10 +26,17 @@ from core.config import get_settings
 from core.database import normalize_database_url
 from core.rate_limiter import limiter
 from models.base import Base
+from tools import mutation_db
 
-# One-time guard so DDL/database creation happens once per process even though
-# the engine fixture is function-scoped (each test runs on its own event loop).
-_DB_READY = False
+# mutmut sets this in every process it runs the tests in; the driver sets
+# `mutation_db.ENV` beside it.
+_UNDER_MUTMUT = "MUTANT_UNDER_TEST"
+
+# The database this process already created, so DDL runs once per process even
+# though the engine fixture is function-scoped (each test runs on its own event
+# loop). A name rather than a flag, so it never vouches for a database another
+# process created (a forked process inherits it).
+_READY_DB: str | None = None
 
 
 @pytest.fixture(autouse=True)
@@ -58,10 +70,28 @@ def _base_url() -> str:
     return normalize_database_url(raw)
 
 
-def _test_db_name() -> str:
+def _worktree_db_name() -> str:
     """Derive a stable per-worktree test database name."""
     digest = hashlib.sha1(_repo_root().encode()).hexdigest()[:12]
     return f"test_gs_{digest}"
+
+
+def _mutation_base() -> str | None:
+    """The driver's base name under mutation testing, else None.
+
+    mutmut run bare (not through ``make back-mutate``) would put every process
+    on the worktree's one database, so it fails here, loudly, on the clean run.
+    """
+    base = os.environ.get(mutation_db.ENV)
+    if base is None and _UNDER_MUTMUT in os.environ:
+        pytest.fail("mutmut runs through `make back-mutate`, never bare (backend/CLAUDE.md)")
+    return base
+
+
+def _test_db_name() -> str:
+    """The worktree's database, or this process' own under mutation testing."""
+    base = _mutation_base()
+    return mutation_db.process_name(base) if base else _worktree_db_name()
 
 
 def _split_url(url: str) -> tuple[str, str]:
@@ -70,18 +100,46 @@ def _split_url(url: str) -> tuple[str, str]:
     return head, tail
 
 
-async def _ensure_database(db_name: str) -> None:
-    """Create the test database if it does not already exist."""
+async def _admin_connect() -> asyncpg.Connection:
+    """A raw connection to the maintenance ``postgres`` database."""
     head, _ = _split_url(_base_url())
     # Strip the SQLAlchemy driver marker for a raw asyncpg connection.
-    dsn = head.replace("postgresql+asyncpg://", "postgresql://") + "/postgres"
-    conn = await asyncpg.connect(dsn)
+    return await asyncpg.connect(
+        head.replace("postgresql+asyncpg://", "postgresql://") + "/postgres"
+    )
+
+
+async def _ensure_database(db_name: str) -> None:
+    """Create the test database if it does not already exist."""
+    conn = await _admin_connect()
     try:
         exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", db_name)
         if not exists:
             await conn.execute(f'CREATE DATABASE "{db_name}"')
     finally:
         await conn.close()
+
+
+async def _drop_database(name: str) -> None:
+    conn = await _admin_connect()
+    try:
+        await conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+    finally:
+        await conn.close()
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session: pytest.Session) -> None:
+    """Under mutation testing, drop the database this process created.
+
+    Last of the hooks: pytest tears the last test's fixtures down in its own
+    ``pytest_sessionfinish``, and a forced drop before that would cut the
+    connection its rollback still needs.
+    """
+    global _READY_DB
+    if os.environ.get(mutation_db.ENV) and _READY_DB == _test_db_name():
+        asyncio.run(_drop_database(_READY_DB))
+        _READY_DB = None
 
 
 @pytest_asyncio.fixture
@@ -91,17 +149,17 @@ async def engine():
     asyncpg connections are bound to the event loop that created them, so the
     engine is created per test (each test runs on its own loop). NullPool avoids
     reusing connections across loops. The database and tables are created once
-    per process, guarded by ``_DB_READY``.
+    per process, guarded by ``_READY_DB``.
     """
-    global _DB_READY
+    global _READY_DB
     db_name = _test_db_name()
     head, _ = _split_url(_base_url())
     test_engine = create_async_engine(f"{head}/{db_name}", future=True, poolclass=NullPool)
-    if not _DB_READY:
+    if _READY_DB != db_name:
         await _ensure_database(db_name)
         async with test_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        _DB_READY = True
+        _READY_DB = db_name
     yield test_engine
     await test_engine.dispose()
 

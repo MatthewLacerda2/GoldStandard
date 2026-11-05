@@ -237,6 +237,13 @@ make setup      # once per clone: each commit runs `make pre-commit` (lint only)
 A red gate is never handed off as "probably pre-existing": re-run that target on
 `origin/main`, and only if it is red there too, say so with the output.
 
+**Gates block on correctness; signals inform on quality.** Mutation testing
+(backend/CLAUDE.md) is a signal: Claude runs it locally, only on the code that
+needs it, and it is never a score. The one exception is sensitive code
+(`backend/mutation-sensitive.txt`): the `mutation gate` check holds a PR that
+changes it until a run on the functions it touched is in its body, every
+survivor answered. CI only reads that block; the mutants never run there.
+
 ## Server-start guardrails
 
 Do **not** auto-start dev servers, `docker compose up`, or long-running

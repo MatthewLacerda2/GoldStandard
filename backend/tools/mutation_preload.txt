@@ -1,0 +1,23 @@
+# Imported once by mutmut's fork server (`pyproject.toml` → preload_modules_file),
+# so each mutant's process starts with them loaded and imports only the rest:
+# the app's import is most of what a mutant costs before its first test.
+#
+# Third-party only, so nothing of the app's (its settings, its engine) exists
+# before a mutant's own process does. mutmut skips a line that fails to import
+# without a word, so `tests/tools/test_mutate.py` imports every one.
+fastapi
+fastapi.routing
+fastapi.security
+starlette
+pydantic
+pydantic_settings
+sqlalchemy
+sqlalchemy.ext.asyncio
+sqlalchemy.orm
+asyncpg
+httpx
+jwt
+slowapi
+limits
+pytest
+pytest_asyncio

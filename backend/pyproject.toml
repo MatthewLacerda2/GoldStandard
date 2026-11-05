@@ -28,3 +28,45 @@ extend-immutable-calls = [
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+# Mutation testing: run it through `make back-mutate`, never bare. The driver
+# (`tools/mutate.py`) refuses an accidental whole-scope run and gives each test
+# process a database of its own. What it is for and how to triage a survivor:
+# backend/CLAUDE.md, "Mutation testing".
+[tool.mutmut]
+# The logic: everything under `services/`, `core/` and `utils/` (a new module
+# there is mutated without touching this file), then the sensitive files
+# outside them (`mutation-sensitive.txt`; a test fails when one is missing
+# here). A handler is decorated, and mutmut makes no mutant of a decorated
+# function: `api/v1/auth.py` is here so a change to it is named in the block.
+source_paths = ["services", "core", "utils", "api/deps.py", "api/v1/auth.py"]
+# mutmut copies only `source_paths` (and `tests/`, `pyproject.toml`) into
+# `mutants/` and runs the tests there, so everything else the suite imports or
+# reads is copied too. A missing entry fails the first, unmutated run, and the
+# driver prints pytest's error. A sensitive file inside a copied directory is
+# copied back unmutated and mutated again: a moment, no verdict changed.
+also_copy = [
+    "api",
+    "models",
+    "repositories",
+    "schemas",
+    "tools",
+    "main.py",
+    "pytest.ini",
+    "mutation-sensitive.txt",
+    ".env",
+]
+# The whole suite: mutmut records which tests reach each function and runs only
+# those against its mutants. A hand-picked list produces false survivors.
+pytest_add_cli_args_test_selection = ["tests"]
+# Never the default `fork`: it runs the suite in mutmut's own process and forks
+# every mutant from it, so each one inherits the conftest that process
+# imported. The fork server keeps test code out of the parent, each mutant
+# imports the conftest itself and takes its own database (`tools/mutation_db.py`),
+# and the preload list keeps that import short.
+process_isolation = "forkserver"
+forkserver_warmup = "import"
+preload_modules_file = "tools/mutation_preload.txt"
+# A mutant's wall-clock limit is (its tests' time + this) x 15. The default 1 s
+# lets ten processes importing the app at once time out before any test runs.
+timeout_constant = 5.0
