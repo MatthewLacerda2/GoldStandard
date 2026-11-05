@@ -71,7 +71,7 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
   an issue, a pull request or a date (`tools/docs_lint/`, `make docs-lint`).
 - **What a doc points at exists (docs lint, `named-path`):** a repository path
   or a `` `make <target>` `` must exist where it is named: in the Markdown
-  under `docs/` and `.claude/`, in every `CLAUDE.md` and `README.md`, and in
+  of the `docs` and `.claude` folders, in every `CLAUDE.md` and `README.md`, and in
   the comments (never the strings) of `.py`, `.ts`/`.tsx`, `.sh`, the `.yml`
   under `.github/`, the git hooks and the `Makefile`. A move that leaves a
   pointer behind fails the gate instead of misleading the next reader.

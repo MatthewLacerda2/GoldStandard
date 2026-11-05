@@ -19,6 +19,8 @@ CODE_SUFFIXES = frozenset({".py", ".sh", ".ts", ".tsx", ".mts", ".cts", ".js", "
 _SLASH_SUFFIXES = frozenset({".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"})
 
 _HTML_COMMENT = re.compile(r"<!--((?:(?!-->).)*)-->")
+# What a line that is nothing but a comment opens with, in a code file.
+_CODE_COMMENT = ("#", "//", "/*", "*")
 # A fence opens with three or more backticks or tildes, indented at most three
 # spaces, and closes with a run of the same character at least as long.
 _FENCE = re.compile(r" {0,3}(`{3,}|~{3,})(.*)")
@@ -178,10 +180,13 @@ def allowed_line(doc: Doc, index: int, rule: str) -> bool:
     """Whether line `index` (0-based) is excused from `rule`. In a Markdown
     page, an HTML comment on it allows it, or one in the unbroken run of
     one-line HTML comments directly above it does; an allow inside a fence
-    excuses only its own line. In a code file, a comment on it or on the line
-    directly above does."""
+    excuses only its own line. In a code file, a comment on it allows it, or
+    one on the line directly above when that line is nothing but a comment: an
+    allow after code on its line is that line's own."""
     if not doc.is_markdown:
-        near = (*doc.comments.get(index - 1, []), *doc.comments.get(index, []))
+        near = list(doc.comments.get(index, []))
+        if index > 0 and doc.lines[index - 1].lstrip().startswith(_CODE_COMMENT):
+            near += doc.comments.get(index - 1, [])
         return any(grants(comment, rule) for comment in near)
     on_line = (m.group(1) for m in _HTML_COMMENT.finditer(doc.lines[index]))
     if any(grants(comment, rule) for comment in on_line):
