@@ -18,16 +18,29 @@ import hashlib
 import os
 
 import asyncpg
+from sqlalchemy import make_url
 
 # What the driver sets and the conftest reads: the base of every name.
 ENV = "GS_MUTATION_DB"
 
+# URL parameters SQLAlchemy's asyncpg dialect keeps for its own adapter, which
+# `asyncpg.connect` would refuse as unknown arguments.
+_ADAPTER_ONLY = ("prepared_statement_cache_size", "prepared_statement_name_func")
 
-def admin_dsn(database_url: str) -> str:
-    """The maintenance ``postgres`` database of the server ``database_url``
-    (a normalized SQLAlchemy asyncpg URL) names, as a raw asyncpg DSN."""
-    head = database_url.rpartition("/")[0]
-    return f"{head.replace('postgresql+asyncpg://', 'postgresql://')}/postgres"
+
+def admin_connect_args(database_url: str) -> dict:
+    """``asyncpg.connect`` arguments for the maintenance ``postgres`` database
+    of the server ``database_url`` (a normalized SQLAlchemy asyncpg URL) names.
+
+    They are the ones SQLAlchemy's dialect hands asyncpg for the app's own
+    connections, so every URL parameter (``ssl=require``, a timeout) reaches
+    this connection under the same name. A raw DSN would not do: asyncpg reads
+    a DSN by libpq's names (``sslmode``) and sends any other one to the server
+    as a setting, which it refuses.
+    """
+    url = make_url(database_url).set(database="postgres")
+    _, args = url.get_dialect()().create_connect_args(url)
+    return {key: value for key, value in args.items() if key not in _ADAPTER_ONLY}
 
 
 async def drop(conn: asyncpg.Connection, name: str) -> None:
@@ -51,9 +64,10 @@ def process_name(base: str) -> str:
     return f"{base}_{os.getpid()}"
 
 
-async def sweep(admin_dsn: str, base: str) -> list[str]:
-    """Drop every database of ``base``'s runs; return their names."""
-    conn = await asyncpg.connect(admin_dsn)
+async def sweep(admin_args: dict, base: str) -> list[str]:
+    """Drop every database of ``base``'s runs; return their names.
+    ``admin_args`` is what ``admin_connect_args`` returns."""
+    conn = await asyncpg.connect(**admin_args)
     try:
         rows = await conn.fetch(
             "SELECT datname FROM pg_database WHERE starts_with(datname, $1)", f"{base}_"

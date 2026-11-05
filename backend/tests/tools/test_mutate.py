@@ -124,7 +124,7 @@ def test_a_name_no_mutant_matches_is_named_instead_of_a_failing_test(tmp_path, m
 
 
 def test_a_database_that_refuses_the_sweep_keeps_mutmuts_exit_code(monkeypatch, capsys):
-    async def refuse(dsn, base):
+    async def refuse(admin_args, base):
         raise asyncpg.InvalidPasswordError("password authentication failed")
 
     explained = []
@@ -134,6 +134,12 @@ def test_a_database_that_refuses_the_sweep_keeps_mutmuts_exit_code(monkeypatch, 
     monkeypatch.setattr(mutate, "unmatched", lambda mutants, names: [])
     assert mutate.main([SECURITY]) == 3
     assert explained and "InvalidPasswordError" in capsys.readouterr().out
+
+
+def test_a_url_sqlalchemy_cannot_read_skips_the_sweep_without_raising(monkeypatch, capsys):
+    monkeypatch.setenv("DATABASE_URL", "not a url")
+    mutate._sweep("test_gs_mut_x")
+    assert "could not drop the test databases: ArgumentError" in capsys.readouterr().out
 
 
 def _mutants_tree(root, conftest: str):
