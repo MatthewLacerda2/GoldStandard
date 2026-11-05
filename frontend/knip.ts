@@ -28,8 +28,10 @@ const config: KnipConfig = {
   ignoreExportsUsedInFile: true,
   // The exception, written on the export itself with its reason:
   //   /** @keep <why nothing imports it yet, and why it stays> */
-  // `scripts/check-deadcode.ts` fails a tag without a reason, and one on an
-  // export knip would not report anyway.
+  // Knip reads a tag in any comment before an export, so
+  // `scripts/check-deadcode.ts` fails every other spelling, a tag without a
+  // reason, one on an export knip would not report anyway, and the tags knip
+  // skips whatever this says (`@public`, `@beta`, `@alias`).
   tags: ["-keep"],
 };
 

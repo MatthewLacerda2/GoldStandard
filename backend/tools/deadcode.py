@@ -25,9 +25,14 @@ wrapper adds the policy that makes its output worth gating on:
    app.
 4. **What stays on purpose says so where it is**: ``# lint: allow(deadcode)
    <why>`` at the end of the reported line, or alone on the line directly
-   above it. Either excuses that one line. The reason is required, and an
-   allow that excuses nothing is reported, so they only shrink. It is the only
-   exception: vulture's own ``# noqa`` handling is switched off.
+   above it. Either excuses that one line, every finding on it. A decorated
+   definition is reported at its first decorator, so its allow goes there.
+   The reason is required (more than separators, as house_lint's marker allow
+   reads it), and an allow that excuses nothing is reported, so they only
+   shrink. It is the only exception we write: vulture's own ``# noqa``
+   handling is switched off. Vulture's built-in ignores still apply: dunder
+   methods, and ``test_*`` functions and ``*Test*`` classes in ``test*.py``
+   files, which pytest collects by name.
 
 Usage (from ``backend/``)::
 
@@ -35,6 +40,7 @@ Usage (from ``backend/``)::
 """
 
 import ast
+import glob
 import os
 import re
 import tokenize
@@ -68,12 +74,15 @@ IGNORE_NAMES: dict[str, str] = {
 }
 
 ALLOW = re.compile(r"lint: allow\(deadcode\)(?P<why>.*)")
+# A reason is anything besides separators: house_lint's marker allow reads it so.
+REASON = re.compile(r"[^\s:—#*/-]")
 FIX = (
     "Delete the code, and any test that is its only use. If a framework calls it by"
     " convention, add its decorator to IGNORE_DECORATORS or its name to IGNORE_NAMES"
     " in backend/tools/deadcode.py, with the reason. If it stays on purpose, write"
     " `# lint: allow(deadcode) <why>` at the end of the reported line or alone on the"
-    " line above it. An entry or an allow that excuses nothing is deleted."
+    " line above it (a decorated definition is reported at its first decorator). An"
+    " entry or an allow that excuses nothing is deleted."
 )
 
 
@@ -127,7 +136,7 @@ def allows(root: Path) -> list[Allow]:
                 if token.type == tokenize.COMMENT and (match := ALLOW.search(token.string)):
                     line = token.start[0]
                     alone = not token.line[: token.start[1]].strip()
-                    has_reason = bool(re.search(r"\w", match["why"]))
+                    has_reason = bool(REASON.search(match["why"]))
                     found.append(Allow(path.resolve(), line, line + alone, has_reason))
     return found
 
@@ -135,7 +144,9 @@ def allows(root: Path) -> list[Allow]:
 def check(root: Path = BACKEND, tests: str = TESTS) -> list[str]:
     """Every finding under ``root``, as ``path:line: message`` (policy 1-4)."""
     dead = scan(root, [])
-    only_tests = [f for f in scan(root, [f"{root.resolve() / tests}/*"]) if f not in dead]
+    # Escaped: a `[` or `?` in the path would make the pattern miss the tests.
+    without = f"{glob.escape(str(root.resolve() / tests))}/*"
+    only_tests = [f for f in scan(root, [without]) if f not in dead]
     findings = [*dead, *((p, n, f"{m}, used only by tests") for p, n, m in only_tests)]
     every = allows(root)
     excusing = {(a.path, a.excuses) for a in every if a.has_reason}
@@ -156,7 +167,9 @@ def check(root: Path = BACKEND, tests: str = TESTS) -> list[str]:
 
 def unmatched_entries(root: Path = BACKEND) -> list[str]:
     """The IGNORE_DECORATORS and IGNORE_NAMES patterns nothing under ``root``
-    matches: a decorator vulture would read, or a name defined there."""
+    matches: a decorator vulture would read, or a name defined there (a
+    function, class, attribute or variable, which vulture's ``ignore_names``
+    all cover)."""
     decorators: set[str] = set()
     names: set[str] = set()
     for path in _sources(root):
@@ -164,6 +177,10 @@ def unmatched_entries(root: Path = BACKEND) -> list[str]:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 names.add(node.name)
                 decorators.update(get_decorator_name(d) for d in node.decorator_list)
+            elif isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store):
+                names.add(node.attr)
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                names.add(node.id)
     return [
         f"{table} names '{pattern}', which matches nothing in the backend"
         for table, entries, seen in (

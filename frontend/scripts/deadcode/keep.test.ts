@@ -1,41 +1,76 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { judgeKeeps, keepTags } from "./keep";
+import { judgeTags, reportedExports, taggedExports } from "./keep";
 
-const text = [
-  "/** @keep the worked example's next page */",
-  "export function kept() {}",
-  "/** @keep */",
-  "export const bare = 1, other = 2;",
-  "/** @keep a reason */",
-  "export type Imported = string;",
-  "/** @keep not exported, so not knip's */",
-  "function local() {}",
-].join("\n");
-const keeps = keepTags([{ file: "src/a.ts", text }]);
+const judge = (text: string, excusing: string[] = []) =>
+  judgeTags(
+    taggedExports([{ file: "src/a.ts", text }]),
+    new Set(excusing.map((name) => `src/a.ts#${name}`)),
+  ).map((line) => line.replace(/^src\/a\.ts:\d+: /, ""));
 
-describe("keepTags", () => {
-  it("finds every exported declaration tagged @keep, with its reason", () => {
-    expect(keeps.map((k) => [k.name, k.line, k.reason])).toEqual([
-      ["kept", 1, "the worked example's next page"],
-      ["bare", 3, ""],
-      ["other", 3, ""],
-      ["Imported", 5, "a reason"],
+describe("judgeTags", () => {
+  it("passes a reasoned keep tag on an export knip finds unused", () => {
+    const text = [
+      "/** @keep the worked example's next page */",
+      "export function kept() {}",
+      "/**",
+      " * Items, for the next page.",
+      " * @keep no page lists them yet",
+      " */",
+      "export default function listed() {}",
+    ].join("\n");
+    expect(judge(text, ["kept", "default"])).toEqual([]);
+  });
+
+  it("refuses a keep tag knip reads that is not one doc-comment tag", () => {
+    const text = [
+      "// @keep in a line comment",
+      "export function line() {}",
+      "/* @keep in a block comment */",
+      "export function block() {}",
+      "/** Mentions @keep in its prose. */",
+      "export function prose() {}",
+      "/** @keep once\n * @keep twice */",
+      "export function twice() {}",
+    ].join("\n");
+    const spelled = "a keep tag is written once, as /** @keep <why> */";
+    expect(judge(text, ["line", "block", "prose", "twice"])).toEqual(
+      ["line", "block", "prose", "twice"].map((name) => `${name}: ${spelled}`),
+    );
+  });
+
+  it("flags a keep tag without a reason, and one that excuses nothing", () => {
+    const text = [
+      "/** @keep — */",
+      "export const bare = 1;",
+      "/** @keep a reason */",
+      "export type Imported = string;",
+    ].join("\n");
+    expect(judge(text, ["bare"])).toEqual([
+      "bare: its keep tag gives no reason",
+      "Imported: its keep tag excuses nothing, something imports it",
     ]);
+  });
+
+  it("refuses the tags knip always skips an export for", () => {
+    const text = ["public", "beta", "alias"]
+      .map((tag) => `/** @${tag} */\nexport function ${tag}Dead() {}`)
+      .join("\n");
+    expect(judge(text)).toEqual(
+      ["public", "beta", "alias"].map(
+        (tag) =>
+          `${tag}Dead carries @${tag}, which knip always skips: not allowed here`,
+      ),
+    );
   });
 });
 
-describe("judgeKeeps", () => {
-  it("passes a reasoned @keep on an export knip finds unused", () => {
-    const excusing = new Set(["src/a.ts#kept", "src/a.ts#Imported"]);
-    expect(judgeKeeps(keeps.slice(0, 1), excusing)).toEqual([]);
-  });
-
-  it("flags a @keep without a reason, and one that excuses nothing", () => {
-    expect(judgeKeeps(keeps, new Set(["src/a.ts#kept"]))).toEqual([
-      "src/a.ts:3: @keep on bare gives no reason",
-      "src/a.ts:3: @keep on other gives no reason",
-      "src/a.ts:5: @keep on Imported excuses nothing: something imports it now",
-    ]);
+describe("reportedExports", () => {
+  it("reads knip's JSON report, and says so when knip did not answer", () => {
+    const json = JSON.stringify({
+      issues: [{ file: "src/a.ts", exports: [{ name: "x" }], types: [] }],
+    });
+    expect(reportedExports(json)).toEqual(new Set(["src/a.ts#x"]));
+    expect(reportedExports("")).toMatch(/^knip could not run: /);
   });
 });

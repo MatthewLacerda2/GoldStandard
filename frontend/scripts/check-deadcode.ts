@@ -1,20 +1,17 @@
 // The frontend's dead-code gate (`bun run deadcode`, run by
 // `make front-deadcode`). Three checks, each reported even when another fails:
 //   1. knip (`knip.ts`): files, exports and dependencies nothing uses;
-//   2. the `@keep` tags knip skips (`deadcode/keep.ts`): each gives a reason
-//      and still excuses an export knip would report;
+//   2. the tags knip skips an export for (`deadcode/keep.ts`): only the keep
+//      tag, with a reason, on an export knip would report without it;
 //   3. the locale keys nothing reads (`check-i18n-keys.ts`).
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { judgeKeeps, keepTags } from "./deadcode/keep";
+import { judgeTags, reportedExports, taggedExports } from "./deadcode/keep";
 
 const NAME = "check-deadcode";
 const FRONTEND = join(import.meta.dirname, "..");
 const KNIP = join(FRONTEND, "node_modules", ".bin", "knip");
-// Where an export can live: the app, the tooling, and the config files beside
-// them (node_modules and dist are never walked).
-const ROOTS = ["src", "scripts", "eslint-rules"];
 
 const run = (command: string, args: string[]) =>
   spawnSync(command, args, { cwd: FRONTEND, stdio: "inherit" }).status === 0;
@@ -31,9 +28,9 @@ function knip(): boolean {
   return false;
 }
 
-function keeps(): boolean {
-  // Knip asked for the tagged exports only: those it would report untagged.
-  const { stdout } = spawnSync(
+function tags(): boolean {
+  // Knip asked for the kept exports only: those it would report untagged.
+  const knipRun = spawnSync(
     KNIP,
     [
       ...["--no-config-hints", "--no-exit-code", "--reporter", "json"],
@@ -41,42 +38,34 @@ function keeps(): boolean {
     ],
     { cwd: FRONTEND, encoding: "utf8" },
   );
-  const report = JSON.parse(stdout) as {
-    issues: {
-      file: string;
-      exports: { name: string }[];
-      types: { name: string }[];
-    }[];
-  };
-  const excusing = new Set(
-    report.issues.flatMap(({ file, exports, types }) =>
-      [...exports, ...types].map(({ name }) => `${file}#${name}`),
-    ),
+  const excusing = reportedExports(knipRun.stdout ?? "");
+  if (typeof excusing === "string") {
+    console.error(`${NAME}: ${excusing}\n${knipRun.stderr ?? ""}`);
+    return false;
+  }
+  // Every TypeScript file knip can read: tracked, or new and not ignored.
+  const listed = spawnSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "*.ts", "*.tsx"],
+    { cwd: FRONTEND, encoding: "utf8" },
   );
-  const files = [
-    ...readdirSync(FRONTEND),
-    ...ROOTS.flatMap((root) =>
-      readdirSync(join(FRONTEND, root), {
-        recursive: true,
-        encoding: "utf8",
-      }).map((file) => join(root, file)),
-    ),
-  ];
-  const sources = files
-    .filter((file) => /\.tsx?$/.test(file))
+  const sources = listed.stdout
+    .split("\n")
+    .filter(Boolean)
     .map((file) => ({
       file,
       text: readFileSync(join(FRONTEND, file), "utf8"),
     }));
-  const wrong = judgeKeeps(keepTags(sources), excusing);
+  const wrong = judgeTags(taggedExports(sources), excusing);
   for (const line of wrong) console.error(`${NAME}: ${line}`);
   if (wrong.length === 0) return true;
   console.error(
-    "\nA @keep says why the export stays: `/** @keep <why> */`. One on an export something" +
-      " imports now is deleted.\n",
+    "\nAn export that stays on purpose says why on itself, once: `/** @keep <why> */`." +
+      " Delete a keep tag on an export something imports now, and any @public, @beta or" +
+      " @alias: knip skips those with no reason asked.\n",
   );
   return false;
 }
 
-const results = [knip(), keeps(), run("bun", ["scripts/check-i18n-keys.ts"])];
+const results = [knip(), tags(), run("bun", ["scripts/check-i18n-keys.ts"])];
 if (results.includes(false)) process.exit(1);

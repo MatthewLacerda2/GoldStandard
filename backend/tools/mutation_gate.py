@@ -168,10 +168,6 @@ def hash_of(paths: list[str], blob_of: dict[str, str]) -> str:
     return total.hexdigest()
 
 
-def content_hash(root: Path, paths: list[str], rev: str = "HEAD") -> str:
-    return hash_of(paths, blobs(root, paths, rev))
-
-
 def file_lines(
     root: Path, base: str, paths: list[str], rev: str = "HEAD"
 ) -> dict[str, source.Lines]:

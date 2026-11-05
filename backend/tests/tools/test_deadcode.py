@@ -7,6 +7,7 @@ policy in ``tools/deadcode.py``'s docstring.
 
 from pathlib import Path
 
+from tools import deadcode
 from tools.deadcode import check, unmatched_entries
 
 
@@ -53,10 +54,19 @@ Middleware()
     assert check(_project(tmp_path, app)) == []
 
 
+ONLY_TESTED = "def only_tested():\n    pass\n\n\ndef used():\n    pass\n\n\nused()\n"
+CALLS_IT = "from app import only_tested\n\n\ndef test_it():\n    only_tested()\n"
+
+
 def test_what_only_a_test_calls_is_flagged(tmp_path: Path):
-    app = "def only_tested():\n    pass\n\n\ndef used():\n    pass\n\n\nused()\n"
-    test = "from app import only_tested\n\n\ndef test_it():\n    only_tested()\n"
-    root = _project(tmp_path, app, test)
+    root = _project(tmp_path, ONLY_TESTED, CALLS_IT)
+    assert _messages(root) == ["unused function 'only_tested', used only by tests"]
+
+
+def test_glob_characters_in_the_path_still_leave_the_tests_out(tmp_path: Path):
+    root = tmp_path / "a[b]?"
+    root.mkdir()
+    _project(root, ONLY_TESTED, CALLS_IT)
     assert _messages(root) == ["unused function 'only_tested', used only by tests"]
 
 
@@ -118,6 +128,12 @@ def test_an_ignore_entry_nothing_matches_is_reported(tmp_path: Path):
     unmatched = unmatched_entries(tmp_path)
     assert "IGNORE_NAMES names 'dispatch', which matches nothing in the backend" not in unmatched
     assert "IGNORE_DECORATORS names '@*router.*', which matches nothing in the backend" in unmatched
+
+
+def test_an_ignore_name_can_match_an_attribute(tmp_path, monkeypatch):
+    monkeypatch.setitem(deadcode.IGNORE_NAMES, "handler", "read by the framework")
+    _project(tmp_path, "class Hook:\n    def __init__(self):\n        self.handler = 1\n")
+    assert not any("'handler'" in line for line in unmatched_entries(tmp_path))
 
 
 def test_every_ignore_entry_matches_backend_code():

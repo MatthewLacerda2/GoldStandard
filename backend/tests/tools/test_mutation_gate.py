@@ -205,7 +205,7 @@ def _real_body(repo) -> str:
     base = gate.merge_base(repo.root, "origin/main")
     diff = gate.expected(repo.root, base, [GUARD], [GUARD])
     report = block.Report(
-        content=gate.content_hash(repo.root, [GUARD]),
+        content=gate.hash_of([GUARD], gate.blobs(repo.root, [GUARD])),
         files=[GUARD],
         mutated={f: (4, h) for f, h in diff.functions.items()},
         counts={"killed": 4},

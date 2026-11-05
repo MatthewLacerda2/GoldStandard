@@ -60,10 +60,11 @@ silence it, as they do any rule, and nothing yet asks them for a reason.
 nothing imports, an export nothing imports and a dependency nothing uses, and
 `scripts/check-i18n-keys.ts`, which fails on a locale key nothing in `src/`
 reads (tests don't count). Delete what they name. An export that stays on
-purpose says why on itself, `/** @keep <why> */`; a `@keep` without a reason,
-or on an export something imports, fails. A key or namespace read in a way the
-check cannot see goes in its `KEPT`, with the reason. Vendored
-`components/ui/` primitives keep their whole API.
+purpose says why on itself, once, `/** @keep <why> */`; a keep tag spelled
+any other way, without a reason or on an export something imports fails, and
+so does `@public`, `@beta` or `@alias`, which knip always skips. A key or
+namespace read in a way the check cannot see goes in its `KEPT`, with the
+reason. Vendored `components/ui/` primitives keep their whole API.
 
 ## Gate before pushing
 

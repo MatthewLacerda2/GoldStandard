@@ -45,6 +45,7 @@ def base_name(repo_root: str) -> str:
     return f"test_gs_mut_{digest}"
 
 
+# lint: allow(deadcode) the conftest names its database with it during a mutation run
 def process_name(base: str) -> str:
     """This process' own database."""
     return f"{base}_{os.getpid()}"
