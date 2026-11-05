@@ -279,6 +279,20 @@ regression-run:
 	$(REGRESSION) run --base $(BASE) $(REGRESSION_TOOLS)
 
 # ---------------------------------------------------------------------------
+# Merge queue  (tools/merge_queue/: its __init__.py docstring is the design)
+# ---------------------------------------------------------------------------
+# `make queue` merges cleared pull requests into main once CI really passed on
+# their head: PRS="12 14" for those, or ARGS=--watch for the ones labelled
+# `queue`; ARGS=--dry-run only reads; --for MINUTES bounds a watch (default 70).
+# `make mergeable PR=12` asks the same questions read-only: may it merge now?
+.PHONY: queue mergeable
+queue:
+	$(TOOLS_PYTHON) -m tools.merge_queue $(PRS) $(ARGS)
+
+mergeable:
+	$(TOOLS_PYTHON) -m tools.merge_queue --mergeable $(PR)
+
+# ---------------------------------------------------------------------------
 # Repository setup  (run once in a repo made from this template; needs `gh`)
 # ---------------------------------------------------------------------------
 # The issue labels CLAUDE.md's rules are written against. `--force` updates a
@@ -298,6 +312,7 @@ labels:
 	gh label create human          --force --color 5319E7 --description "Needs a human in the loop end to end. Do not start."
 	gh label create agent          --force --color F95F2B --description "Filed by an agent on its own; treated like any other issue."
 	gh label create dependencies   --force --color 0386F6 --description "A Dependabot bump (.github/dependabot.yml)."
+	gh label create queue          --force --color 1D76DB --description "Reviewed and cleared to merge: \`make queue ARGS=--watch\` takes it once it is ready."
 	-@for l in bug enhancement duplicate invalid question wontfix "good first issue" "help wanted" minor; do \
 		gh label delete "$$l" --yes 2>/dev/null; done
 

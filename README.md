@@ -206,6 +206,9 @@ every run, skipping inside when there is nothing to check. `mutation gate`
 (`.github/workflows/mutation-gate.yml`) is that second check: it passes a pull
 request that touches no sensitive code in seconds.
 
+The merge queue (`make queue`) reads the required checks from the same file, so
+a second required check is waited on there too, with nothing else to change.
+
 ## Where the Claude tokens go
 
 `make claude-usage SINCE=YYYY-MM-DD` (default: the last 7 days) reports where

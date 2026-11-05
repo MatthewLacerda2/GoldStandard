@@ -42,6 +42,12 @@ Before the merge, when the PR hits any **trigger**:
   `backend/tools/`, `frontend/eslint-rules/`, `frontend/scripts/`,
   `frontend/eslint.config.ts`, `frontend/knip.ts`, or the lint and test config the gates run.
 
+The paths each trigger covers are listed once, in `tools/review_triggers.py`:
+the merge queue reads it to hold a triggered PR until its review record exists,
+and `make tools` fails while a path named above is missing from it. Ask it about
+a branch with
+`git diff --name-only origin/main...HEAD | python3.14 -m tools.review_triggers`.
+
 And **on demand**: whenever the user asks for a PR to be reviewed, open or
 already merged (*Catching up on a merged PR*, below).
 
@@ -134,7 +140,15 @@ checked against the code first. Then:
 3. **One PR comment, headed `Independent review`**, lists every finding and what
    became of it: fixed (with the commit), declined (with why), or sent to the
    user. Say so if there were no findings, too. Since no person reads the code,
-   this comment is the record that the review happened.
+   this comment is the record that the review happened. The heading is the
+   comment's first line, alone or with a short note in parentheses
+   (`## Independent review (second round)`), and the next line names the head
+   the findings were answered on, in full: `Reviewed head: <the branch's SHA
+   after step 2's push>`. The merge queue counts the record for that head only, or for a
+   rebase of it that resolved nothing (its tree is exactly the reviewed change
+   replayed onto the new base); anything else pushed after it owes a review of
+   the new commits and a new record naming the new head.
+   Post it from the PR's author or an assignee: nobody else's counts.
 4. When the fixes rework a query, a contract or the logic substantially, one more
    reviewer reads the new diff. Otherwise one round is the review.
 
@@ -154,6 +168,8 @@ comment goes on the reviewed PR and links the fix.
   reviews the summary, not the code.
 - Letting the reviewer push its own fixes. It reports; the coder fixes.
 - Merging a triggered PR before its `Independent review` comment exists.
+- Posting the record before the fixes are pushed. It then names a head that is
+  no longer the branch's, and the queue hands the PR back.
 - Waiting for a person to review the code after this one. Nobody will; this
   review and the gates are what the PR gets.
 - Skipping the review because the diff is small. The trigger is what the change

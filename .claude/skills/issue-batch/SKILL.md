@@ -19,25 +19,23 @@ the work.
 
 Inside the five, file collision is the finer limit.
 
-## The queue is not the bottleneck here — collision is
+## The merge queue does the waiting; collision is the limit
 
-Measure before importing anyone's rule. In the template as it stands, CI's
-backend and frontend runs each finish in **about 35 seconds**, cold and with no
-caching: a `docker compose up --wait postgres`, a `pip install`, a `bun install`,
-and `make backend` / `make frontend`. A rebase-and-re-verify costs under a minute.
-Re-measure once your own suite is real — `gh run list` prints it — because the
-whole of this section is downstream of that number.
+Merging by hand costs the waiting, not the runner: whoever merges watches CI,
+rebases, waits again, merges and deletes the branch, holding their whole context
+open the entire time, once per pull request. A fast CI does not make that free,
+and a project made from this template will have a slower one. So the batch's
+session never sits through CI: it reads the diff, labels the pull request
+`queue` once it is reviewed and ready, and keeps one watch running in the
+background for the whole batch (`ci-merge`, *Feeding the merge queue*). The
+queue hands back only what needs somebody.
 
-So there is nothing to pipeline around. In a compiled monorepo the merge queue is
-the scarce resource and the shape of the work is dictated by it; here it is
-cheaper than the conversation about it. **Cap the number of branches in flight on
-file collision**, not on the queue — and not on a person's reading time, because
-nobody reads the diffs (`CLAUDE.md`, *Pull Requests*).
-
-What survives from the compiled-repo arithmetic is the part CI never paid for:
-over shared files, N branches cost **N(N−1)/2 rebases**. That is git's bill, not
-the runner's, and it is still real. A clean rebase is seconds; a colliding one is
-a session.
+What the queue cannot drain is the collision between branches. Over shared
+files, N branches cost **N(N−1)/2 rebases**. That is git's bill, not the
+runner's: the queue does a clean rebase in seconds, but hands a colliding one
+back, and that one is a session. **Cap the number of branches in flight on file
+collision**, not on CI, and not on a person's reading time, because nobody reads
+the diffs (`CLAUDE.md`, *Pull Requests*).
 
 ## Merges serialize per layer, not globally
 
@@ -54,8 +52,14 @@ compiled repo serializes everything:
 - `pytest` imports the whole backend. A helper removed here and used there is the
   same failure in a different language.
 
-So: **one branch at a time into `main` per layer**, the second rebased and
-re-verified. Across layers, do not bother.
+The queue does not re-verify a branch that merges cleanly: it merges it as it
+is, and `main`'s own run of the merge is what catches the pair. A red `main`
+then holds every other merge until the fix lands (`ci-merge`, *Feeding the
+merge queue*), so the damage is one fix branch, not a broken batch. When two
+branches in one layer touch the same shared surface (an exported type, a
+helper), skip even that: **label the second only once it is rebased onto the
+`main` the first landed in**, so its own run re-verifies the pair. Across
+layers, do not bother.
 
 The exception cuts the other way, and it is the dangerous one. **The contract
 *between* the layers is checked only in part.** `make front-contract` holds the
@@ -164,9 +168,10 @@ batch changes:
 
 - **Starting the batch was the approval**, so each pull request merges the
   moment `ci-merge` clears it, without asking.
-- **The batch's session reviews and merges; the coder does neither.** It
-  dispatches `independent-review` when a trigger hits and sends the findings
-  back to the coder to answer.
+- **The batch's session reviews and labels; the queue merges; the coder does
+  neither.** The session dispatches `independent-review` when a trigger hits,
+  sends the findings back to the coder to answer, and labels the pull request
+  `queue` once it is ready. A hand-back goes to the coder that wrote the branch.
 
 ## Re-read the board after every merge
 
@@ -195,7 +200,8 @@ to be read cold (`CLAUDE.md`, *Issues*). Beyond that:
   `make claude-usage` ties an agent's tokens to a pull request by that number.
 - Tell it which gate to run — the layer target while working, `make check` before
   the pull request goes ready — and point it at `ci-merge` for the rest.
-- Tell it **not** to merge — merging belongs to the session running the batch.
+- Tell it **not** to merge or label `queue` — merging belongs to the queue the
+  batch's session feeds.
 - Tell it **not** to review its own pull request. When a trigger hits, the
   batch's session runs `independent-review` and sends the findings back to the
   coder (`SendMessage` resumes it with its context) to answer.
