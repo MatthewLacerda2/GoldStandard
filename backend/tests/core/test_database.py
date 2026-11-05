@@ -47,9 +47,24 @@ def test_connect_timeout_keeps_libpqs_meaning(seconds, timeout):
     assert target.connect_args == {"timeout": timeout}
 
 
-def test_a_connect_timeout_that_is_not_seconds_is_refused():
-    with pytest.raises(ValueError, match="`connect_timeout=soon`"):
-        database.normalize_database_url("postgres://u:p@db/app?connect_timeout=soon")
+def test_asyncpgs_numeric_keys_arrive_as_numbers():
+    """SQLAlchemy passes text, and asyncpg does arithmetic with these."""
+    query = "timeout=2.5&statement_cache_size=0&max_cached_statement_lifetime=60"
+    target = database.database_target(f"{ASYNC}?{query}&max_cacheable_statement_size=1024")
+    assert target.url == ASYNC
+    assert target.connect_args == {
+        "timeout": 2.5,
+        "statement_cache_size": 0,
+        "max_cached_statement_lifetime": 60,
+        "max_cacheable_statement_size": 1024,
+    }
+
+
+@pytest.mark.parametrize("pair", ["connect_timeout=1.5", "timeout=soon", "statement_cache_size=x"])
+def test_a_number_key_that_is_not_its_number_is_refused(pair):
+    """libpq's ``connect_timeout`` is whole seconds; a cache size is a count."""
+    with pytest.raises(ValueError, match=f"`{pair}`"):
+        database.normalize_database_url(f"postgres://u:p@db/app?{pair}")
 
 
 def test_channel_binding_off_or_preferred_is_dropped():
@@ -66,7 +81,9 @@ def test_channel_binding_required_is_refused(mode):
         database.normalize_database_url(f"postgres://u:p@db/app?channel_binding={mode}")
 
 
-@pytest.mark.parametrize("key", ["sslrootcert", "keepalives", "options"])
+@pytest.mark.parametrize(
+    "key", ["sslrootcert", "keepalives", "options", "direct_tls", "server_settings"]
+)
 def test_a_key_asyncpg_does_not_take_is_refused_by_name(key):
     """At startup, not as a ``TypeError`` on the first connection."""
     with pytest.raises(ValueError, match=f"`{key}`"):
@@ -105,7 +122,8 @@ def test_a_url_naming_another_driver_is_left_alone(url):
 async def test_a_neon_style_url_connects(engine):
     """What the host adds reaches the server, not ``asyncpg.connect()`` as a ``TypeError``."""
     query = {"sslmode": "disable", "channel_binding": "prefer", "connect_timeout": "10"}
-    raw = engine.url.set(drivername="postgresql", query={**query, "application_name": "gs"})
+    query |= {"application_name": "gs", "statement_cache_size": "0"}
+    raw = engine.url.set(drivername="postgresql", query=query)
     url, connect_args = database.database_target(raw.render_as_string(hide_password=False))
     neon = create_async_engine(url, connect_args=connect_args, poolclass=NullPool)
     try:
