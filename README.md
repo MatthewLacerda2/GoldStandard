@@ -70,6 +70,9 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
   opens with a `Contents` heading; and neither a `CLAUDE.md` nor a skill cites
   an issue, a pull request or a date (`tools/docs_lint/`, `make docs-lint`). An
   exception is an inline `<!-- lint: allow(<rule>) <why> -->`.
+- **A fix proves itself.** A pull request closing an issue labelled `fix` must
+  change a test that fails on its base: CI's `regression` job runs the changed
+  tests there (`make regression PR=N` does it locally, `tools/regression.py`).
 - **Length discipline (backend):** files ≤ 350 lines of code, endpoint
   handlers ≤ 50, tests ≤ 50 (blank lines, comments and docstrings don't
   count) — enforced by a custom AST linter (`backend/tools/house_lint.py`), not by

@@ -60,6 +60,10 @@ workflows is a change here.
   holds the paths). `tools` (`make tools`: ruff and tests for `tools/`, and the
   docs lint) runs on every change. A Markdown-only branch still gets `CI ok`,
   green with the layer jobs skipped.
+- **`regression` runs on every pull request**: one closing a `fix` issue needs
+  a changed test that fails on the base (`make regression PR=N` locally), or
+  an exception line in its description; it reads the description when it
+  runs, so re-run it after an edit.
 - **A draft runs nothing.** Every job is skipped on a draft, so marking a pull
   request ready is the moment anything is checked (`ready_for_review` starts
   the run); until then the local gates are all you have.

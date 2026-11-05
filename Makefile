@@ -173,6 +173,30 @@ front-fix:
 	cd frontend && { $(BUN) run eslint --fix .; s=$$?; $(BUN) run prettier --write . && exit $$s; }
 
 # ---------------------------------------------------------------------------
+# Regression check  (CI's `regression` job, from this checkout; not a gate)
+# ---------------------------------------------------------------------------
+# A bug fix's changed tests, laid over its base in a scratch worktree (removed
+# afterwards, with its test database) and run there: at least one must fail.
+# PR=N reads what its description owes and takes the base this branch left;
+# BASE=<sha> names the base, and alone runs the changed tests on it whatever
+# they fix. It judges the head commit, so commit first. Backend tests run with
+# $(PYTHON) against the database `make back-test` reaches (DATABASE_URL, or
+# backend/.env, which is copied over); frontend tests install the base's
+# packages. CI runs the two steps apart, setting up only what `plan` asks for
+# in between: `regression-plan PR=N BASE=<sha>`, then `regression-run BASE=<sha>`.
+.PHONY: regression regression-plan regression-run
+REGRESSION := $(TOOLS_PYTHON) tools/regression.py
+REGRESSION_TOOLS := --python $(PYTHON) --bun $(BUN)
+regression:
+	$(REGRESSION) check $(if $(PR),--pr $(PR)) $(if $(BASE),--base $(BASE)) $(REGRESSION_TOOLS)
+
+regression-plan:
+	$(REGRESSION) plan --pr $(PR) --base $(BASE)
+
+regression-run:
+	$(REGRESSION) run --base $(BASE) $(REGRESSION_TOOLS)
+
+# ---------------------------------------------------------------------------
 # Repository setup  (run once in a repo made from this template; needs `gh`)
 # ---------------------------------------------------------------------------
 # The issue labels CLAUDE.md's rules are written against. `--force` updates a
