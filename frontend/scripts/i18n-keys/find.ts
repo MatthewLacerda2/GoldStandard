@@ -49,7 +49,10 @@ export interface Unused {
   files: string[];
 }
 
-const PLURAL_SUFFIX = /_(?:ordinal_)?(?:zero|one|two|few|many|other)$/;
+/** The suffix i18next adds to a key for a count (`_one`, `_other`, ...;
+ *  `_ordinal_one` with `ordinal: true`): every CLDR category, so it holds for
+ *  any language a locale is added in. */
+export const PLURAL_SUFFIX = /_(?:ordinal_)?(?:zero|one|two|few|many|other)$/;
 // Two segments or more, optionally ending in the separator before the
 // interpolation: `a.b.`, `a.b_`, `a.b`.
 const KEY_HEAD = /^[\w-]+(?:\.[\w-]+)+\.?$/;
@@ -70,19 +73,30 @@ export function leafKeys(tree: unknown, prefix = ""): string[] {
   );
 }
 
+/** Calls `visit` on every node of every source's syntax tree, with the
+ *  file's name. Comments are not nodes, so nothing in one is seen. */
+export function walk(
+  sources: Source[],
+  visit: (node: ts.Node, file: string) => void,
+): void {
+  for (const { file, text } of sources) {
+    const down = (node: ts.Node): void => {
+      visit(node, file);
+      ts.forEachChild(node, down);
+    };
+    down(ts.createSourceFile(file, text, ts.ScriptTarget.Latest, false));
+  }
+}
+
 /** The string literals and template heads in `sources`, comments aside. */
 export function readsIn(sources: Source[]): Reads {
   const reads: Reads = { literals: new Set(), heads: [] };
-  const visit = (node: ts.Node): void => {
+  walk(sources, (node) => {
     if (ts.isStringLiteralLike(node)) reads.literals.add(node.text);
     else if (ts.isTemplateExpression(node) && KEY_HEAD.test(node.head.text)) {
       reads.heads.push(node.head.text);
     }
-    ts.forEachChild(node, visit);
-  };
-  for (const { file, text } of sources) {
-    visit(ts.createSourceFile(file, text, ts.ScriptTarget.Latest, false));
-  }
+  });
   return reads;
 }
 

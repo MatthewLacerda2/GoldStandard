@@ -3,7 +3,8 @@
 //   1. knip (`knip.ts`): files, exports and dependencies nothing uses;
 //   2. the tags knip skips an export for (`deadcode/keep.ts`): only the keep
 //      tag, with a reason, on an export knip would report without it;
-//   3. the locale keys nothing reads (`check-i18n-keys.ts`).
+//   3. the locale keys nothing reads, and the keys the code asks for that a
+//      locale lacks (`check-i18n-keys.ts`).
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

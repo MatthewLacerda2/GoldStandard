@@ -128,8 +128,9 @@ back-install:
 front-lint:
 	cd frontend && $(BUN) run check
 
-# Files, exports and dependencies nothing uses (knip, knip.ts), and locale
-# keys nothing reads (scripts/check-deadcode.ts runs every part).
+# Files, exports and dependencies nothing uses (knip, knip.ts), locale keys
+# nothing reads, and keys the code asks for that a locale lacks
+# (scripts/check-deadcode.ts runs every part).
 front-deadcode:
 	cd frontend && $(BUN) run deadcode
 
