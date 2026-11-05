@@ -1,8 +1,10 @@
 """How `tools/regression.py` runs one target on the base, and judges it.
 
 A target is one test file a runner runs by name: a pytest file of `backend/`,
-a vitest file of `frontend/`, a unittest file of `tools/`. Each run ends in one
-of three outcomes:
+a vitest file of `frontend/`, a unittest file of `tools/`. It runs only the
+tests the change adds or changes (`tools/regression_names.py` finds them, and
+says when there are none to find: then the whole file runs). Each run ends in
+one of three outcomes:
 
     failed   a test failed: the bug shows on the base, which is the point
     passed   every test passed: the test does not reproduce the bug
@@ -21,8 +23,9 @@ with on any base, so it proves nothing:
                 invalid … got: undefined` (a component the module lacks)
 
 What a pattern cannot see still counts as a failure: a test of a route the
-fix adds gets the base's 404, and a new constant reads as `undefined`. The
-judging is per file, so a changed file's older test failing counts too.
+fix adds gets the base's 404, and a new constant reads as `undefined`. Only
+the tests that run are judged, so an older test of the same file failing on
+the base counts only when the file runs whole.
 
 Only a test body's failure counts: pytest's setup errors (no database) are
 broken, not failed. A run past `TIMEOUT` has failed: a hung test is the bug
@@ -66,11 +69,13 @@ _JS_MISSING = re.compile(
 
 class Target(NamedTuple):
     """One test file: `layer` is the directory its runner runs from, `path`
-    the file relative to it."""
+    the file relative to it, `tests` what of it runs (every test, if none):
+    pytest node ids, vitest full names, unittest qualified names."""
 
     runner: str
     layer: str
     path: str
+    tests: tuple[str, ...] = ()
 
     def __str__(self) -> str:
         return f"{self.runner} {PurePosixPath(self.layer, self.path)}"
@@ -108,18 +113,17 @@ def pytest_outcome(code: int, junit: str) -> str:
 
 def vitest_outcome(code: int, report: str) -> str:
     """From vitest's exit code and JSON report. A file that does not load
-    reports no failing test."""
-    if code == 0:
-        return PASSED
+    reports no failing test; a `-t` that matches nothing skips every test and
+    exits 0, so a pass needs a test that passed."""
     try:
         files = json.loads(report).get("testResults") or []
     except ValueError:
         return BROKEN
+    tests = [test for file in files for test in file.get("assertionResults") or []]
+    if code == 0:
+        return PASSED if any(test.get("status") == "passed" for test in tests) else BROKEN
     failures = [
-        (test.get("failureMessages") or [""])[0]
-        for file in files
-        for test in file.get("assertionResults") or []
-        if test.get("status") == "failed"
+        (test.get("failureMessages") or [""])[0] for test in tests if test.get("status") == "failed"
     ]
     return judged(failures, js_missing)
 
@@ -136,12 +140,13 @@ def unittest_outcome(code: int, report: str) -> str:
 
 
 # One unittest file, run in a fresh interpreter from the base worktree so
-# nothing of the head is imported. It reports each failure as `Type: message`,
-# for `unittest_outcome` to judge the way pytest's are.
+# nothing of the head is imported: the tests named after it, if any, by the
+# qualified name of the method each runs. It reports each failure as
+# `Type: message`, for `unittest_outcome` to judge the way pytest's are.
 UNITTEST = """
 import json, sys, unittest
 from pathlib import Path
-file, report = Path(sys.argv[1]).resolve(), sys.argv[2]
+file, report, names = Path(sys.argv[1]).resolve(), sys.argv[2], set(sys.argv[3:])
 failures = []
 class Result(unittest.TextTestResult):
     def note(self, err):
@@ -159,6 +164,13 @@ while (top / "__init__.py").exists():
     top = top.parent
 loader = unittest.TestLoader()
 suite = loader.discover(str(file.parent), pattern=file.name, top_level_dir=str(top))
+def cases(suite):
+    for test in suite:
+        yield from cases(test) if isinstance(test, unittest.TestSuite) else [test]
+def qualname(test):
+    return getattr(getattr(type(test), test._testMethodName, None), "__qualname__", "")
+if names:
+    suite = unittest.TestSuite(t for t in cases(suite) if qualname(t) in names)
 loaded = not loader.errors and suite.countTestCases() > 0
 print("\\n".join(loader.errors))
 ok = loaded and unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite).wasSuccessful()
@@ -172,19 +184,27 @@ OUTCOMES = {"pytest": pytest_outcome, "vitest": vitest_outcome, "unittest": unit
 def command(t: Target, report: Path, python: str, bun: str) -> list[str]:
     """The command that runs `t`, writing its report to `report`."""
     if t.runner == "pytest":
-        return [python, "-m", "pytest", t.path, "-p", "no:cacheprovider", f"--junitxml={report}"]
+        selected = t.tests or (t.path,)
+        return [python, "-m", "pytest", *selected, "-p", "no:cacheprovider", f"--junitxml={report}"]
     if t.runner == "vitest":
+        named = ["-t", f"^(?:{'|'.join(map(js_escape, t.tests))})$"] if t.tests else []
         return [
             bun,
             "run",
             "vitest",
             "run",
             t.path,
+            *named,
             "--reporter=default",
             "--reporter=json",
             f"--outputFile.json={report}",
         ]
-    return [sys.executable, "-c", UNITTEST, t.path, str(report)]
+    return [sys.executable, "-c", UNITTEST, t.path, str(report), *t.tests]
+
+
+def js_escape(name: str) -> str:
+    """`name` as a JavaScript regular expression that matches only itself."""
+    return re.sub(r"[\\^$.*+?()[\]{}|/]", r"\\\g<0>", name)
 
 
 def call(argv: list[str], cwd: Path, env: dict[str, str]) -> int | None:

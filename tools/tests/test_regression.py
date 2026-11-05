@@ -148,7 +148,14 @@ class HowItIsJudged(unittest.TestCase):
         rendered = "Error: Element type is invalid: expected a string but got: object."
         self.assertEqual(vitest_outcome(1, vitest(rendered)), FAILED)
         self.assertEqual(vitest_outcome(1, json.dumps({"testResults": [{}]})), BROKEN)
-        self.assertEqual(vitest_outcome(0, ""), PASSED)
+
+    def test_vitest_passes_only_when_a_test_ran(self) -> None:
+        # A `-t` that matches no test skips them all, and exits 0.
+        ran = {"testResults": [{"assertionResults": [{"status": "passed"}]}]}
+        self.assertEqual(vitest_outcome(0, json.dumps(ran)), PASSED)
+        skipped = {"testResults": [{"assertionResults": [{"status": "skipped"}]}]}
+        self.assertEqual(vitest_outcome(0, json.dumps(skipped)), BROKEN)
+        self.assertEqual(vitest_outcome(0, ""), BROKEN)
 
     def test_unittest_reports_what_failed(self) -> None:
         report = json.dumps({"loaded": True, "failures": ["AssertionError: 1 != 2"]})

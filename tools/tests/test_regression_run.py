@@ -26,6 +26,14 @@ TEST = (
     "    def test_double(self):\n        self.assertEqual(thing.{call}, 6)\n"
 )
 REASON = "No regression test on base: the bug only shows on real hardware."
+# A test file the base already has, whose test fails on every commit.
+OLD = (
+    "import unittest\nfrom tools import thing\n"
+    "class {cls}:\n"
+    "    def test_old(self):\n        self.fail('fails on every commit')\n"
+)
+CASE = "T(unittest.TestCase)"
+NEW = "    def test_new(self):\n        self.assertEqual(thing.{call}, 6)\n"
 
 
 class ScratchRepository(unittest.TestCase):
@@ -99,6 +107,41 @@ class Run(ScratchRepository):
             with self.assertRaises(RuntimeError):
                 self.run_step()
         self.assertEqual(self.worktrees().count("\n"), 0, self.worktrees())
+
+
+class PerTest(ScratchRepository):
+    """Only the tests the change adds or changes are judged."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.base = self.commit("tools/tests/test_thing.py", OLD.format(cls=CASE))
+
+    def fix_with(self, call: str, cls: str = CASE, tail: str = "") -> str:
+        self.write("tools/thing.py", FIXED)
+        self.commit("tools/tests/test_thing.py", OLD.format(cls=cls) + NEW.format(call=call) + tail)
+        return self.run_step()[1]
+
+    def test_an_older_failing_test_cannot_pass_a_new_one(self) -> None:
+        out = self.fix_with(call="double(2) + 2")
+        self.assertIn("judging the tests the change adds or changes:\n  T.test_new", out)
+        self.assertIn("Ran 1 test", out)
+        self.assertIn("test_thing.py (T.test_new): passes on the base.", out)
+
+    def test_a_new_test_failing_on_the_base_passes(self) -> None:
+        self.assertIn("a changed test fails on the base", self.fix_with(call="double(3)"))
+
+    def test_an_inherited_test_runs_in_the_case_that_inherits_it(self) -> None:
+        tail = "class T(Mixin, unittest.TestCase):\n    pass\n"
+        out = self.fix_with(call="double(2) + 2", cls="Mixin", tail=tail)
+        self.assertIn("  Mixin.test_new\n", out)
+        self.assertIn("Ran 1 test", out)
+
+    def test_a_change_to_no_test_judges_the_whole_file(self) -> None:
+        self.write("tools/thing.py", FIXED)
+        self.commit("tools/tests/test_thing.py", "# helpers\n" + OLD.format(cls=CASE))
+        code, out = self.run_step()
+        self.assertIn("judging the whole file: no test the change adds or changes", out)
+        self.assertEqual(code, 0, out)
 
 
 class Plan(ScratchRepository):

@@ -19,16 +19,18 @@ is a refusal.
 
 `run` judges the change, whatever its description says. It makes a worktree of
 the base, lays every test file and fixture the change touched over it (as the
-head commit has them; a deleted one is deleted) and runs each target there
-(`tools/regression_runners.py` has how each is run and judged). It passes when
-at least one target **fails** on the base. The worktree is removed when `run`
+head commit has them; a deleted one is deleted) and runs each target there:
+only the tests of it the change adds or changes, or the whole file when none
+can be told apart (`tools/regression_names.py` has how they are found, and
+`tools/regression_runners.py` how each is run and judged). It passes when at
+least one target **fails** on the base. The worktree is removed when `run`
 ends, however it ends.
 
 `REV` is the base: in CI the merge commit's first parent, `HEAD^1`. `check`
 without one takes where the branch left the pull request's base branch.
 
-Pure but for `git`, `gh`, `lay_over`, `base_worktree`, `on_base`, `plan`, `run`
-and `main`.
+Pure but for `git`, `gh`, `narrowed`, `lay_over`, `base_worktree`, `on_base`,
+`plan`, `run` and `main`.
 """
 
 from __future__ import annotations
@@ -47,6 +49,7 @@ from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
 if __package__:
+    from tools.regression_names import changed_tests
     from tools.regression_runners import (
         BROKEN,
         FAILED,
@@ -57,6 +60,7 @@ if __package__:
         run_target,
     )
 else:  # run as a script: its own folder is on the path
+    from regression_names import changed_tests
     from regression_runners import (
         BROKEN,
         FAILED,
@@ -174,7 +178,8 @@ def verdict(results: dict[Target, str]) -> list[str]:
     if not results:
         lines = ["no changed test file names a target."]
     for t, outcome in sorted(results.items()):
-        lines.append(f"{t}: " + ("passes on the base." if outcome == PASSED else JUDGED))
+        named = f"{t} ({', '.join(t.tests)})" if t.tests else str(t)
+        lines.append(f"{named}: " + ("passes on the base." if outcome == PASSED else JUDGED))
     return [*lines, HOW]
 
 
@@ -207,6 +212,21 @@ def committed(head: Path) -> set[str]:
             "-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", "HEAD", cwd=head
         ).splitlines()
     )
+
+
+def narrowed(head: Path, base: str, t: Target) -> Target:
+    """`t` cut down to the tests the change adds or changes, saying which, or
+    left whole, saying why."""
+    path = str(PurePosixPath(t.layer, t.path))
+    diff = git(
+        *("-c", "core.quotePath=false", "diff", "--no-color", "--no-ext-diff", "-U0"),
+        *("--no-renames", base, "HEAD", "--", path),
+        cwd=head,
+    )
+    tests, why = changed_tests(t.runner, t.path, git("show", f"HEAD:{path}", cwd=head), diff)
+    judging = f"the whole file: {why}." if why else "the tests the change adds or changes:"
+    print(f"{t}: judging {judging}", *tests, sep="\n  ", flush=True)
+    return t._replace(tests=tests)
 
 
 def lay_over(head: Path, worktree: Path, paths: list[str], present: set[str]) -> None:
@@ -308,7 +328,7 @@ def on_base(
 def run(head: Path, base: str, python: str, bun: str) -> int:
     """0 when a changed test fails on the base, 1 when none does."""
     paths = changed(head, base)
-    found = targets(paths, committed(head).__contains__)
+    found = [narrowed(head, base, t) for t in targets(paths, committed(head).__contains__)]
     results = on_base(head, base, paths, found, python, bun) if found else {}
     refused = verdict(results)
     print("\n".join(["Refused:", *refused]) if refused else "a changed test fails on the base.")
