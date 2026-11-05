@@ -67,7 +67,13 @@ workflows is a change here.
   runs, so re-run it after an edit.
 - **A draft runs nothing.** Every job is skipped on a draft, so marking a pull
   request ready is the moment anything is checked (`ready_for_review` starts
-  the run); until then the local gates are all you have.
+  the run); until then the local gates are all you have. Push first, then mark
+  it ready: a push that lands as the pull request turns ready starts a draft's
+  skipped run in the same concurrency group, which can cancel the real one and
+  leave the head with no `CI ok`.
+- **A merge to `main` takes about a minute to reach other pull requests.**
+  GitHub rebuilds each one's merge commit after `main` moves; a run started in
+  that minute still tests the old `main`.
 - **CI's environment:** `make backend PYTHON=python` on a clean Python 3.14 with
   `requirements.txt` installed fresh, and `bun install --frozen-lockfile`. The
   `tools` job installs only ruff, at the pin in `backend/requirements-dev.txt`.
@@ -102,12 +108,18 @@ workflows is a change here.
 
 Merging by hand is the fallback for a repo where the queue cannot run: wait for
 `CI ok` on the head and check that it exists (*CI as it runs today*), merge
-with a merge commit, then remove the worktree and delete the branch
+with a merge commit pinned to that head over REST
+(`gh api -X PUT repos/{owner}/{repo}/pulls/N/merge -f merge_method=merge -f sha=<head>`;
+`gh pr merge` goes through GraphQL, which fails when GitHub is having a bad
+minute), then remove the worktree and delete the branch
 (`deleteBranchOnMerge` is off).
 
 The queue merges a branch that merges cleanly as it is, without a re-run on the
 new `main`; what two branches in one layer break together shows as a red
 `main` (`issue-batch`, *Merges serialize per layer, not globally*, has why).
+**A branch that adds or tightens a gate is the one exception**: the new gate
+judges code no run of the branch has seen, so it is rebased onto the `main` it
+lands in and re-run before it merges.
 
 ## Feeding the merge queue
 
