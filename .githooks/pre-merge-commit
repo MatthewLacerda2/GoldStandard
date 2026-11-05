@@ -1,0 +1,5 @@
+#!/bin/sh
+# A merge that makes its commit without stopping runs this hook instead of
+# pre-commit, so it gets the same check. (A merge that stops on a conflict is
+# finished by `git commit`, which runs pre-commit itself.)
+exec "$(dirname "$0")/pre-commit"

@@ -136,6 +136,14 @@ The backend tests need a Postgres with `pgvector` reachable via `DATABASE_URL`
 `docker compose up --build` — postgres + backend + an nginx-served frontend that
 reverse-proxies `/api/*`.
 
+About the hook `make setup` installs. It is one `core.hooksPath` setting in
+the repository config, so it covers every worktree of the clone at once,
+replaces any hooks path set before, and stops hooks kept in `.git/hooks` from
+running. The path is relative, so a worktree on a branch older than `.githooks/`
+runs no hook. A commit that touches a layer needs that layer installed in its
+worktree (`make back-install` / `make front-install`), and the layer's working
+tree must match what is staged, since lint reads the files on disk.
+
 ## Protecting `main` (one-time setup)
 
 In a repo made from this template, require **`CI ok`** on `main` once. It is the

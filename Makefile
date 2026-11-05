@@ -98,17 +98,35 @@ front-install:
 # ---------------------------------------------------------------------------
 # Clone setup and the pre-commit hook  (`make setup` once per clone)
 # ---------------------------------------------------------------------------
-# Worktrees share the repository config, so this covers every worktree of the
-# clone, and it overwrites any hooks path set before.
-.PHONY: setup pre-commit pre-commit-back pre-commit-front back-fix front-fix
+# One setting in the repository config, so it covers every worktree of the
+# clone at once. It replaces any hooks path set before, which also stops hooks
+# kept in .git/hooks from running. The path is relative to each worktree, so a
+# worktree on a branch that predates .githooks/ runs no hook at all.
+.PHONY: setup pre-commit-scope pre-commit pre-commit-back pre-commit-front back-fix front-fix
 setup:
 	git config core.hooksPath .githooks
-	@echo "setup: each commit now runs 'make pre-commit' (.githooks/pre-commit)."
+	@echo "setup: each commit and merge now runs 'make pre-commit' (.githooks/), in every worktree of this clone."
+	@echo "setup: hooks in .git/hooks no longer run, and a branch without .githooks/ runs none."
 	@echo "setup: to commit work in progress anyway, use 'git commit --no-verify'."
 
-# The layers the commit touches. The hook passes them in, read from the index
-# being committed; run by hand, this is what `git add` has staged.
-STAGED_LAYERS ?= $(shell git diff --cached --name-only -- backend frontend | cut -d/ -f1 | sort -u)
+# The layers the index changes, as one loop: the hook reads it through
+# `pre-commit-scope`, and a `make pre-commit` by hand reads it here.
+staged_layers = for l in backend frontend; do git diff --cached --quiet -- $$l || echo $$l; done
+STAGED_LAYERS ?= $(shell $(staged_layers))
+
+# The hook runs this while git's environment still points at the index being
+# committed, and passes what it prints to `pre-commit`. The lint gates read the
+# working tree, so a touched layer whose working tree is not what is staged (an
+# unstaged edit, an untracked file) is refused: lint would judge something
+# other than the commit.
+pre-commit-scope:
+	@layers="$(STAGED_LAYERS)"; for l in $$layers; do \
+		if ! git diff --quiet -- $$l || [ -n "$$(git ls-files --others --exclude-standard -- $$l)" ]; then \
+			echo "pre-commit: $$l/ has changes that are not staged, and lint reads the working tree." >&2; \
+			echo "pre-commit: stage them, or set them aside: git stash push --keep-index --include-untracked" >&2; \
+			exit 1; \
+		fi; \
+	done; echo $$layers
 
 # What .githooks/pre-commit runs: each touched layer's lint gate, never its
 # tests or build. A layer the commit does not touch is skipped and says so; a
@@ -123,23 +141,29 @@ pre-commit-back:
 	elif ! (cd backend && $(PYTHON) -m ruff --version) >/dev/null 2>&1; then \
 		echo "pre-commit: no ruff for PYTHON=$(PYTHON) (run from backend/): run 'make back-install'."; \
 		exit 1; \
-	else $(MAKE) --no-print-directory back-lint; fi
+	elif ! $(MAKE) --no-print-directory back-lint; then \
+		echo "pre-commit: backend lint failed. Fix: make back-fix PYTHON=$(PYTHON) (file and test length by hand)."; \
+		exit 1; \
+	fi
 
 pre-commit-front:
 	@if [ -z "$(filter frontend,$(STAGED_LAYERS))" ]; then \
 		echo "pre-commit: frontend skipped, nothing staged under frontend/."; \
-	elif [ ! -x frontend/node_modules/.bin/eslint ]; then \
-		echo "pre-commit: frontend/node_modules is not installed: run 'make front-install'."; \
+	elif ! command -v $(BUN) >/dev/null 2>&1 || [ ! -x frontend/node_modules/.bin/eslint ]; then \
+		echo "pre-commit: no $(BUN) on PATH, or frontend/node_modules missing: install Bun, then 'make front-install'."; \
 		exit 1; \
-	else $(MAKE) --no-print-directory front-lint; fi
+	elif ! $(MAKE) --no-print-directory front-lint; then \
+		echo "pre-commit: frontend lint failed. Fix: make front-fix (type errors by hand)."; \
+		exit 1; \
+	fi
 
-# What the hook points at when a lint gate fails.
+# What a failed lint points at. Every fixer runs even when one leaves errors
+# behind, the formatter last, and the target still fails if any are left.
 back-fix:
-	cd backend && $(PYTHON) -m ruff check --fix .
-	cd backend && $(PYTHON) -m ruff format .
+	cd backend && { $(PYTHON) -m ruff check --fix .; s=$$?; $(PYTHON) -m ruff format . && exit $$s; }
 
 front-fix:
-	cd frontend && $(BUN) run fix
+	cd frontend && { $(BUN) run eslint --fix .; s=$$?; $(BUN) run prettier --write . && exit $$s; }
 
 # ---------------------------------------------------------------------------
 # Repository setup  (run once in a repo made from this template; needs `gh`)
