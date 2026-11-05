@@ -96,7 +96,10 @@ class HowItIsJudged(unittest.TestCase):
         self.assertEqual(verdict({PYTEST: FAILED, PYTEST._replace(path="b"): PASSED}), [])
 
     def test_a_pass_on_the_base_is_refused(self) -> None:
-        self.assertEqual(pytest_outcome(0, ""), PASSED)
+        ran = (
+            '<testsuites><testcase name="t"/><testcase name="u"><skipped/></testcase></testsuites>'
+        )
+        self.assertEqual(pytest_outcome(0, ran), PASSED)
         self.assertIn("passes on the base", "\n".join(verdict({PYTEST: PASSED})))
 
     def test_only_a_missing_name_does_not_count(self) -> None:
@@ -148,12 +151,30 @@ class HowItIsJudged(unittest.TestCase):
         rendered = "Error: Element type is invalid: expected a string but got: object."
         self.assertEqual(vitest_outcome(1, vitest(rendered)), FAILED)
         self.assertEqual(vitest_outcome(1, json.dumps({"testResults": [{}]})), BROKEN)
-        self.assertEqual(vitest_outcome(0, ""), PASSED)
+
+    def test_vitest_passes_only_when_a_test_ran(self) -> None:
+        # A `-t` that matches no test skips them all, and exits 0.
+        ran = {"testResults": [{"assertionResults": [{"status": "passed"}]}]}
+        self.assertEqual(vitest_outcome(0, json.dumps(ran)), PASSED)
+        skipped = {"testResults": [{"assertionResults": [{"status": "skipped"}]}]}
+        self.assertEqual(vitest_outcome(0, json.dumps(skipped)), BROKEN)
+        self.assertEqual(vitest_outcome(0, ""), BROKEN)
 
     def test_unittest_reports_what_failed(self) -> None:
         report = json.dumps({"loaded": True, "failures": ["AssertionError: 1 != 2"]})
         self.assertEqual(unittest_outcome(1, report), FAILED)
         self.assertEqual(unittest_outcome(1, json.dumps({"loaded": False, "failures": []})), BROKEN)
+
+    def test_a_run_whose_every_test_is_skipped_cannot_be_judged(self) -> None:
+        skipped = '<testsuites><testcase name="t"><skipped/></testcase></testsuites>'
+        self.assertEqual(pytest_outcome(0, skipped), BROKEN)
+        self.assertEqual(pytest_outcome(0, ""), BROKEN)
+        self.assertEqual(pytest_outcome(1, "<testsuites><testcase"), BROKEN)  # cut short
+        report = {"loaded": True, "failures": []}
+        self.assertEqual(unittest_outcome(0, json.dumps({**report, "ran": 0})), BROKEN)
+        self.assertEqual(unittest_outcome(0, json.dumps({**report, "ran": 1})), PASSED)
+        hidden = {**report, "ran": 1, "unmatched": ["T.test_hidden"]}
+        self.assertEqual(unittest_outcome(0, json.dumps(hidden)), BROKEN)
 
     def test_no_target_is_refused(self) -> None:
         self.assertTrue(verdict({}))

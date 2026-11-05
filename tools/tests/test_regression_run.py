@@ -26,6 +26,17 @@ TEST = (
     "    def test_double(self):\n        self.assertEqual(thing.{call}, 6)\n"
 )
 REASON = "No regression test on base: the bug only shows on real hardware."
+# A test file the base already has, whose test fails on every commit.
+OLD = (
+    "import unittest\nfrom tools import thing\n"
+    "class {cls}:\n"
+    "    def test_old(self):\n        self.fail('fails on every commit')\n"
+)
+CASE = "T(unittest.TestCase)"
+# The imports, and a decorator that does not keep its method's name.
+HIDE = "import unittest\nfrom tools import thing\ndef hide(f):\n    return lambda self: f(self)\n"
+NEW = "    def test_new(self):\n        self.assertEqual(thing.{call}, 6)\n"
+HIDDEN = NEW.format(call="double(2) + 2").replace("def test_new", "@hide\n    def test_hidden")
 
 
 class ScratchRepository(unittest.TestCase):
@@ -99,6 +110,64 @@ class Run(ScratchRepository):
             with self.assertRaises(RuntimeError):
                 self.run_step()
         self.assertEqual(self.worktrees().count("\n"), 0, self.worktrees())
+
+
+class PerTest(ScratchRepository):
+    """Only the tests the change adds or changes are judged."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.base = self.commit("tools/tests/test_thing.py", OLD.format(cls=CASE))
+
+    def fix_with(self, call: str, tail: str = "") -> str:
+        self.write("tools/thing.py", FIXED)
+        self.commit(
+            "tools/tests/test_thing.py", OLD.format(cls=CASE) + NEW.format(call=call) + tail
+        )
+        return self.run_step()[1]
+
+    def test_an_older_failing_test_cannot_pass_a_new_one(self) -> None:
+        out = self.fix_with(call="double(2) + 2")
+        self.assertIn("judging the tests the change adds or changes:\n  T.test_new", out)
+        self.assertIn("Ran 1 test", out)
+        self.assertIn("test_thing.py (T.test_new): passes on the base.", out)
+
+    def test_a_new_test_failing_on_the_base_passes(self) -> None:
+        self.assertIn("a changed test fails on the base", self.fix_with(call="double(3)"))
+
+    def test_an_inherited_test_runs_in_the_case_that_inherits_it(self) -> None:
+        mixed = NEW.format(call="double(2) + 2").replace("test_new", "test_mixed")
+        tail = f"class Mixin:\n{mixed}class U(Mixin, unittest.TestCase):\n    pass\n"
+        out = self.fix_with(call="double(2) + 2", tail=tail)
+        self.assertIn("  Mixin.test_mixed\n  T.test_new\n", out)
+        self.assertIn("Ran 2 tests", out)
+        self.assertIn("Refused:", out)
+
+    def hidden_fix(self, *new: str) -> tuple[int, str]:
+        """Commit the fix, and `new` tests after the older one."""
+        self.write("tools/thing.py", FIXED)
+        older = OLD.format(cls=CASE).split("\n", 2)[2]  # without its imports
+        self.commit("tools/tests/test_thing.py", HIDE + older + "".join(new))
+        return self.run_step()
+
+    def test_a_test_a_decorator_hides_cannot_pass(self) -> None:
+        # Without `functools.wraps` the method is no longer `T.test_hidden`.
+        code, out = self.hidden_fix(NEW.format(call="double(2) + 2"), HIDDEN)
+        self.assertIn("named, but no test here runs it: T.test_hidden", out)
+        self.assertIn("cannot be judged", out)
+        self.assertEqual(code, 1)
+
+    def test_every_named_test_hidden_runs_the_whole_file(self) -> None:
+        code, out = self.hidden_fix(HIDDEN)
+        self.assertIn("no test here is one of those named: running the whole file", out)
+        self.assertEqual(code, 0, out)  # the older failing test counts again: a documented limit
+
+    def test_a_change_to_no_test_judges_the_whole_file(self) -> None:
+        self.write("tools/thing.py", FIXED)
+        self.commit("tools/tests/test_thing.py", "# helpers\n" + OLD.format(cls=CASE))
+        code, out = self.run_step()
+        self.assertIn("judging the whole file: no test the change adds or changes", out)
+        self.assertEqual(code, 0, out)
 
 
 class Plan(ScratchRepository):
