@@ -10,8 +10,8 @@ name: CI
 # change and asks `tools/ci_paths.py`, which holds the one path list:
 # `backend` and `frontend` run only when it printed `true` for their layer,
 # so a Markdown-only change runs `changes`, `tools` and `CI ok` and nothing
-# heavy. `tools` runs on every change: it is seconds of stdlib Python, and it
-# is where checks that read the docs belong.
+# heavy. `tools` runs on every change: it is seconds of stdlib Python and
+# ruff, and it is where checks that read the docs belong (the docs lint).
 #
 # A job added to this file is gated only once it is listed under `CI ok`'s
 # `needs:`. `tools/tests/test_ci_workflow.py` fails until it is.
@@ -82,7 +82,8 @@ jobs:
             printf 'backend=true\nfrontend=true\ncode=true\n' | tee -a "$GITHUB_OUTPUT"
           fi
 
-  # The repository's own tools and their tests, on every change.
+  # The repository's own tools, their lint and tests, and the docs lint, on
+  # every change.
   tools:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
@@ -93,8 +94,12 @@ jobs:
         with:
           python-version: "3.14"
 
+      # Only ruff, at the backend's pin: tools/ itself is stdlib-only.
+      - name: Install ruff
+        run: python -m pip install "$(grep -E '^ruff==' backend/requirements-dev.txt)"
+
       - name: Run tools gates
-        run: make tools TOOLS_PYTHON=python
+        run: make tools TOOLS_PYTHON=python RUFF=ruff
 
   backend:
     needs: changes

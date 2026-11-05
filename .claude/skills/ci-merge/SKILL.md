@@ -53,13 +53,15 @@ workflows is a change here.
   `main`**, and ends in **`CI ok`**, the one check that says CI passed. Its
   first job, `changes`, asks `tools/ci_paths.py` which layers the change
   touches, and the `backend` and `frontend` jobs run only for theirs (that file
-  holds the paths). `tools` (`make tools`) runs on every change. A
-  Markdown-only branch still gets `CI ok`, green with the layer jobs skipped.
+  holds the paths). `tools` (`make tools`: ruff and tests for `tools/`, and the
+  docs lint) runs on every change. A Markdown-only branch still gets `CI ok`,
+  green with the layer jobs skipped.
 - **A draft runs nothing.** Every job is skipped on a draft, so marking a pull
   request ready is the moment anything is checked (`ready_for_review` starts
   the run); until then the local gates are all you have.
 - **CI's environment:** `make backend PYTHON=python` on a clean Python 3.14 with
-  `requirements.txt` installed fresh, and `bun install --frozen-lockfile`.
+  `requirements.txt` installed fresh, and `bun install --frozen-lockfile`. The
+  `tools` job installs only ruff, at the pin in `backend/requirements-dev.txt`.
 - **Absent and passing are different states.** A branch that conflicts with
   `main` gets no run at all, and on the pull request page that reads exactly
   like checks that have not started. Wait for `CI ok` on the head commit, and

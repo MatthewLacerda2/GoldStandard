@@ -4,9 +4,17 @@
 
 PYTHON ?= python3.14
 BUN    ?= bun
-# tools/ is stdlib-only and needs no venv, so it has an interpreter of its own:
-# PYTHON may be a path relative to backend/.
+# tools/ code is stdlib-only, so it runs on a plain interpreter of its own
+# (PYTHON may be a path relative to backend/), and docs-lint and the tools
+# tests need nothing installed.
 TOOLS_PYTHON ?= python3.14
+# Linting tools/ does need ruff, and it is the backend's: the version pinned in
+# backend/requirements-dev.txt and the rules in backend/pyproject.toml, so the
+# two cannot disagree. Locally it is the backend venv's (`make back-install`),
+# and tools-lint fails if that venv has drifted from the pin; CI installs the
+# same pin and passes RUFF=ruff.
+RUFF ?= backend/.venv/bin/ruff
+RUFF_PIN := $(shell sed -n 's/^ruff==//p' backend/requirements-dev.txt)
 
 .DEFAULT_GOAL := check
 
@@ -23,10 +31,22 @@ frontend: front-lint front-build front-test front-contract
 # Repository tools  (tools/: stdlib-only Python serving the whole repo)
 # ---------------------------------------------------------------------------
 # CI runs this on every change, Markdown-only ones included, so a check that
-# reads the docs belongs here: add its command below its tests.
-.PHONY: tools
-tools:
+# reads the docs belongs here, as a target `tools` lists beside `docs-lint`.
+# docs-lint goes first: it needs nothing installed, so a docs-only change gets
+# its verdict even where tools-lint has no ruff to run.
+.PHONY: tools tools-lint docs-lint
+tools: docs-lint tools-lint
 	$(TOOLS_PYTHON) -m unittest discover --start-directory tools/tests --top-level-directory .
+
+tools-lint:
+	@found="$$($(RUFF) --version 2>/dev/null)"; [ "$$found" = "ruff $(RUFF_PIN)" ] || { \
+		echo "tools-lint: $(RUFF) is '$${found:-missing}', the pin is ruff $(RUFF_PIN): run make back-install"; exit 1; }
+	$(RUFF) check --config backend/pyproject.toml tools
+	$(RUFF) format --check --config backend/pyproject.toml tools
+
+# The size and shape of what an agent loads: CLAUDE.md files and skills.
+docs-lint:
+	$(TOOLS_PYTHON) -m tools.docs_lint
 
 # ---------------------------------------------------------------------------
 # Backend gates  (run from backend/, driven by $(PYTHON))
