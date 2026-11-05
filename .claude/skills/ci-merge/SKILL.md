@@ -23,6 +23,10 @@ flight at once.
   a run merges with the loop still in it. The no-drift rule is what makes this
   cheap here — the local gates *are* the CI targets, so the proof on a draft is
   `make check`, run locally.
+- **A check only a person can run goes under `## For a human`**, as unticked
+  `- [ ]` items. Finished does not wait for it (`CLAUDE.md`, *Pull Requests*),
+  so the description is where it waits instead, and that one heading is how
+  `make checks` finds it once the pull request has merged.
 
 ## Before marking it ready
 
