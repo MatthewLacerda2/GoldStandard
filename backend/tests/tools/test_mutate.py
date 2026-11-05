@@ -141,8 +141,9 @@ def test_a_database_that_refuses_the_sweep_keeps_mutmuts_exit_code(monkeypatch, 
     [
         ("not a url", "ArgumentError"),
         ("postgresql+psycopg://u:p@db/app", "ValueError"),
-        ("postgresql+asyncpg://u:p@db/app?application_name=x", "TypeError"),
-        ("postgresql+asyncpg://u:p@db/app?timeout=10", "TypeError"),
+        # Refused when the URL is normalized: a key asyncpg does not take, a timeout of none.
+        ("postgresql+asyncpg://u:p@db/app?keepalives=1", "ValueError"),
+        ("postgresql+asyncpg://u:p@db/app?timeout=0", "ValueError"),
     ],
 )
 def test_a_url_asyncpg_cannot_take_skips_the_sweep_without_raising(url, error, monkeypatch, capsys):
