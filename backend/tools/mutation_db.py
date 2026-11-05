@@ -23,6 +23,8 @@ from sqlalchemy import make_url
 # What the driver sets and the conftest reads: the base of every name.
 ENV = "GS_MUTATION_DB"
 
+_ASYNCPG = "postgresql+asyncpg"
+
 # URL parameters SQLAlchemy's asyncpg dialect keeps for its own adapter, which
 # `asyncpg.connect` would refuse as unknown arguments.
 _ADAPTER_ONLY = ("prepared_statement_cache_size", "prepared_statement_name_func")
@@ -33,12 +35,19 @@ def admin_connect_args(database_url: str) -> dict:
     of the server ``database_url`` (a normalized SQLAlchemy asyncpg URL) names.
 
     They are the ones SQLAlchemy's dialect hands asyncpg for the app's own
-    connections, so every URL parameter (``ssl=require``, a timeout) reaches
-    this connection under the same name. A raw DSN would not do: asyncpg reads
-    a DSN by libpq's names (``sslmode``) and sends any other one to the server
-    as a setting, which it refuses.
+    connections: each URL parameter arrives under its own name, as a string,
+    so the ones asyncpg takes as strings (``ssl=require``,
+    ``command_timeout=30``) work here as they do for the app, and any other one
+    (``timeout``, ``statement_cache_size``, a libpq-only name) fails here as it
+    does there; naming them for asyncpg is ``normalize_database_url``'s job. A
+    raw DSN would not do: asyncpg reads a DSN by libpq's names (``sslmode``)
+    and sends any other one to the server as a setting, which it refuses.
+    Another driver's URL is refused: its arguments are not asyncpg's.
     """
-    url = make_url(database_url).set(database="postgres")
+    url = make_url(database_url)
+    if url.drivername != _ASYNCPG:
+        raise ValueError(f"the test databases need a {_ASYNCPG} URL, not {url.drivername}")
+    url = url.set(database="postgres")
     _, args = url.get_dialect()().create_connect_args(url)
     return {key: value for key, value in args.items() if key not in _ADAPTER_ONLY}
 

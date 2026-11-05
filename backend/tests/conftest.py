@@ -94,9 +94,9 @@ def _test_db_name() -> str:
     return mutation_db.process_name(base) if base else _worktree_db_name()
 
 
-def _test_url() -> URL:
-    """The base URL on the test database, every query parameter kept."""
-    return make_url(_base_url()).set(database=_test_db_name())
+def _test_url(db_name: str) -> URL:
+    """The base URL on the test database ``db_name``, every query parameter kept."""
+    return make_url(_base_url()).set(database=db_name)
 
 
 async def _admin_connect() -> asyncpg.Connection:
@@ -148,7 +148,7 @@ async def engine():
     """
     global _READY_DB
     db_name = _test_db_name()
-    test_engine = create_async_engine(_test_url(), future=True, poolclass=NullPool)
+    test_engine = create_async_engine(_test_url(db_name), future=True, poolclass=NullPool)
     if _READY_DB != db_name:
         await _ensure_database(db_name)
         async with test_engine.begin() as conn:

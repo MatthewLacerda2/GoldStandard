@@ -3,10 +3,11 @@ the URL's parameters reach both the test database and the maintenance one, and
 under mutation testing each process names its own database, drops it when its
 session ends, and refuses to run under a bare mutmut."""
 
+import inspect
 import os
 
+import asyncpg
 import pytest
-from sqlalchemy import make_url
 
 from core.database import normalize_database_url
 from tests import conftest
@@ -65,11 +66,14 @@ def test_the_maintenance_database_is_on_the_same_server_with_the_same_parameters
     }
 
 
-def test_the_maintenance_connection_gets_what_the_apps_connections_get():
-    # The dialect's own arguments for the app's URL, but for the database.
-    url = make_url(WITH_PARAMS).set(database="postgres")
-    _, app_args = url.get_dialect()().create_connect_args(url)
-    assert mutation_db.admin_connect_args(WITH_PARAMS) == app_args
+def test_asyncpg_takes_every_argument_by_name_the_dialects_own_left_out():
+    args = mutation_db.admin_connect_args(f"{WITH_PARAMS}&prepared_statement_cache_size=0")
+    inspect.signature(asyncpg.connect).bind(**args)  # TypeError on a name it lacks
+
+
+def test_another_drivers_url_is_refused():
+    with pytest.raises(ValueError, match="postgresql\\+asyncpg URL, not postgresql\\+psycopg"):
+        mutation_db.admin_connect_args("postgresql+psycopg://u:p@db/app")
 
 
 def test_libpqs_sslmode_reaches_the_maintenance_connection_as_ssl():
@@ -77,16 +81,9 @@ def test_libpqs_sslmode_reaches_the_maintenance_connection_as_ssl():
     assert mutation_db.admin_connect_args(url)["ssl"] == "require"
 
 
-def test_the_dialects_own_parameters_never_reach_asyncpg():
-    url = f"{WITH_PARAMS}&prepared_statement_cache_size=0"
-    assert "prepared_statement_cache_size" not in mutation_db.admin_connect_args(url)
-
-
 def test_the_test_database_keeps_every_url_parameter(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", WITH_PARAMS)
-    monkeypatch.delenv(mutation_db.ENV, raising=False)
-    monkeypatch.delenv("MUTANT_UNDER_TEST", raising=False)
-    url = conftest._test_url()
-    assert url.database == conftest._worktree_db_name()
+    url = conftest._test_url("test_gs_x")
+    assert url.database == "test_gs_x"
     assert dict(url.query) == {"ssl": "require", "command_timeout": "30"}
     assert (url.host, url.port, url.password) == ("db", 5433, "p/w")

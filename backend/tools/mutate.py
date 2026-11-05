@@ -157,9 +157,18 @@ def _admin_args() -> dict:
     return mutation_db.admin_connect_args(normalize_database_url(url))
 
 
-# Postgres down or refusing us, or settings that do not load (a URL SQLAlchemy
-# cannot read among them): mutmut has failed on it too (or will), and says so.
-_UNREACHABLE = (OSError, ValueError, ArgumentError, asyncpg.PostgresError, asyncpg.InterfaceError)
+# Postgres down or refusing us, or settings that do not load: a URL SQLAlchemy
+# cannot read (`ArgumentError`), another driver's (`ValueError`), or a query
+# parameter `asyncpg.connect` refuses or mistypes (`TypeError`). mutmut has
+# failed on it too (or will), and says so.
+_UNREACHABLE = (
+    OSError,
+    ValueError,
+    TypeError,
+    ArgumentError,
+    asyncpg.PostgresError,
+    asyncpg.InterfaceError,
+)
 
 
 def _sweep(base: str) -> None:
