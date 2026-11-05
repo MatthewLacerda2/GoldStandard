@@ -4,6 +4,9 @@
 
 PYTHON ?= python3.14
 BUN    ?= bun
+# tools/ is stdlib-only and needs no venv, so it has an interpreter of its own:
+# PYTHON may be a path relative to backend/.
+TOOLS_PYTHON ?= python3.14
 
 .DEFAULT_GOAL := check
 
@@ -11,10 +14,19 @@ BUN    ?= bun
 # Aggregate gates
 # ---------------------------------------------------------------------------
 .PHONY: check backend frontend
-check: backend frontend
+check: tools backend frontend
 
 backend: back-lint back-build back-test
 frontend: front-lint front-build front-test
+
+# ---------------------------------------------------------------------------
+# Repository tools  (tools/: stdlib-only Python serving the whole repo)
+# ---------------------------------------------------------------------------
+# CI runs this on every change, Markdown-only ones included, so a check that
+# reads the docs belongs here: add its command below its tests.
+.PHONY: tools
+tools:
+	$(TOOLS_PYTHON) -m unittest discover --start-directory tools/tests --top-level-directory .
 
 # ---------------------------------------------------------------------------
 # Backend gates  (run from backend/, driven by $(PYTHON))
