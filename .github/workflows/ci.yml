@@ -121,7 +121,12 @@ jobs:
     env:
       HUSKY: 0
     steps:
+      # Full history: it fetches every branch, so `origin/main` exists and
+      # `git merge-base HEAD origin/main` can be read by the gates that compare
+      # against what `main` already has (the API contract check).
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # Bun's version lives in one place: `packageManager` in package.json.
       - uses: oven-sh/setup-bun@v2

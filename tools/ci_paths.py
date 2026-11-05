@@ -37,9 +37,11 @@ _SHARED = ("Makefile", ".github/workflows/ci.yml")
 
 LAYERS: dict[str, tuple[str, ...]] = {
     # docker/, docker-compose.yml and .env.example define the Postgres the
-    # backend tests run against.
+    # backend tests run against. frontend/openapi.json is the API contract the
+    # backend build checks the app against, so it counts for both layers.
     "backend": (
         "backend/**",
+        "frontend/openapi.json",
         "docker/**",
         "docker-compose.yml",
         ".env.example",

@@ -45,6 +45,13 @@ class WhatAChangeRuns(unittest.TestCase):
         ):
             self.assertEqual(runs(path), backend_only, path)
 
+    def test_the_api_contract_runs_both_layers(self) -> None:
+        # The backend build checks the app against the frontend's copy.
+        self.assertEqual(
+            runs("frontend/openapi.json"),
+            {"backend": True, "frontend": True, "code": True},
+        )
+
     def test_the_makefile_and_the_workflow_run_both_layers(self) -> None:
         for path in ("Makefile", ".github/workflows/ci.yml"):
             answer = runs(path)
