@@ -196,6 +196,9 @@ class Queue:
                 talk.say(f"#{number}: {line}")
             return False
         ok, why = self.hub.merge(number, head)
+        if ok is None:
+            self.narrate(number, why)
+            return False
         if not ok:
             # Out of line until its head or `main` moves: retried every pass, it
             # would also hold every pull request that conflicts with it.

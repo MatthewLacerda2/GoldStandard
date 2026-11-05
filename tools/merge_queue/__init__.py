@@ -12,12 +12,13 @@ service: stdlib Python over `gh api` (REST only, `talk.py`) and local `git`.
 What it guarantees, and where each guarantee lives:
 
 - **CI really ran on the head commit and passed**: every check the `main`
-  ruleset requires (`.github/rulesets/main.json`; today `CI ok`, which every
-  `ci.yml` job feeds) concluded `success` on the head (`checks.py`). A skipped
+  ruleset requires (`.github/rulesets/main.json`: `CI ok`, which every `ci.yml`
+  job feeds, and the `mutation gate`) concluded `success` on the head (`checks.py`). A skipped
   check is not a run (a draft skips it); no run is not green.
 - **The review lane is enforced, not replaced**: a pull request that hits an
   `independent-review` trigger (`tools/review_triggers.py`) merges only with an
-  `Independent review` comment naming its head (`review.py`).
+  `Independent review` comment naming its head, or a head it is exactly a
+  clean rebase of (`review.py`).
 - **What it closes may be closed** (`closing.py`), by its description or by a
   commit message the merge commit keeps: no issue labelled `planning` or
   `human`, no closing keyword aimed at a pull request or at a closed issue,
@@ -39,7 +40,8 @@ What it guarantees, and where each guarantee lives:
   ambiguous 5xx is asked about before anything is concluded (`github.py`).
 - **After the merge**: the remote branch is deleted (only once GitHub says
   merged, asked again on later passes when it had not said so yet) and the
-  coder's worktree is freed (`aftermath.py`).
+  coder's worktree is freed, unless it is locked or holds work `main` lacks
+  (`aftermath.py`).
 - **One queue per clone** (a lock), and a memory that outlives a watch
   (`state.py`).
 

@@ -54,9 +54,10 @@ class MainGate:
 
     def runs_of(self, sha: str) -> list[dict]:
         """A commit's check runs: asked again unless they had all finished lately."""
-        at, runs = self.kept.get(sha, (0.0, []))
-        if time.monotonic() - at < KEEP_SECONDS:
-            return runs
+        if sha in self.kept:
+            at, runs = self.kept[sha]
+            if time.monotonic() - at < KEEP_SECONDS:
+                return runs
         runs = self.hub.check_runs(sha)
         if runs and all(run.get("status") == "completed" for run in runs):
             self.kept[sha] = (time.monotonic(), runs)

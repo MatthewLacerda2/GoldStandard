@@ -23,8 +23,12 @@ from tools.merge_queue import talk
 REMOTE = re.compile(r"[/:]([^/:]+)/([^/]+?)(?:\.git)?/?$")
 # The run a check run belongs to, from its `details_url` (Actions only).
 RUN_URL = re.compile(r"/actions/runs/(\d+)(?:/|$)")
-# How long a merge call that failed in transit is given to show up as merged.
-MERGE_SETTLES_SECONDS = 60
+# GitHub's 405 while `main` moves under the merge (another merge just landed):
+# not a verdict, so the merge is asked again on the next pass.
+BASE_MOVED = "base branch was modified"
+# How long a merge call that failed in transit is given to show up as merged:
+# asked this many times, this far apart.
+MERGE_SETTLE_TRIES, MERGE_SETTLE_SECONDS = 6, 10
 
 
 def owner_and_name(url: str) -> str:
@@ -88,6 +92,18 @@ class GitHub:
 
     def __init__(self, repo: str) -> None:
         self.repo = repo
+        self._settings: tuple[str, str] | None = None
+
+    def merge_settings(self) -> tuple[str, str]:
+        """The repository's merge commit title and message settings, asked once
+        (GitHub's defaults when it does not say)."""
+        if self._settings is None:
+            found = single(talk.api(f"repos/{self.repo}"))
+            self._settings = (
+                found.get("merge_commit_title") or "MERGE_MESSAGE",
+                found.get("merge_commit_message") or "PR_TITLE",
+            )
+        return self._settings
 
     def path(self, rest: str) -> str:
         return f"repos/{self.repo}/{rest}"
@@ -138,14 +154,16 @@ class GitHub:
         except talk.Refused, talk.Unreachable:
             return None
 
-    def merge(self, number: int, sha: str) -> tuple[bool, str]:
-        """Merge with a merge commit, only while the head is still `sha`.
+    def merge(self, number: int, sha: str) -> tuple[bool | None, str]:
+        """Merge with a merge commit, only while the head is still `sha`:
+        `True` merged, `False` refused (and why), `None` to be asked again.
 
         `sha` is REST's `--match-head-commit`: GitHub refuses the merge (409)
         if the head moved after the queue judged it. The call is never retried:
         a 502 can arrive with the merge already done, so a call that failed in
         transit is followed by asking whether it merged, for
-        [`MERGE_SETTLES_SECONDS`]; a refusal GitHub reasoned about is a real no.
+        about a minute; a refusal GitHub reasoned about is a real no,
+        except [`BASE_MOVED`], which is GitHub asking to be asked again.
         """
         command = talk.api_command(
             self.path(f"pulls/{number}/merge"),
@@ -158,13 +176,14 @@ class GitHub:
         failure = done.stderr.strip()
         if talk.auth(failure):
             raise talk.AuthFailed(f"the merge: {failure}")
+        if BASE_MOVED in failure.lower():
+            return None, f"`main` moved under the merge ({failure}); asked again next pass."
         if not talk.transport(failure):
             return False, f"GitHub refused the merge: {failure}"
-        began = time.monotonic()
-        while time.monotonic() - began < MERGE_SETTLES_SECONDS:
+        for _ in range(MERGE_SETTLE_TRIES):
             if self.merged(number):
                 return True, ""
-            time.sleep(10)
+            time.sleep(MERGE_SETTLE_SECONDS)
         return False, (
             f"the merge call failed in transit ({failure}) and GitHub has not said it"
             " merged: look at the pull request before merging it again."

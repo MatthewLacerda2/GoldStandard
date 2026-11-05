@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tools import review_triggers
 from tools.merge_queue import aftermath, repo, talk
 
 
@@ -30,6 +31,7 @@ class Clone(unittest.TestCase):
         self.clone = repo.Clone(str(self.work))
 
     def commit(self, name: str, text: str, message: str) -> str:
+        (self.work / name).parent.mkdir(parents=True, exist_ok=True)
         (self.work / name).write_text(text)
         git(self.work, "add", name)
         git(self.work, "commit", "-q", "-m", message)
@@ -67,7 +69,7 @@ class Clone(unittest.TestCase):
         assert fresh is not None
         self.assertEqual(git(self.origin, "rev-parse", "feat"), fresh)
         self.assertTrue(self.clone.contains(fresh, broke))
-        self.assertTrue(self.clone.same_change(head, fresh))
+        self.assertTrue(self.clone.covers(head, fresh))
         self.assertEqual(git(self.work, "worktree", "list").count("\n"), 0)  # thrown away
 
     def test_a_conflicting_rebase_names_the_paths_and_pushes_nothing(self) -> None:
@@ -80,29 +82,69 @@ class Clone(unittest.TestCase):
         self.assertIn("`a.txt`", lines[0])
         self.assertEqual(git(self.origin, "rev-parse", "feat"), head)
 
-    def test_whitespace_is_part_of_the_change(self) -> None:
-        # Dedenting a guarded call out of its loop changes what it does; a
-        # whitespace-blind comparison would keep the old review record valid.
-        guarded = self.branch("guarded", "g.py", "for x in xs:\n    grant(x)\n")
-        dedented = self.branch("dedented", "g.py", "for x in xs:\n    pass\ngrant(x)\n")
-        self.clone.fetch([])
-        self.assertFalse(self.clone.same_change(guarded, dedented))
-        once = self.branch("once", "g.py", "for x in xs:\ngrant(x)\n")
-        self.assertFalse(self.clone.same_change(guarded, once))
-
-    def test_a_rebase_that_moves_the_lines_keeps_the_change(self) -> None:
+    def test_a_rebase_that_moves_the_lines_is_still_covered(self) -> None:
         head = self.branch("feat", "a.txt", "one\ntwo\nTHREE\n")
         self.advance_main("a.txt", "zero\none\ntwo\nthree\n")  # shifts the hunk
         self.clone.fetch([])
         fresh, _ = self.clone.rebase("feat", head, push=False)
         assert fresh is not None
-        self.assertTrue(self.clone.same_change(head, fresh))
+        self.assertTrue(self.clone.covers(head, fresh))
 
-    def test_a_changed_change_is_not_the_same(self) -> None:
-        head = self.branch("feat", "b.txt", "new\n")
-        other = self.branch("other", "b.txt", "different\n")
+    def rebased_by_hand(self, branch: str, file: str, text: str) -> str:
+        """`branch` remade on the current `main` by hand, its one file written as `text`."""
+        git(self.work, "checkout", "-q", "-B", f"{branch}-2", "origin/main")
+        return self.commit(file, text, "rebased by hand")
+
+    def test_whitespace_in_an_existing_file_is_part_of_the_change(self) -> None:
+        self.commit("g.py", "def a():\n    for x in xs:\n        pass\n", "g")
+        git(self.work, "push", "-q", "origin", "HEAD:main")
+        loop = "def a():\n    for x in xs:\n        pass\n        grant(x)\n"
+        reviewed = self.branch("guarded", "g.py", loop)
+        self.advance_main("c.txt", "main moves\n")
         self.clone.fetch([])
-        self.assertFalse(self.clone.same_change(head, other))
+        dedented = self.rebased_by_hand(
+            "guarded", "g.py", loop.replace("        grant", "    grant")
+        )
+        self.assertFalse(self.clone.covers(reviewed, dedented))
+
+    def test_the_same_line_in_another_function_is_another_change(self) -> None:
+        two = "def a():\n    pass\n\n\ndef b():\n    pass\n"
+        self.commit("f.py", two, "f")
+        git(self.work, "push", "-q", "origin", "HEAD:main")
+        in_b = two + "    check(user)\n"
+        reviewed = self.branch("check", "f.py", in_b)
+        self.clone.fetch([])
+        in_a = two.replace("def a():\n    pass\n", "def a():\n    pass\n    check(user)\n")
+        moved = self.rebased_by_hand("check", "f.py", in_a)
+        self.assertFalse(self.clone.covers(reviewed, moved))
+
+    def test_a_conflict_resolved_by_hand_is_another_change(self) -> None:
+        reviewed = self.branch("feat", "a.txt", "ONE\ntwo\nthree\n")
+        self.advance_main("a.txt", "uno\ntwo\nthree\n")
+        self.clone.fetch([])
+        resolved = self.rebased_by_hand("feat", "a.txt", "ONE uno\ntwo\nthree\n")
+        self.assertFalse(self.clone.covers(reviewed, resolved))
+
+    def test_a_binary_change_counts(self) -> None:
+        reviewed = self.branch("blob", "logo.bin", "\x00\x01one")
+        self.advance_main("c.txt", "main moves\n")
+        self.clone.fetch([])
+        fresh, _ = self.clone.rebase("blob", reviewed, push=False)
+        assert fresh is not None
+        self.assertTrue(self.clone.covers(reviewed, fresh))
+        swapped = self.rebased_by_hand("blob", "logo.bin", "\x00\x01two")
+        self.assertFalse(self.clone.covers(reviewed, swapped))
+
+    def test_a_hostile_diff_config_still_shows_a_query(self) -> None:
+        head = self.branch("q", "backend/repo.py", "rows = session.execute(select(Item))\n")
+        for key, value in (("diff.noprefix", "true"), ("diff.external", "/usr/bin/true")):
+            git(self.work, "config", key, value)
+        git(self.work, "config", "diff.mnemonicPrefix", "true")
+        git(self.work, "config", "color.ui", "always")
+        self.clone.fetch([])
+        diff = self.clone.backend_diff(head)
+        self.assertEqual(review_triggers.querying(diff), ["backend/repo.py"])
+        self.assertEqual(self.clone.changed(head), ["backend/repo.py"])
 
     def test_main_first_parents_and_the_ruleset(self) -> None:
         newest = self.advance_main("c.txt", "x\n")
@@ -124,6 +166,29 @@ class Clone(unittest.TestCase):
         self.assertIn("removed", lines[0])
         self.assertFalse(wt.exists())
         self.assertIn("local branch `feat` deleted.", lines)
+
+    def worktree_on_merged_feat(self) -> tuple[Path, aftermath.Aftermath]:
+        head = self.branch("feat", "b.txt", "new\n")
+        git(self.work, "push", "-q", "origin", f"{head}:main")  # as if merged
+        wt = self.work.parent / "wt"
+        git(self.work, "worktree", "add", "-q", str(wt), "feat")
+        return wt, aftermath.Aftermath(hub=None, root=str(self.work), dry=False)
+
+    def test_a_worktree_with_a_commit_main_lacks_is_kept(self) -> None:
+        wt, after = self.worktree_on_merged_feat()
+        (wt / "fix.txt").write_text("the fix the merge did not wait for\n")
+        git(wt, "add", "fix.txt")
+        git(wt, "commit", "-q", "-m", "unpushed fix")
+        self.assertIn(
+            "1 commit(s) `main` has no equivalent of", after.worktrees({"branch": "feat"})[0]
+        )
+        self.assertTrue(wt.exists())
+
+    def test_a_locked_worktree_is_left_to_its_session(self) -> None:
+        wt, after = self.worktree_on_merged_feat()
+        git(self.work, "worktree", "lock", str(wt))
+        self.assertIn("locked", after.worktrees({"branch": "feat"})[0])
+        self.assertTrue(wt.exists())
 
 
 if __name__ == "__main__":

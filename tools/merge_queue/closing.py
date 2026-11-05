@@ -17,9 +17,12 @@ say it deliberately leaves it open (`refs #N`).
 
 Which issues a pull request closes is read by the rule GitHub applies
 ([`closes`]): a keyword, then `#N`, `owner/name#N` or the issue's URL, the
-last two only for this repository. It is read from the description **and from
-the branch's commit messages**: the queue merges with a merge commit, which
-keeps them, and a `fixes #N` in one closes #N when it lands on `main`. REST has
+last two only for this repository. It is read from the description, from
+**the merge commit's own message** (what the repository's merge commit
+settings put there, [`merge_text`]: this repository's default is the pull
+request's title) **and from the branch's commit messages**: the queue merges
+with a merge commit, which keeps them, and a `fixes #N` in any of them closes
+#N when it lands on `main`. REST has
 no other way to ask, so an issue linked only in the sidebar is not seen. A
 description is an edit away from passing (no push, no new CI run); a commit
 message needs the branch rewritten.
@@ -110,6 +113,20 @@ def refusal(closed: dict[int, dict], in_commits: frozenset[int] = frozenset()) -
     if in_commits & set(closed) and lines:
         lines.append("A commit message is fixed by rewording the commit and pushing the branch.")
     return lines
+
+
+def merge_text(pull: dict, title: str, message: str) -> str:
+    """The message GitHub writes on the merge commit, by the repository's
+    `merge_commit_title` (`MERGE_MESSAGE`, the default, or `PR_TITLE`) and
+    `merge_commit_message` (`PR_TITLE`, the default, `PR_BODY` or `BLANK`)."""
+    head = pull.get("head_repo", "").split("/")[0]
+    first = (
+        pull["title"]
+        if title == "PR_TITLE"
+        else (f"Merge pull request #{pull['number']} from {head}/{pull['branch']}")
+    )
+    rest = {"PR_BODY": pull["body"], "BLANK": ""}.get(message, pull["title"])
+    return f"{first}\n\n{rest}"
 
 
 def issue_of(branch: str) -> int | None:

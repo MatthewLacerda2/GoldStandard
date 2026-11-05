@@ -8,7 +8,9 @@ from __future__ import annotations
 import contextlib
 import io
 import unittest
+from unittest import mock
 
+from tools.merge_queue import main_gate
 from tools.merge_queue.state import Memory
 from tools.tests.queue_world import FakeClone, FakeHub, check_run, long_ago, make_queue
 from tools.tests.queue_world import pull_request as pr
@@ -111,6 +113,15 @@ class CI(Pass):
         self.assertEqual(queue.memory.unsettled, {})
         self.assertIn("#1: cleaned later.", self.out.getvalue())
 
+    def test_a_moved_base_is_merged_on_the_next_pass_not_handed_back(self) -> None:
+        one = pr(1)
+        self.hub.green(one)
+        self.hub.again.add(1)
+        queue = make_queue(self.hub, self.clone)
+        self.assertFalse(queue.sweep([one]))
+        self.assertEqual(queue.handed, {})
+        self.assertTrue(queue.sweep([one]))
+
     def test_a_refused_merge_is_handed_back(self) -> None:
         one = pr(1)
         self.hub.green(one)
@@ -165,6 +176,30 @@ class Closing(Pass):
         self.assertIn("it closes #5, which is labelled `planning`", self.out.getvalue())
         self.hub.issues[5]["labels"] = []  # the user greenlit it
         self.assertTrue(self.sweep(one))
+
+    def test_a_commit_message_closing_a_planning_issue_is_handed_back(self) -> None:
+        one = pr(1)
+        self.hub.green(one)
+        self.hub.messages[1] = ["Fix the login\n\nfixes #5"]
+        self.hub.issues[5] = {"number": 5, "state": "open", "labels": [{"name": "planning"}]}
+        self.assertFalse(self.sweep(one))
+        self.assertIn(
+            "a commit message closes #5, which is labelled `planning`", self.out.getvalue()
+        )
+
+    def test_the_title_closes_when_the_merge_commit_carries_it(self) -> None:
+        one = pr(1, title="Fix #5: the login")
+        self.hub.green(one)
+        self.hub.issues[5] = {"number": 5, "state": "closed", "labels": []}
+        self.assertFalse(self.sweep(one))  # the default merge message is the title
+        self.hub.settings = ("MERGE_MESSAGE", "BLANK")
+        self.assertTrue(self.sweep(one))
+
+    def test_a_leading_number_that_is_no_issue_names_none(self) -> None:
+        page = pr(1, branch="fix/404-page")
+        self.hub.green(page)
+        self.hub.missing.add(404)
+        self.assertTrue(self.sweep(page))
 
     def test_a_branch_named_for_an_issue_must_name_it(self) -> None:
         one = pr(1, branch="feat/47-merge-queue", body="Closes #46")
@@ -249,6 +284,21 @@ class RedMain(Pass):
         self.assertIn("did not run `backend`", self.out.getvalue())
         self.hub.runs[skips["head"]] = [check_run(), check_run(name="backend")]
         self.assertTrue(self.sweep(skips))
+
+    def test_unreadable_main_ci_holds_the_line(self) -> None:
+        self.hub.unreadable.add(self.clone.main)
+        one = pr(1)
+        self.hub.green(one)
+        self.assertFalse(self.sweep(one))
+        self.assertIn("could not be read", self.out.getvalue())
+
+    def test_a_red_main_holds_right_after_the_machine_boots(self) -> None:
+        # `time.monotonic()` counts from boot: an unread commit is never fresh.
+        self.red_main()
+        one = pr(1)
+        self.hub.green(one)
+        with mock.patch.object(main_gate.time, "monotonic", return_value=5.0):
+            self.assertFalse(self.sweep(one))
 
     def test_a_streak_names_its_oldest_commit(self) -> None:
         newest, oldest, green = "1" * 40, "2" * 40, "3" * 40

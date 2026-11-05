@@ -21,8 +21,9 @@ def ruleset(*contexts: dict) -> str:
 
 
 class WhatCountsAsCI(unittest.TestCase):
-    def test_the_repository_ruleset_requires_ci_ok_from_actions(self) -> None:
-        self.assertEqual(checks.required(RULESET.read_text()), [CI_OK])
+    def test_the_repository_ruleset_requires_ci_ok_and_the_mutation_gate(self) -> None:
+        gate = Required("mutation gate", 15368)
+        self.assertEqual(checks.required(RULESET.read_text()), [CI_OK, gate])
 
     def test_a_second_required_check_is_read_too(self) -> None:
         text = ruleset({"context": "CI ok", "integration_id": 15368}, {"context": "gate"})
@@ -65,6 +66,17 @@ class OnAHead(unittest.TestCase):
         self.assertEqual(self.state(ready, draft), checks.GREEN)
         rerun = check_run(status="in_progress", run_id=3)
         self.assertEqual(self.state(ready, rerun), checks.PENDING)
+
+    def test_a_failure_with_a_newer_run_going_waits_for_it(self) -> None:
+        # Re-running the failed jobs (or reopening) starts new runs while the
+        # newest `CI ok` is still the old failure.
+        failed, again = (
+            check_run("failure", run_id=1),
+            check_run(status="queued", name="backend", run_id=2),
+        )
+        self.assertEqual(self.state(failed, again), checks.PENDING)
+        older = check_run(status="in_progress", name="backend", run_id=0)
+        self.assertEqual(self.state(failed, older), checks.RED)
 
     def test_red_is_an_answer_while_another_check_still_runs(self) -> None:
         both = (CI_OK, Required("gate"))
@@ -117,6 +129,13 @@ class PerJobOnMain(unittest.TestCase):
         names = [each.context for each in checks.jobs([CI_OK], self.commits())]
         self.assertEqual(names, ["CI ok", "backend"])  # `other` is another workflow's
 
+    def test_a_job_the_newest_run_no_longer_has_is_not_judged(self) -> None:
+        # `backend` was renamed away: the newest push run has no such job, so
+        # its old red holds nothing.
+        renamed = [job("CI ok", suite=3), job("server", suite=3)]
+        commits = [("n" * 40, renamed), *self.commits()]
+        self.assertEqual([j.context for j in checks.jobs([CI_OK], commits)], ["CI ok", "server"])
+
     def test_a_docs_only_green_merge_does_not_turn_a_red_job_green(self) -> None:
         commits = self.commits()
         found = {
@@ -132,6 +151,8 @@ class PerJobOnMain(unittest.TestCase):
         assert red is not None
         self.assertFalse(checks.proves_fixed(red, [job("CI ok"), job("backend", "skipped")]))
         self.assertTrue(checks.proves_fixed(red, [job("CI ok"), job("backend")]))
+        # A head whose workflow no longer has the job (renamed or removed) clears it.
+        self.assertTrue(checks.proves_fixed(red, [job("CI ok"), job("server")]))
 
 
 if __name__ == "__main__":

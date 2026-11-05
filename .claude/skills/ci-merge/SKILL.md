@@ -120,7 +120,7 @@ and label; it spends no tokens.
   REST, `gh api repos/{owner}/{repo}/issues/N/labels -f 'labels[]=queue'`
   (`gh pr edit` is GraphQL, which some proxies refuse). The label is
   the go-ahead, not the proof. Before every merge the queue checks it again:
-  every check `.github/rulesets/main.json` requires (today `CI ok`) passed on
+  every check `.github/rulesets/main.json` requires (`CI ok` and the `mutation gate`) passed on
   the head commit, the review record names that head (`independent-review`,
   *Answering the findings*), what the description closes may be closed, it
   does not conflict with `main`, and `main` is not red.
@@ -148,8 +148,8 @@ merges on its own.
   draft and ready again, or push, to get a run.
 - **The review lane**: no `Independent review` record, or one naming another
   head. Run `independent-review` on what was pushed since, then post a record
-  naming the new head. A rebase that left the change as it was needs nothing:
-  the queue counts the record for it.
+  naming the new head. A rebase that resolved nothing needs nothing: the queue
+  replays the reviewed change onto the new base, and an identical tree counts.
 - **What it closes**, in the description or in a commit message (the merge
   commit keeps them, and `fixes #N` there closes #N too): an issue labelled
   `planning` or `human`, a number that is a pull request or a closed issue, or

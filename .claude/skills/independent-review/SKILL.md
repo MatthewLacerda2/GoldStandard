@@ -144,8 +144,9 @@ checked against the code first. Then:
    comment's first line, alone, and the next line names the head the findings
    were answered on, in full: `Reviewed head: <the branch's SHA after step 2's
    push>`. The merge queue counts the record for that head only, or for a
-   rebase of it that left the PR's own change the same; anything pushed after
-   it owes a review of the new commits and a new record naming the new head.
+   rebase of it that resolved nothing (its tree is exactly the reviewed change
+   replayed onto the new base); anything else pushed after it owes a review of
+   the new commits and a new record naming the new head.
    Post it from the PR's author or an assignee: nobody else's counts.
 4. When the fixes rework a query, a contract or the logic substantially, one more
    reviewer reads the new diff. Otherwise one round is the review.

@@ -6,7 +6,7 @@ from __future__ import annotations
 from argparse import Namespace
 from datetime import UTC, datetime, timedelta
 
-from tools.merge_queue import checks, judge
+from tools.merge_queue import checks, judge, talk
 from tools.merge_queue.queue import Queue
 from tools.merge_queue.state import Memory
 
@@ -61,9 +61,13 @@ class FakeHub:
         self.issues: dict[int, dict] = {}
         self.notes: dict[int, list[tuple[str, str]]] = {}
         self.messages: dict[int, list[str]] = {}
+        self.settings = ("MERGE_MESSAGE", "PR_TITLE")
         self.runs: dict[str, list[dict]] = {}
         self.merges: list[int] = []
         self.refusing: set[int] = set()
+        self.again: set[int] = set()
+        self.missing: set[int] = set()  # issue numbers GitHub answers 404 for
+        self.unreadable: set[str] = set()  # commits whose check runs GitHub refuses
         self.reran: list[int] = []
 
     def pull(self, number):
@@ -73,15 +77,22 @@ class FakeHub:
         return [p for p in self.pulls.values() if p["state"] == "open" and p["base"] == base]
 
     def issue(self, number):
+        if number in self.missing:
+            raise talk.Refused(f"gh api GET issues/{number}: HTTP 404: Not Found")
         return self.issues.get(number, {"number": number, "state": "open", "labels": []})
 
     def comments(self, number):
         return self.notes.get(number, [])
 
+    def merge_settings(self):
+        return self.settings
+
     def commit_messages(self, number):
         return self.messages.get(number, [])
 
     def check_runs(self, sha):
+        if sha in self.unreadable:
+            raise talk.Refused(f"gh api GET commits/{sha}/check-runs: HTTP 404")
         return self.runs.get(sha, [])
 
     def rerun_failed(self, run):
@@ -91,6 +102,9 @@ class FakeHub:
         return number in self.merges
 
     def merge(self, number, sha):
+        if number in self.again:
+            self.again.discard(number)
+            return None, "`main` moved under the merge; asked again next pass."
         if number in self.refusing:
             return False, "GitHub refused the merge: Pull Request is not mergeable"
         self.merges.append(number)
@@ -116,6 +130,7 @@ class FakeClone:
         self.same: set[frozenset[str]] = set()  # pairs of heads with the same change
         self.history: list[str] = [self.main]  # `main`'s first parents, newest first
         self.pushed: list[str] = []
+        self.files: dict[str, str] = {}  # what `main` has at a path
 
     def fetch(self, heads):
         pass
@@ -126,11 +141,14 @@ class FakeClone:
     def backend_diff(self, head):
         return ""
 
-    def package_sides(self, head):
+    def sides(self, head, path):
         return None, None
 
-    def same_change(self, one, other):
-        return one == other or frozenset((one, other)) in self.same
+    def file(self, rev, path):
+        return self.files.get(path)
+
+    def covers(self, reviewed, head):
+        return reviewed == head or frozenset((reviewed, head)) in self.same
 
     def conflicts(self, one, other):
         return ["backend/x.py"] if frozenset((one, other)) in self.clashes else None

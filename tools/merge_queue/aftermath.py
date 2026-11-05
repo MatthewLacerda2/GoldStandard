@@ -10,7 +10,8 @@ merge*: `deleteBranchOnMerge` is off):
   asked about again on every pass (`queue.Queue.settle`);
 - each worktree on the branch is removed, and then the local branch, unless
   somebody's work is still in it ([`keep_reason`]). Never the worktree the
-  queue runs in.
+  queue runs in, and never a **locked** one: a lock marks a session that is
+  still using it, so it is left, said, for that session or a person to free.
 
 Each step is best effort: a failure is said, never a hand-back. The merge is
 done, and what is left is housekeeping.
@@ -28,14 +29,21 @@ SETTLE_TRIES = 6
 SETTLE_SECONDS = 5
 
 
-def worktrees_on(porcelain: str, branch: str) -> list[str]:
-    """The worktrees `git worktree list --porcelain` shows on `branch`."""
-    found, path = [], ""
-    for line in porcelain.splitlines():
+def worktrees_on(porcelain: str, branch: str) -> list[tuple[str, bool]]:
+    """The worktrees `git worktree list --porcelain` shows on `branch`, each
+    with whether it is locked."""
+    found, path, on, locked = [], "", False, False
+    for line in [*porcelain.splitlines(), ""]:
         if line.startswith("worktree "):
-            path = line.removeprefix("worktree ")
+            path, on, locked = line.removeprefix("worktree "), False, False
         elif line == f"branch refs/heads/{branch}":
-            found.append(path)
+            on = True
+        elif line == "locked" or line.startswith("locked "):
+            locked = True
+        elif not line and path:
+            if on:
+                found.append((path, locked))
+            path = ""
     return found
 
 
@@ -81,7 +89,7 @@ class Aftermath:
         for step in (self.branch, self.worktrees):
             try:
                 lines += step(pull)
-            except (talk.Unreachable, talk.MachineDown, talk.Refused) as failed:
+            except (talk.Unreachable, talk.MachineDown, talk.Refused, talk.AuthFailed) as failed:
                 lines.append(f"a step was left undone ({failed}); settle it by hand.")
         return lines
 
@@ -108,15 +116,14 @@ class Aftermath:
             talk.git_net("fetch", "--quiet", "origin", repo.BASE, cwd=self.root)
         listed = talk.git("worktree", "list", "--porcelain", cwd=self.root).stdout
         lines, kept = [], False
-        for path in worktrees_on(listed, branch):
-            why = self.keep(path)
+        for path, locked in worktrees_on(listed, branch):
+            why = "it is locked, by a session still using it" if locked else self.keep(path)
             if why:
                 kept = True
                 lines.append(f"worktree {path} kept: {why}.")
             elif self.dry:
                 lines.append(f"would remove worktree {path}.")
             else:
-                talk.git("worktree", "unlock", path, cwd=self.root)
                 done = talk.git("worktree", "remove", "--force", path, cwd=self.root)
                 if done.returncode != 0:
                     kept = True

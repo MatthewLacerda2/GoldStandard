@@ -2,9 +2,10 @@
 
 **What counts as CI is what the `main` ruleset requires** (README, *Protecting
 `main`*): the contexts `.github/rulesets/main.json` lists ([`required`]),
-today the one `CI ok` that `ci.yml` ends in. A workflow added beside `ci.yml`
-as a second required check is judged here the day it is listed there, with
-nothing to change in the queue. A context listed with an `integration_id` is
+`CI ok`, which `ci.yml` ends in, and the `mutation gate`, a workflow of its
+own on `pull_request_target` whose check runs land on the pull request's head
+too. A workflow added as another required check is judged here the day it is
+listed there, with nothing to change in the queue. A context listed with an `integration_id` is
 read only from that app's check runs, so another app cannot post a check of
 the same name and stand in for it.
 
@@ -105,14 +106,13 @@ def required(ruleset: str) -> list[Required]:
     return found
 
 
+def same_app(required: Required, run: dict) -> bool:
+    return required.app is None or (run.get("app") or {}).get("id") == required.app
+
+
 def mine(required: Required, runs: list[dict]) -> list[dict]:
     """The check runs that answer for `required`, oldest first."""
-    found = [
-        run
-        for run in runs
-        if run.get("name") == required.context
-        and (required.app is None or (run.get("app") or {}).get("id") == required.app)
-    ]
+    found = [run for run in runs if run.get("name") == required.context and same_app(required, run)]
     return sorted(found, key=lambda run: run.get("id") or 0)
 
 
@@ -130,6 +130,11 @@ def one(required: Required, runs: list[dict]) -> tuple[str, str]:
         return GREEN, f"{name} passed."
     if conclusion == "skipped":
         return NO_RUN, f"{name} was skipped on this commit (a draft's run): it checked nothing."
+    later = [r for r in runs if (r.get("id") or 0) > (run.get("id") or 0)]
+    if any(r.get("status") != "completed" for r in later if same_app(required, r)):
+        # A re-run of the failed jobs, or a reopened pull request's new run, is
+        # going; `CI ok` reports again once its jobs finish.
+        return PENDING, f"{name} failed, and a newer run is going: waiting for it."
     return RED, f"{name} concluded {conclusion}: {run.get('html_url') or 'the run'}"
 
 
@@ -169,25 +174,37 @@ def says(required: Required, runs: list[dict]) -> str | None:
     return "success" if conclusion == "success" else "red"
 
 
+def suite(run: dict) -> object:
+    return (run.get("check_suite") or {}).get("id")
+
+
 def jobs(required: list[Required], commits: list[tuple[str, list[dict]]]) -> list[Required]:
-    """The required contexts and every job of the workflow runs that report one:
-    the check runs sharing a check suite with a required context, from its app."""
+    """The required contexts and the jobs of the workflow run that last reported
+    each on `main`: the check runs sharing a check suite with its newest
+    finished run, on the newest commit that has one. A job removed or renamed
+    in that workflow drops out of the list with the first push run without it,
+    so an old red of a job that no longer exists holds nothing."""
     found = list(required)
-    for _, runs in commits:
-        for each in required:
-            suites = {(run.get("check_suite") or {}).get("id") for run in mine(each, runs)}
-            suites.discard(None)
+    for each in required:
+        for _, runs in commits:
+            done = [run for run in mine(each, runs) if run.get("status") == "completed"]
+            if not done:
+                continue
             for run in runs:
                 job = Required(run.get("name") or "", each.app)
-                in_suite = (run.get("check_suite") or {}).get("id") in suites
-                if in_suite and job.context and job not in found:
+                if suite(run) == suite(done[-1]) and job.context and job not in found:
                     found.append(job)
+            break
     return found
 
 
 def proves_fixed(red: Red, runs: list[dict]) -> bool:
-    """Whether a head's own check runs ran `red`'s job and passed it (skipped is not)."""
-    return one(red.check, runs)[0] == GREEN
+    """Whether a head's own check runs show `red`'s job fixed: it ran and passed
+    (skipped is not), or the head has no run of it at all, because the pull
+    request removes or renames the job. That last is what a `main` red on a
+    job that no longer exists needs, and the pull request's own required
+    checks still had to pass first."""
+    return one(red.check, runs)[0] == GREEN or not mine(red.check, runs)
 
 
 def main_red(required: Required, commits: Iterable[tuple[str, list[dict]]]) -> Red | None:

@@ -166,14 +166,19 @@ def api(path: str, method: str = "GET", fields: dict[str, str] | None = None) ->
     return json.loads(done.stdout) if done.stdout.strip() else None
 
 
+# Every git the queue runs prints paths as they are (no quoted octal escapes
+# for a non-ASCII name) and no colour, whatever this machine's config says.
+GIT = ("git", "-c", "core.quotePath=false", "-c", "color.ui=never")
+
+
 def git(*args: str, cwd: str) -> subprocess.CompletedProcess:
     """Local `git`. Callers read `returncode` themselves."""
-    return once(["git", *args], cwd)
+    return once([*GIT, *args], cwd)
 
 
 def git_net(*args: str, cwd: str) -> subprocess.CompletedProcess:
     """`git` that talks to the remote (fetch, push), retried in transit."""
-    return retried(["git", *args], cwd)
+    return retried([*GIT, *args], cwd)
 
 
 def say(line: str, *rest: str) -> None:

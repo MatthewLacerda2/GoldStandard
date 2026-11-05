@@ -18,7 +18,7 @@ It decides and says nothing: the queue speaks.
 from __future__ import annotations
 
 from tools import review_triggers
-from tools.merge_queue import checks, closing, github, repo, review
+from tools.merge_queue import checks, closing, github, repo, review, talk
 from tools.merge_queue.main_gate import MainGate
 
 DRAFT, HANDED, CONFLICT, PENDING, HELD, GREEN = (
@@ -42,7 +42,8 @@ class Judge:
         """Why what it closes may not be closed; empty when it may. Keeps the
         labels of the pull request and of the issues it closes, for the order."""
         repo_name = self.hub.repo
-        described = set(closing.closes(pull["body"], repo_name))
+        merged = closing.merge_text(pull, *self.hub.merge_settings())
+        described = set(closing.closes(f"{pull['body']}\n{merged}", repo_name))
         committed = set(closing.closes("\n".join(self.messages(pull)), repo_name))
         closed = {number: self.hub.issue(number) for number in sorted(described | committed)}
         self.labels[pull["number"]] = [
@@ -50,7 +51,20 @@ class Judge:
             *(label for item in closed.values() for label in closing.labels(item)),
         ]
         refused = closing.refusal(closed, frozenset(committed - described))
-        return refused or closing.unnamed(pull["branch"], pull["body"], repo_name)
+        if refused or not self.named_for_an_issue(pull["branch"]):
+            return refused
+        return closing.unnamed(pull["branch"], pull["body"], repo_name)
+
+    def named_for_an_issue(self, branch: str) -> bool:
+        """Whether the branch's leading number is an existing issue's: `fix/404-page`
+        names no issue when there is no issue #404."""
+        number = closing.issue_of(branch)
+        if number is None:
+            return False
+        try:
+            return "pull_request" not in self.hub.issue(number)
+        except talk.Refused:  # a 404: no such issue
+            return False
 
     def messages(self, pull: dict) -> list[str]:
         """The branch's commit messages, asked once per head."""
@@ -62,11 +76,16 @@ class Judge:
         head = pull["head"]
         paths = self.clone.changed(head)
         queries = review_triggers.querying(self.clone.backend_diff(head))
-        package = review_triggers.PACKAGE in paths and review_triggers.gated(
-            *self.clone.package_sides(head)
-        )
+        gates = [
+            path
+            for path, moved in review_triggers.GATED.items()
+            if path in paths and moved(*self.clone.sides(head, path))
+        ]
+        listed = self.clone.file(repo.UPSTREAM, review_triggers.SENSITIVE)
+        guarded = review_triggers.sensitive(listed)
         labels = self.labels.get(pull["number"], pull.get("labels", []))
-        return review_triggers.hits(paths, pull.get("additions", 0), labels, queries, package)
+        additions = pull.get("additions", 0)
+        return review_triggers.hits(paths, additions, labels, queries, gates, guarded)
 
     def review(self, pull: dict) -> list[str]:
         """Why its review lane is not satisfied; empty when it is (or it has none)."""
@@ -78,7 +97,7 @@ class Judge:
             return []
         coders = {pull.get("author", ""), *pull.get("assignees", [])} - {""}
         named = review.records(self.hub.comments(pull["number"]), coders)
-        ok, why = review.verdict(named, head, lambda sha: self.clone.same_change(sha, head))
+        ok, why = review.verdict(named, head, lambda sha: self.clone.covers(sha, head))
         if ok:
             self.reviewed.add(head)
             return []

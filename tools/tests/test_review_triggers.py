@@ -59,7 +59,7 @@ class Triggers(unittest.TestCase):
         self.assertTrue(review_triggers.gated(old, gate))
         self.assertTrue(review_triggers.gated(None, old))
         package = review_triggers.PACKAGE
-        self.assertEqual(hit(package, package_gated=True), ["CI and the gates"])
+        self.assertEqual(hit(package, gates=[package]), ["CI and the gates"])
         self.assertEqual(hit(package), [])
 
     def test_a_refactor_is_its_label_or_its_size(self) -> None:

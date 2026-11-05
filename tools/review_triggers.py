@@ -8,12 +8,17 @@ change here, and `tools/tests/test_review_triggers.py` fails while the skill's
 *When* names a path no trigger here covers.
 
 Patterns read as `tools/ci_paths.py` reads them: `*` stops at a `/`, `**` does
-not. Beside the paths, three triggers look at more than a file's name:
+not. Beside the paths, four triggers look at more than a file's name:
 
 - **database access** also counts any changed line of backend code outside the
   tests that builds or runs a statement ([`QUERY`]), wherever it lives;
+- **auth** also counts every sensitive path `backend/mutation-sensitive.txt`
+  lists ([`sensitive`]; not its `hash-only` entries, the mutation gate's own
+  files, which count as **CI and the gates**), as `main` has the list;
 - **CI and the gates** counts `frontend/package.json` only when a key the gates
-  read changes ([`PACKAGE_GATES`]): a dependency bump is not a CI change;
+  read changes ([`PACKAGE_GATES`]), and `backend/requirements-dev.txt` only when
+  the pin the mutation gate installs changes ([`DEV_GATES`]): a dependency bump
+  is not a CI change;
 - **refactor** is the `refactor` label (on the pull request or an issue it
   closes), or more than [`REFACTOR_LINES`] lines added.
 
@@ -30,6 +35,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from pathlib import Path
 
 from tools.ci_paths import counts
 
@@ -66,6 +72,7 @@ TRIGGERS: dict[str, tuple[str, ...]] = {
         "backend/pytest.ini",
         "backend/conftest.py",
         "backend/tests/conftest.py",
+        "backend/mutation-sensitive.txt",
         "frontend/eslint-rules/**",
         "frontend/eslint.config.*",
         "frontend/**/tsconfig*.json",
@@ -97,6 +104,26 @@ QUERY = re.compile(
     r"|\bsession\.(get|add|add_all|delete|merge|flush|refresh)\("
 )
 BACKEND_TESTS = "backend/tests/"
+
+# The mutation gate's list of sensitive code (the *Auth* trigger's paths).
+SENSITIVE = "backend/mutation-sensitive.txt"
+# `backend/requirements-dev.txt` beside the backend's other dev tools holds the
+# mutmut pin the `mutation gate` workflow installs: only that line makes it a
+# CI change.
+DEV_REQUIREMENTS = "backend/requirements-dev.txt"
+DEV_GATES = ("mutmut",)
+
+
+def sensitive(text: str | None) -> tuple[str, ...]:
+    """The sensitive paths a `mutation-sensitive.txt` lists, as patterns (a
+    directory, ending in `/`, as everything under it); not its `hash-only`
+    entries, which are the gate's own files."""
+    entries = []
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if line and not line.startswith(("#", "hash-only ")):
+            entries.append(f"{line}**" if line.endswith("/") else line)
+    return tuple(entries)
 
 
 def querying(diff: str) -> list[str]:
@@ -134,25 +161,44 @@ def gated(before: str | None, after: str | None) -> bool:
     return any(old.get(key) != new.get(key) for key in PACKAGE_GATES)
 
 
+def pinned(before: str | None, after: str | None) -> bool:
+    """Whether a `requirements-dev.txt` change moves a pin the gates install."""
+
+    def pins(text: str | None) -> set[str]:
+        lines = (line.strip() for line in (text or "").splitlines())
+        return {line for line in lines if line.startswith(DEV_GATES)}
+
+    return pins(before) != pins(after)
+
+
+# The files whose change is a CI change only when their gate part moves, each
+# with the judge that reads both sides.
+GATED = {PACKAGE: gated, DEV_REQUIREMENTS: pinned}
+
+
 def hits(
     paths: list[str],
     additions: int = 0,
     labels: list[str] | tuple[str, ...] = (),
     queries: list[str] | tuple[str, ...] = (),
-    package_gated: bool = False,
+    gates: list[str] | tuple[str, ...] = (),
+    guarded: tuple[str, ...] = (),
 ) -> list[str]:
     """The triggers a change hits, each with what tripped it; empty when none.
 
-    `queries` are the files [`querying`] found; `package_gated` is [`gated`]'s
-    answer for [`PACKAGE`], asked only when the change touches it.
+    `queries` are the files [`querying`] found; `gates` the [`GATED`] files
+    whose judge said their gate part changed; `guarded` the [`sensitive`]
+    patterns.
     """
     found = []
     for trigger, patterns in TRIGGERS.items():
+        if trigger == "auth":
+            patterns = (*patterns, *guarded)
         touched = sorted(p for p in paths if counts(patterns, p))
         if trigger == "database access":
             touched = sorted({*touched, *queries})
-        if trigger == "CI and the gates" and package_gated and PACKAGE in paths:
-            touched.append(PACKAGE)
+        if trigger == "CI and the gates":
+            touched = sorted({*touched, *(g for g in gates if g in paths)})
         if touched:
             more = f" (+{len(touched) - 3} more)" if len(touched) > 3 else ""
             found.append(f"{trigger}: {', '.join(touched[:3])}{more}")
@@ -166,7 +212,9 @@ def hits(
 def main(lines: list[str]) -> str:
     """The triggers the changed paths in `lines` hit, one per line."""
     paths = [line.strip() for line in lines if line.strip()]
-    return "\n".join(hits(paths)) or "no trigger: the review is not required."
+    listed = Path(SENSITIVE).read_text() if Path(SENSITIVE).exists() else None
+    found = hits(paths, guarded=sensitive(listed))
+    return "\n".join(found) or "no trigger: the review is not required."
 
 
 if __name__ == "__main__":

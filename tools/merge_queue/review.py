@@ -16,11 +16,12 @@ request's author or an assignee: the account the findings are answered from.
 names the head the findings were answered on (that line only, so a quoted or
 older SHA further down never stands in for it). A push after it (a fix, a
 takeover's commits) makes it stale, and so does a record that names no head.
-The one push it survives is a rebase that left the pull request's own change
-as it was: the same diff against `main`, every changed line and its
-whitespace included, only the hunks' line numbers aside
-(`repo.Clone.same_change`), whoever made the rebase. A rebase that had to
-resolve something changes the diff, and the review is owed again.
+The one push it survives is a rebase that resolved nothing: the record counts
+for a head whose tree is exactly what replaying the named head's change onto
+the new head's base gives (`repo.Clone.covers`, a three-way `git merge-tree`
+with no checkout), whoever made the rebase. A rebase that had to resolve a
+conflict, or any line added, moved or re-indented on the way, gives another
+tree, and the review is owed again.
 
 The record is a process guard, not a permission boundary: anyone with write
 access can merge by hand. It keeps an honest pipeline from merging a review
@@ -63,13 +64,11 @@ def records(comments: list[tuple[str, str]], coders: Collection[str]) -> list[st
     return named
 
 
-def verdict(
-    named: list[str], head: str, same_change: Callable[[str], bool]
-) -> tuple[bool, list[str]]:
+def verdict(named: list[str], head: str, covers: Callable[[str], bool]) -> tuple[bool, list[str]]:
     """Whether the records cover `head`, and, when not, why and what to do.
 
-    `same_change(sha)` says whether `sha`'s own change is `head`'s (a rebase
-    that changed nothing of it). Only the newest record that names a head is
+    `covers(sha)` says whether `head` is `sha`'s change replayed onto `head`'s
+    base, and nothing else (a rebase that resolved nothing). Only the newest record that names a head is
     asked about; an older one was overtaken by it.
     """
     head = head.lower()
@@ -78,7 +77,7 @@ def verdict(
     if not named:
         return False, [MISSING]
     last = next((sha for sha in reversed(named) if sha), "")
-    if last and same_change(last):
+    if last and covers(last):
         return True, []
     record = "the newest `Independent review` comment"
     if not last:

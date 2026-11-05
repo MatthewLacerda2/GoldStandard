@@ -14,32 +14,28 @@ the code is shaped as it is does not get to pick a side.
 
 from __future__ import annotations
 
-import hashlib
-import re
-import subprocess
 import tempfile
 from pathlib import Path
 
 from tools.merge_queue import github, order, talk
-from tools.review_triggers import PACKAGE
 
 BASE = "main"
 UPSTREAM = f"origin/{BASE}"
 RULESET = ".github/rulesets/main.json"
-# A hunk header's line numbers, and a blob line's ids: what a rebase changes
-# in a diff whose change it did not touch.
-HUNK = re.compile(rb"^@@ -\d+(,\d+)? \+\d+(,\d+)? @@.*$", re.MULTILINE)
-INDEX = re.compile(rb"^index [0-9a-f]+\.\.[0-9a-f]+.*\n", re.MULTILINE)
+# A diff the queue parses is git's own, whatever this machine's config says:
+# no external or text-converting diff, no colour, no renames, and the `a/` and
+# `b/` prefixes `review_triggers.querying` reads (`diff.noprefix` and
+# `diff.mnemonicPrefix` would change them).
+PLAIN_DIFF = (
+    "--no-ext-diff",
+    "--no-textconv",
+    "--no-color",
+    "--no-renames",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
+)
 # How far back `main`'s first parents are read for its red streak.
 MAIN_DEPTH = 20
-
-
-def normalised(diff: bytes) -> bytes:
-    """A `-U0` diff with what a clean rebase changes taken out: hunk start lines
-    (their sizes stay) and the `index` lines' blob ids. Every changed line, its
-    whitespace included, stays as it was."""
-    diff = INDEX.sub(b"", diff)
-    return HUNK.sub(lambda m: b"@@ -" + (m[1] or b"") + b" +" + (m[2] or b"") + b" @@", diff)
 
 
 class Clone:
@@ -50,7 +46,7 @@ class Clone:
         self.main = ""
         self._pairs: dict[frozenset[str], list[str] | None] = {}
         self._paths: dict[str, list[str]] = {}
-        self._keys: dict[str, str | None] = {}
+        self._covers: dict[tuple[str, str, str], bool] = {}
 
     def ask(self, *args: str) -> str:
         """A local question whose failure must not read as an empty answer."""
@@ -83,7 +79,7 @@ class Clone:
         with `main`, both ends of a rename."""
         key = f"{head} {self.main}"
         if key not in self._paths:
-            out = self.ask("diff", "--name-only", "--no-renames", f"{UPSTREAM}...{head}")
+            out = self.ask("diff", *PLAIN_DIFF, "--name-only", f"{UPSTREAM}...{head}")
             self._paths[key] = [line for line in out.splitlines() if line]
         return self._paths[key]
 
@@ -95,43 +91,50 @@ class Clone:
     def backend_diff(self, head: str) -> str:
         """The pull request's backend change outside the tests, with no context."""
         spec = f"{UPSTREAM}...{head}"
-        return self.ask("diff", "-U0", "--no-color", spec, "--", "backend", ":!backend/tests")
+        return self.ask("diff", *PLAIN_DIFF, "-U0", spec, "--", "backend", ":!backend/tests")
 
-    def package_sides(self, head: str) -> tuple[str | None, str | None]:
-        """`frontend/package.json` at the merge base and at the head."""
+    def sides(self, head: str, path: str) -> tuple[str | None, str | None]:
+        """`path` at the pull request's merge base with `main`, and at its head."""
         base = self.ask("merge-base", UPSTREAM, head).strip()
-        return self.file(base, PACKAGE), self.file(head, PACKAGE)
+        return self.file(base, path), self.file(head, path)
 
-    def change_key(self, sha: str) -> str | None:
-        """A fingerprint of `sha`'s own change: its diff against its merge base
-        with `main`, with no context lines (a `main` edit beside a hunk is not
-        the pull request's) and the hunk headers' line numbers dropped (a
-        rebase moves them), **whitespace kept** (dedenting a line out of a block
-        changes what it does). The diff is git's own (`--no-ext-diff
-        --no-textconv`: a machine's difftastic would print something else),
-        read as bytes. `None` when it cannot be read (a commit that cannot be
-        fetched): the review is then owed, never assumed."""
-        key = f"{sha} {self.main}"
-        if key not in self._keys:
-            self._keys[key] = self._change_key(sha)
-        return self._keys[key]
+    def covers(self, reviewed: str, head: str) -> bool:
+        """Whether `head` is `reviewed`'s change and nothing else: its tree is
+        exactly what replaying `reviewed` onto `head`'s base gives.
 
-    def _change_key(self, sha: str) -> str | None:
-        if not self.has(sha):
-            talk.git_net("fetch", "--quiet", "origin", sha, cwd=self.root)
-        options = ("--no-ext-diff", "--no-textconv", "--no-color", "--no-renames", "-U0")
-        command = ["git", "diff", *options, f"{UPSTREAM}...{sha}"]
-        diff = subprocess.run(command, capture_output=True, check=False, cwd=self.root)
-        if diff.returncode != 0:
-            return None
-        return hashlib.sha256(normalised(diff.stdout)).hexdigest()
-
-    def same_change(self, one: str, other: str) -> bool:
-        """Whether two heads carry the same change against `main`."""
-        if one.lower() == other.lower():
+        The replay is a three-way merge with no checkout (`git merge-tree
+        --write-tree --merge-base`): `reviewed`'s change, from its own merge
+        base with `main`, onto `head`'s merge base. Equal trees mean a rebase
+        that resolved nothing; any line moved, re-indented or added, a binary
+        file changed, or a conflict, means not. A commit that cannot be
+        fetched, or a question git cannot answer, is `False`: the review is
+        then owed, never assumed.
+        """
+        if reviewed.lower() == head.lower():
             return True
-        first = self.change_key(one)
-        return first is not None and first == self.change_key(other)
+        key = (reviewed, head, self.main)
+        if key not in self._covers:
+            self._covers[key] = self._covers_now(reviewed, head)
+        return self._covers[key]
+
+    def _covers_now(self, reviewed: str, head: str) -> bool:
+        if not self.has(reviewed):
+            talk.git_net("fetch", "--quiet", "origin", reviewed, cwd=self.root)
+        bases = [talk.git("merge-base", sha, UPSTREAM, cwd=self.root) for sha in (reviewed, head)]
+        tree = talk.git("rev-parse", f"{head}^{{tree}}", cwd=self.root)
+        if any(done.returncode != 0 for done in (*bases, tree)):
+            return False
+        old_base, new_base = (done.stdout.strip() for done in bases)
+        replay = talk.git(
+            "merge-tree",
+            "--write-tree",
+            f"--merge-base={old_base}",
+            new_base,
+            reviewed,
+            cwd=self.root,
+        )
+        replayed = replay.stdout.split("\n", 1)[0].strip()
+        return replay.returncode == 0 and replayed == tree.stdout.strip()
 
     def conflicts(self, one: str, other: str) -> list[str] | None:
         """The paths two commits conflict on, or `None` (clean, or git could not say)."""

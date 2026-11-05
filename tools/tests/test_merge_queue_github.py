@@ -4,8 +4,10 @@ is read, and that the queue reaches GitHub through `gh api` alone."""
 from __future__ import annotations
 
 import ast
+import subprocess
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tools.merge_queue import github, talk
 
@@ -73,6 +75,42 @@ class Failures(unittest.TestCase):
         self.assertEqual(command[:2], ["gh", "api"])
         self.assertIn("--paginate", command)
         self.assertNotIn("--paginate", talk.api_command("x", method="PUT", fields={"a": "b"}))
+
+
+def answered(code: int = 0, stderr: str = "") -> subprocess.CompletedProcess:
+    return subprocess.CompletedProcess([], code, "", stderr)
+
+
+class TheMerge(unittest.TestCase):
+    def setUp(self) -> None:
+        self.hub = github.GitHub("o/r")
+        self.enterContext(mock.patch.object(github.time, "sleep"))
+
+    def merge(self, *answers: subprocess.CompletedProcess) -> tuple[bool | None, str, list]:
+        with mock.patch.object(talk, "once", side_effect=list(answers)) as sent:
+            ok, why = self.hub.merge(4, "a" * 40)
+        return ok, why, [call.args[0] for call in sent.call_args_list]
+
+    def test_it_is_a_merge_commit_pinned_to_the_judged_head(self) -> None:
+        ok, _, sent = self.merge(answered())
+        self.assertTrue(ok)
+        self.assertIn("sha=" + "a" * 40, sent[0])
+        self.assertIn("merge_method=merge", sent[0])
+        self.assertEqual(sent[0][:4], ["gh", "api", "--method", "PUT"])
+
+    def test_a_failure_in_transit_is_asked_about_never_taken_as_merged(self) -> None:
+        with mock.patch.object(self.hub, "merged", return_value=False) as asked:
+            ok, why, _ = self.merge(answered(1, "HTTP 502: Bad Gateway"))
+        self.assertFalse(ok)
+        self.assertIn("in transit", why)
+        self.assertEqual(asked.call_count, github.MERGE_SETTLE_TRIES)
+        with mock.patch.object(self.hub, "merged", return_value=True):
+            self.assertTrue(self.merge(answered(1, "HTTP 502: Bad Gateway"))[0])
+
+    def test_a_moved_base_is_asked_again_and_a_refusal_is_final(self) -> None:
+        moved = "HTTP 405: Base branch was modified. Review and try the merge again."
+        self.assertIsNone(self.merge(answered(1, moved))[0])
+        self.assertIs(self.merge(answered(1, "HTTP 405: Pull Request is not mergeable"))[0], False)
 
 
 class RestOnly(unittest.TestCase):
