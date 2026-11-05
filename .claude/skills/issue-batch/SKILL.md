@@ -60,7 +60,7 @@ re-verified. Across layers, do not bother.
 The exception cuts the other way, and it is the dangerous one. **Nothing checks
 the contract *between* the layers.** `frontend/src/lib/schemas/items.ts` says in
 its first line that it mirrors `backend/schemas/items.py`, and the mirroring is a
-human promise — no generated client, no shared schema, and the path filters mean
+human promise — no generated client, no shared schema, and CI's path list means
 the backend gate never even runs on a frontend-only change. Two branches that
 split one API change between them will both be green and the app will be broken.
 Keep an API change on one branch.

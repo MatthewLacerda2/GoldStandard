@@ -55,11 +55,15 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
 ## The practices (what is enforced)
 
 - **`make check` is the law.** `make backend` and `make frontend` each run their
-  layer's lint + build + test; CI calls the same targets. Gates must be green
-  before pushing.
+  layer's lint + build + test, and `make tools` tests the repository's own
+  tooling; CI calls the same targets. Gates must be green before pushing.
+- **One check says CI passed.** `.github/workflows/ci.yml` runs on every ready
+  pull request and every push to `main`, skips the layers a change did not
+  touch (`tools/ci_paths.py` holds the list), and ends in a `CI ok` job that
+  passes only when every other job passed or was skipped by design.
 - **Length discipline (backend):** files ≤ 350 lines of code, endpoint
   handlers ≤ 50, tests ≤ 50 (blank lines, comments and docstrings don't
-  count) — enforced by a custom AST linter (`tools/house_lint.py`), not by
+  count) — enforced by a custom AST linter (`backend/tools/house_lint.py`), not by
   honor system. Ruff enforces that type annotations exist; the same AST linter
   enforces that the ones on a `@router` handler are Pydantic I/O models —
   every request and response body is a schema type, a `list` of one, or `None`,
@@ -82,6 +86,7 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
 backend/    FastAPI · SQLAlchemy 2.0 async · Pydantic v2 · pytest · Ruff
 frontend/   React 19 · Vite · TanStack Router/Query · Tailwind v4 · ShadCN · Vitest
 docker/     postgres (pgvector/pgvector:pg16)
+tools/      repository tooling: stdlib-only Python, tested by `make tools`
 Makefile    the single task runner; CI invokes these targets
 CLAUDE.md   the operating contract
 ```
@@ -107,6 +112,29 @@ The backend tests need a Postgres with `pgvector` reachable via `DATABASE_URL`
 (`docker compose up -d --wait postgres` provides one). Running the full stack is
 `docker compose up --build` — postgres + backend + an nginx-served frontend that
 reverse-proxies `/api/*`.
+
+## Protecting `main` (one-time setup)
+
+In a repo made from this template, require **`CI ok`** on `main` once. It is the
+only check the ruleset needs: a job added to `ci.yml` is gated as soon as it is
+listed under `CI ok`'s `needs:`, with nothing to change on GitHub. The ruleset
+lives in `.github/rulesets/main.json`; apply it with `gh` (repository admin):
+
+```sh
+gh api repos/{owner}/{repo}/rulesets --method POST --input .github/rulesets/main.json
+```
+
+Or by hand: *Settings → Rules → Rulesets → New branch ruleset*, target the
+default branch, add *Require status checks to pass* with `CI ok` from GitHub
+Actions.
+
+A workflow that cannot sit under `CI ok`'s `needs:` (one triggered by
+`pull_request_target`, say, which runs from the base branch for access a pull
+request's own run does not get) is added to the ruleset as a **second required
+check**, by its job's name, in `main.json` and on GitHub. It must then keep the
+promise `CI ok` keeps, or it leaves pull requests pending forever: no `paths:`
+filter, `ready_for_review` in its `types:`, and a final job that reports on
+every run, skipping inside when there is nothing to check.
 
 ## Intentional non-goals (documented upgrade paths)
 
