@@ -8,8 +8,9 @@ this holds every other tracked file that takes comments (`FILES`). The rest
 take none, or are prose and generated files (`NOT_READ`), and
 `tools/tests/test_markers.py` fails on a tracked file none of the three names.
 `frontend/eslint-rules/marker-scope.test.ts` holds ESLint to its share: it
-fails when a tracked `.ts`/`.tsx` file is ignored or has the rule below error,
-the route tree (in `NOT_READ`) aside.
+reads `LAYER_LINTED`'s `frontend/` globs and `NOT_READ` from this file's text
+(so both stay tuples of plain string literals) and fails when ESLint does not
+run the rule at error on a file the first matches and the second does not.
 
 Only comment text is read, for the marker and the allow alike, each comment
 on its own, by `tools/comments.py`, which says how
@@ -75,7 +76,8 @@ FILES = {
 
 # Tracked files no check reads: they take no comments (JSON, JSON Lines, the
 # lockfile), are prose that names the words to explain them (Markdown), or are
-# generated.
+# generated. An entry here also excuses a file from `LAYER_LINTED`: the
+# frontend's scope test lets ESLint skip the route tree because of it.
 NOT_READ = (
     "**/*.json",
     "**/*.jsonl",
