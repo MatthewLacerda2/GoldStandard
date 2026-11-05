@@ -31,7 +31,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -86,7 +86,7 @@ def _own_branch(pr: dict) -> str:
     return ref if same_repo and ref != base_repo.get("default_branch") else ""
 
 
-def merged_since(since: str, fetch=gh_page) -> list[PullRequest]:
+def merged_since(since: str, fetch: Callable[[int], list[dict]] = gh_page) -> list[PullRequest]:
     """The pull requests merged from `since` (YYYY-MM-DD, UTC) on, newest first.
 
     Pages run newest-updated first and stop at the first page that reaches
