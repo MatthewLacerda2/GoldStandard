@@ -59,6 +59,13 @@ class WhatAChangeRuns(unittest.TestCase):
             {"backend": True, "frontend": True, "code": True},
         )
 
+    def test_the_contract_form_fixture_runs_both_layers(self) -> None:
+        # The backend's render and the merge driver's writer both read it.
+        self.assertEqual(
+            runs("frontend/scripts/openapi-form.json"),
+            {"backend": True, "frontend": True, "code": True},
+        )
+
     def test_the_merge_drivers_attributes_run_the_frontend(self) -> None:
         # The frontend's merge-driver tests merge with the real .gitattributes.
         self.assertEqual(

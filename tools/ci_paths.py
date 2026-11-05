@@ -43,11 +43,13 @@ _SHARED = ("Makefile", ".github/workflows/ci.yml")
 LAYERS: dict[str, tuple[str, ...]] = {
     # docker/, docker-compose.yml and .env.example define the Postgres the
     # backend tests run against. frontend/openapi.json is the API contract the
-    # backend build checks the app against, so it counts for both layers. The
-    # mutation gate's workflow is read by the backend's tests of that gate.
+    # backend build checks the app against, so it counts for both layers, and
+    # so does the fixture holding the merge driver's writer to the backend's.
+    # The mutation gate's workflow is read by the backend's tests of that gate.
     "backend": (
         "backend/**",
         "frontend/openapi.json",
+        "frontend/scripts/openapi-form.json",
         ".github/workflows/mutation-gate.yml",
         "docker/**",
         "docker-compose.yml",

@@ -1,0 +1,148 @@
+{
+  "components": {
+    "schemas": {
+      "Item": {
+        "properties": {
+          "\u0001": {
+            "type": "string"
+          },
+          "10": {
+            "type": "string"
+          },
+          "9": {
+            "type": "string"
+          },
+          "Zeta": {
+            "type": "string"
+          },
+          "alpha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closed": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "extra": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "kinds": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pair": {
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "type": "array"
+          },
+          "quote\"d": {
+            "type": "string"
+          },
+          "tab\there": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            },
+            "type": "array"
+          },
+          "é": {
+            "type": "boolean"
+          },
+          "！": {
+            "type": "string"
+          },
+          "😀": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Tag": {
+        "properties": {
+          "label": {
+            "type": "string"
+          }
+        },
+        "propertyNames": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "Ünïcode": {
+        "properties": {},
+        "type": "object"
+      }
+    }
+  },
+  "paths": {
+    "/items": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Item"
+                  },
+                  "type": "array"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}": {
+      "delete": {
+        "responses": {}
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ünïcode": {
+      "post": {
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ünïcode"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

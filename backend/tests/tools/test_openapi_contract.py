@@ -111,3 +111,14 @@ def test_check_reads_the_file_as_json(tmp_path: Path):
     assert oc.is_current(spec, path)
     path.write_text("{ not json", encoding="utf-8")
     assert not oc.is_current(spec, path)
+
+
+FORM = Path(__file__).resolve().parents[3] / "frontend" / "scripts" / "openapi-form.json"
+
+
+def test_render_writes_the_form_the_merge_driver_writes():
+    # The merge driver re-renders a merged contract in TypeScript
+    # (frontend/scripts/merge-openapi.ts); its test holds it to this same file,
+    # whose keys reach every place the two writers could part.
+    text = FORM.read_text(encoding="utf-8")
+    assert oc.render(json.loads(text)) == text

@@ -168,10 +168,11 @@ since lint reads the files on disk.
 
 About the merge drivers `make setup` registers. Nearly every frontend branch
 touches the locale files, `routeTree.gen.ts` and the house-rule registries
-(`frontend/eslint-rules/index.ts`, `frontend/eslint.config.ts`), and git's
-line merge calls two additions at one spot a conflict. `.gitattributes` routes
-those files to `frontend/scripts/merge-driver.ts`: a locale file merges key by
-key, the route tree is regenerated from both sides' routes, and a registry
+(`frontend/eslint-rules/index.ts`, `frontend/eslint.config.ts`), every API
+branch rewrites `frontend/openapi.json`, and git's line merge calls two
+additions at one spot a conflict. `.gitattributes` routes those files to
+`frontend/scripts/merge-driver.ts`: a locale file merges key by key, the API
+contract too (written back sorted, as `make openapi` writes it), the route tree is regenerated from both sides' routes, and a registry
 keeps both insertions when each stands alone. A real conflict (one key given
 two values, a line both sides changed) still stops the merge, with markers.
 Git runs a driver only once the clone's config defines it, so a clone without

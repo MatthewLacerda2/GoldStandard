@@ -8,13 +8,17 @@
 //     markers around that key.
 //   - route-tree: regenerated from the merged route set
 //     (merge-route-tree.ts). When it cannot be, git's line merge.
+//   - openapi: the contract, a three-way merge per key (merge-openapi.ts),
+//     written in the contract's own sorted form, so a clean merge is what
+//     `make openapi` writes. A key changed differently on both sides is still
+//     a conflict, with markers around that key.
 //   - append: two branches that only inserted lines at the same spot keep
 //     both, checked (merge-append.ts says what, and where it must never be
 //     used). Any other conflict is git's line merge.
 //
 // Registered by `make setup` (merge-driver.sh install). Git calls it through
 // merge-driver.sh, which falls back to a line merge when this cannot run, as
-//   bun --no-install frontend/scripts/merge-driver.ts <locale|route-tree|append> %O %A %B %L %P %S %X %Y
+//   bun --no-install frontend/scripts/merge-driver.ts <locale|openapi|route-tree|append> %O %A %B %L %P %S %X %Y
 // and reads the result from %A (our version's temporary file). It exits 0
 // for a clean merge in %A and CONFLICT for a conflict written into %A with
 // markers; any other status means it wrote nothing, and the shell runs the
@@ -25,7 +29,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PARSE_MARKER_SIZE, refusal, resolveInsertions } from "./merge-append";
-import { mergeLocale } from "./merge-locale";
+import { mergeLocale, type JsonMerge } from "./merge-locale";
+import { mergeContract } from "./merge-openapi";
 import { mergeRouteTree } from "./merge-route-tree";
 
 const [kind, base, ours, theirs, markerSize, path, ...labels] =
@@ -84,30 +89,38 @@ function lineMerge(
   return result.status ?? 1;
 }
 
-async function mergeLocaleFile(): Promise<number> {
-  let merge;
+/**
+ * A JSON file merged key by key by `merge`, each result written through
+ * `format`. A side that is not JSON, or one `merge` cannot write, gets git's
+ * line merge.
+ */
+async function mergeJsonFile(
+  merge: (base: string, ours: string, theirs: string) => JsonMerge,
+  format: (text: string) => Promise<string>,
+): Promise<number> {
+  let result;
   try {
-    merge = mergeLocale(read(base), read(ours), read(theirs));
+    result = merge(read(base), read(ours), read(theirs));
   } catch (error) {
     console.error(
-      `merge-driver: ${path} is not JSON on some side (${String(error)}); line merge`,
+      `merge-driver: ${path}: no key-by-key merge (${String(error)}); line merge`,
     );
     return outcome(lineMerge(ours, base, theirs));
   }
-  if (merge.clean) {
-    writeFileSync(ours, await prettierFormat(merge.text));
+  if (result.clean) {
+    writeFileSync(ours, await format(result.text));
     return 0;
   }
   console.error(
-    `merge-driver: ${path}: changed differently on both sides: ${merge.conflicts.join(", ")}`,
+    `merge-driver: ${path}: changed differently on both sides: ${result.conflicts.join(", ")}`,
   );
   // A line merge of the three sides, each with every other key already
   // merged, marks exactly the conflicting keys.
-  const scratch = mkdtempSync(join(tmpdir(), "locale-merge-"));
+  const scratch = mkdtempSync(join(tmpdir(), "json-merge-"));
   try {
-    writeFileSync(ours, await prettierFormat(merge.ours));
-    writeFileSync(join(scratch, "base"), await prettierFormat(merge.base));
-    writeFileSync(join(scratch, "theirs"), await prettierFormat(merge.theirs));
+    writeFileSync(ours, await format(result.ours));
+    writeFileSync(join(scratch, "base"), await format(result.base));
+    writeFileSync(join(scratch, "theirs"), await format(result.theirs));
     return outcome(
       lineMerge(ours, join(scratch, "base"), join(scratch, "theirs")),
     );
@@ -172,7 +185,11 @@ async function mergeAppendFile(): Promise<number> {
   return outcome(lineMerge(ours, base, theirs));
 }
 
-if (kind === "locale") process.exit(await mergeLocaleFile());
+if (kind === "locale")
+  process.exit(await mergeJsonFile(mergeLocale, prettierFormat));
+// The contract is Prettier-ignored: merge-openapi.ts writes its form whole.
+else if (kind === "openapi")
+  process.exit(await mergeJsonFile(mergeContract, async (text) => text));
 else if (kind === "route-tree") process.exit(await mergeRouteTreeFile());
 else if (kind === "append") process.exit(await mergeAppendFile());
 else {
