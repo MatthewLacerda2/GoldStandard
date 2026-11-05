@@ -65,7 +65,10 @@ routes/pages  →  lib/api/<domain>.ts  →  lib/api/client.ts (the one place au
 - **One check says CI passed.** `.github/workflows/ci.yml` runs on every ready
   pull request and every push to `main`, skips the layers a change did not
   touch (`tools/ci_paths.py` holds the list), and ends in a `CI ok` job that
-  passes only when every other job passed or was skipped by design.
+  passes only when every other job passed or was skipped by design. A file a
+  layer's code reads from outside that layer must be on the layer's list, or a
+  change to it alone skips the tests that read it: `tools/layer_reads.py` fails
+  on one that is not (`make tools`).
 - **What an agent loads stays small (docs lint):** a `CLAUDE.md` is at most
   300 lines, a skill's Markdown 500 and its code 400; a skill's frontmatter
   carries the `name` and `description` it needs to load; a long reference page
