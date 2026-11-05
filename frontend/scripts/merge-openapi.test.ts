@@ -48,6 +48,11 @@ describe("stringifyContract", () => {
     expect(["！", "😀"].sort()).toEqual(["😀", "！"]);
     expect(contract({ "😀": "", "！": "" })).toBe(json({ "！": "", "😀": "" }));
   });
+
+  it("refuses a number, naming where, since Python may print it otherwise", () => {
+    // `1e-05` in Python is `0.00001` here; a contract's shape holds none.
+    expect(() => contract({ a: { b: [true, 1e-5] } })).toThrow(/a\.b\.1/);
+  });
 });
 
 describe("mergeContract", () => {
@@ -105,14 +110,21 @@ function withEndpoints(
 const A: [string, string] = ["speed-a", "SpeedA"];
 const B: [string, string] = ["speed-b", "SpeedB"];
 
-/** Two branches each add an endpoint and its schema, at the same spots of the sorted file. */
+/**
+ * A repository whose two branches change the contract, each side `written`
+ * (in the contract's form unless told otherwise) from the committed contract
+ * or a `base`.
+ */
 function contractRepo(
-  sides: { ours: Contract; theirs: Contract },
-  options?: { install?: boolean },
+  sides: { base?: Contract; ours: Contract; theirs: Contract },
+  { install = true, written = contract } = {},
 ) {
-  const dir = repo({ [CONTRACT]: contract(COMMITTED) }, options);
-  branch(dir, "ours", { [CONTRACT]: contract(sides.ours) });
-  branch(dir, "theirs", { [CONTRACT]: contract(sides.theirs) });
+  const dir = repo(
+    { [CONTRACT]: written(sides.base ?? COMMITTED) },
+    { install },
+  );
+  branch(dir, "ours", { [CONTRACT]: written(sides.ours) });
+  branch(dir, "theirs", { [CONTRACT]: written(sides.theirs) });
   return dir;
 }
 const twoEndpoints = () => ({
@@ -148,12 +160,15 @@ describe("openapi.json through git", { timeout: GIT_SPAWN_TIMEOUT_MS }, () => {
   });
 
   it("still conflicts, with markers around just that key, when one key gets two values", () => {
+    // A schema of the test's own in the base, its field retyped on each side.
+    const base = withEndpoints(COMMITTED, ["speed", "Speed"]);
     const retyped = (type: string, endpoint: [string, string]) => {
-      const next = withEndpoints(COMMITTED, endpoint);
-      next.components.schemas.ItemRead.properties!.name.type = type;
+      const next = withEndpoints(base, endpoint);
+      next.components.schemas.Speed.properties!.id.type = type;
       return next;
     };
     const dir = contractRepo({
+      base,
       ours: retyped("integer", A),
       theirs: retyped("boolean", B),
     });
@@ -161,7 +176,7 @@ describe("openapi.json through git", { timeout: GIT_SPAWN_TIMEOUT_MS }, () => {
     const merge = run(dir, "git", "merge", "theirs");
     expect(merge.status).not.toBe(0);
     expect(merge.output).toContain(
-      "components.schemas.ItemRead.properties.name.type",
+      "components.schemas.Speed.properties.id.type",
     );
     const text = read(dir, CONTRACT);
     const field = (type: string) => `            "type": "${type}"\n`;
@@ -183,7 +198,24 @@ describe("openapi.json through git", { timeout: GIT_SPAWN_TIMEOUT_MS }, () => {
     git(dir, "checkout", "-q", "ours");
     const merge = run(dir, "git", "merge", "theirs");
     expect(merge.status).not.toBe(0);
-    expect(merge.output).toContain("is not JSON on some side");
+    expect(merge.output).toContain("no key-by-key merge");
     expect(read(dir, CONTRACT)).toContain("<<<<<<< HEAD\nnot json\n");
+  });
+
+  it("falls back to git's line merge when a side holds a number", () => {
+    const numbered = withEndpoints(COMMITTED, A);
+    Object.assign(numbered.components.schemas.SpeedA, { minProperties: 1 });
+    const dir = contractRepo(
+      {
+        ours: numbered,
+        theirs: withEndpoints(COMMITTED, B),
+      },
+      { written: json },
+    );
+    git(dir, "checkout", "-q", "ours");
+    const merge = run(dir, "git", "merge", "theirs");
+    expect(merge.status).not.toBe(0);
+    expect(merge.output).toContain("a number at components.schemas.SpeedA");
+    expect(read(dir, CONTRACT)).toContain("<<<<<<< HEAD\n");
   });
 });

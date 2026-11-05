@@ -1,7 +1,7 @@
 #!/bin/sh
 # The git merge drivers for the locale JSON, the OpenAPI contract,
-# routeTree.gen.ts and the house-rule registries. The logic is in merge-driver.ts; this shell is what
-# git runs, for two reasons:
+# routeTree.gen.ts and the house-rule registries. The logic is in
+# merge-driver.ts; this shell is what git runs, for two reasons:
 #
 #   merge-driver.sh install
 #     Registers the drivers in this clone's git config. `.gitattributes`

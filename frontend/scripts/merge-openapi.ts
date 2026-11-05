@@ -22,10 +22,11 @@
 // started using it, merges as deleted, and that build names the fix.
 //
 // Python's `json.dumps` and this writer agree on everything the contract
-// holds: strings, booleans, null, arrays and objects (no numbers: a schema's
-// shape keeps none). Python sorts keys by code point, which JavaScript's
-// default sort does not (it compares UTF-16 units), so the sort here is by
-// code point too.
+// holds: strings, booleans, null, arrays and objects. Not on every number
+// (`1e-05` against `0.00001`), but a schema's shape keeps none, so a number is
+// refused and the driver takes git's line merge. Python sorts keys by code
+// point, which JavaScript's default sort does not (it compares UTF-16 units),
+// so the sort here is by code point too.
 
 import {
   mergeJson,
@@ -34,29 +35,34 @@ import {
   type JsonMerge,
 } from "./merge-locale";
 
-/** Python's `sorted()` order for strings: by code point, not by UTF-16 unit. */
-function byCodePoint(a: string, b: string): number {
-  const [x, y] = [a, b].map((s) => Array.from(s, (c) => c.codePointAt(0)!));
-  for (let i = 0; i < Math.min(x.length, y.length); i++)
-    if (x[i] !== y[i]) return x[i] - y[i];
-  return x.length - y.length;
-}
-
-function sortKeys(value: Json): Json {
-  if (value instanceof Map)
-    return new Map(
-      [...value]
-        .sort(([a], [b]) => byCodePoint(a, b))
-        .map(([k, v]) => [k, sortKeys(v)]),
+/**
+ * `value` with every object's keys in Python's `sorted()` order: by code
+ * point, which is UTF-8 byte order (JavaScript's default sort compares UTF-16
+ * units). A number throws, naming where: the writers could print it apart.
+ */
+function sortKeys(value: Json, at: string[] = []): Json {
+  if (typeof value === "number")
+    throw new TypeError(
+      `a number at ${at.join(".")}: the contract holds none (openapi_contract.py SHAPE)`,
     );
-  return Array.isArray(value) ? value.map(sortKeys) : value;
+  if (Array.isArray(value))
+    return value.map((v, i) => sortKeys(v, [...at, `${i}`]));
+  if (!(value instanceof Map)) return value;
+  return new Map(
+    [...value]
+      .sort(([a], [b]) => Buffer.compare(Buffer.from(a), Buffer.from(b)))
+      .map(([k, v]) => [k, sortKeys(v, [...at, k])]),
+  );
 }
 
 /** The contract's file form, as openapi_contract.py `render` writes it. */
 export const stringifyContract = (value: Json) =>
   stringifyOrdered(sortKeys(value));
 
-/** Merges three versions of the contract. Throws a SyntaxError on a side that is not JSON. */
+/**
+ * Merges three versions of the contract. Throws a SyntaxError on a side that
+ * is not JSON, and a TypeError on one holding a number.
+ */
 export const mergeContract = (
   base: string,
   ours: string,

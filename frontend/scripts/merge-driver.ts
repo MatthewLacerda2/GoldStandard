@@ -91,7 +91,8 @@ function lineMerge(
 
 /**
  * A JSON file merged key by key by `merge`, each result written through
- * `format`. A side that is not JSON gets git's line merge.
+ * `format`. A side that is not JSON, or one `merge` cannot write, gets git's
+ * line merge.
  */
 async function mergeJsonFile(
   merge: (base: string, ours: string, theirs: string) => JsonMerge,
@@ -102,7 +103,7 @@ async function mergeJsonFile(
     result = merge(read(base), read(ours), read(theirs));
   } catch (error) {
     console.error(
-      `merge-driver: ${path} is not JSON on some side (${String(error)}); line merge`,
+      `merge-driver: ${path}: no key-by-key merge (${String(error)}); line merge`,
     );
     return outcome(lineMerge(ours, base, theirs));
   }
